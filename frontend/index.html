@@ -1,0 +1,2297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AGV地图查看器</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f0f0f0;
+      overflow: hidden
+    }
+
+    .header {
+      background: #2c3e50;
+      color: #fff;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, .1)
+    }
+
+    .title {
+      font-size: 20px;
+      font-weight: bold
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center
+    }
+
+    .btn {
+      background: #3498db;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px
+    }
+
+    .btn:hover {
+      background: #2980b9
+    }
+
+    .status {
+      font-size: 14px;
+      color: #ecf0f1
+    }
+
+    .canvas-container {
+      position: relative;
+      width: 100vw;
+      height: calc(100vh - 60px);
+      overflow: hidden;
+      background: #34495e;
+      transition: margin-left .4s cubic-bezier(.25, .8, .25, 1)
+    }
+
+    .canvas-container.sidebar-open {
+      margin-left: 300px
+    }
+
+    .sidebar {
+      position: fixed;
+      left: -400px;
+      top: 0;
+      width: 260px;
+      height: 100vh;
+      background: #2c3e50;
+      color: #fff;
+      padding: 20px;
+      box-shadow: 2px 0 10px rgba(0, 0, 0, .3);
+      transition: left .4s cubic-bezier(.25, .8, .25, 1);
+      z-index: 1000;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column
+    }
+
+    .sidebar.open {
+      left: 0
+    }
+
+    .sidebar-header {
+      padding: 0 0 20px 0;
+      border-bottom: 1px solid #34495e;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px
+    }
+
+    .sidebar-title {
+      font-size: 18px;
+      font-weight: bold
+    }
+
+    .sidebar-close {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 5px
+    }
+
+    .sidebar-tabs {
+      display: flex;
+      border-bottom: 1px solid #34495e;
+      margin-bottom: 20px
+    }
+
+    .tab-button {
+      flex: 1;
+      background: none;
+      border: none;
+      color: #bdc3c7;
+      padding: 12px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: .3s;
+      border-bottom: 2px solid transparent
+    }
+
+    .tab-button:hover {
+      color: #ecf0f1;
+      background: rgba(52, 73, 94, .5)
+    }
+
+    .tab-button.active {
+      color: #3498db;
+      border-bottom-color: #3498db;
+      background: rgba(52, 152, 219, .1)
+    }
+
+    .tab-content {
+      display: none
+    }
+
+    .tab-content.active {
+      display: block
+    }
+
+    .form-group {
+      margin-bottom: 12px
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      color: #ecf0f1
+    }
+
+    .form-input,
+    .form-select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #34495e;
+      border-radius: 4px;
+      background: #34495e;
+      color: #fff;
+      font-size: 14px;
+      box-sizing: border-box
+    }
+
+    .btn-primary {
+      background: #3498db;
+      color: #fff;
+      border: none;
+      padding: 10px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      width: 100%
+    }
+
+    .btn-primary:hover {
+      background: #2980b9
+    }
+
+    .btn-saveconfig {
+      background: #3498db;
+      color: #fff;
+      border: none;
+      padding: 10px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      width: 70%
+    }
+
+    .btn-saveconfig:hover {
+      background: #2980b9
+    }
+
+    .robot-list {
+      margin-top: 10px
+    }
+
+    .robot-item {
+      background: #34495e;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 4px;
+      border-left: 4px solid #3498db
+    }
+
+    .robot-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px
+    }
+
+    .robot-name {
+      font-weight: bold;
+      font-size: 16px;
+      color: #ecf0f1
+    }
+
+    .robot-info {
+      font-size: 12px;
+      color: #bdc3c7
+    }
+
+    .robot-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px
+    }
+
+    .btn-delete-small {
+      padding: 5px 5px;
+      font-size: 12px;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer
+    }
+
+    .btn-danger {
+      background: #e74c3c;
+      color: #fff;
+      border: none;
+      padding: 5px 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      width: 30%
+    }
+
+    .btn-danger:hover {
+      background: #c0392b
+    }
+
+    .btn-config-small {
+      background: #f39c12;
+      color: #fff;
+      border: none;
+      padding: 5px 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      width: 30%
+    }
+
+    .btn-config-small:hover {
+      background: #e67e22
+    }
+
+    .btn-cancel-small {
+      background: #f39c12;
+      color: #fff;
+      border: none;
+      padding: 10px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      width: 30%
+    }
+
+    .btn-cancel-small:hover {
+      background: #e67e22
+    }
+
+
+    .sidebar-toggle {
+      position: fixed;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      background: linear-gradient(135deg, #3498db, #2980b9);
+      color: #fff;
+      border: none;
+      padding: 15px 8px;
+      border-radius: 0 8px 8px 0;
+      cursor: pointer;
+      font-size: 14px;
+      z-index: 1001;
+      box-shadow: 2px 0 8px rgba(0, 0, 0, .2);
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      min-height: 80px; transition: left .4s cubic-bezier(.25, .8, .25, 1)
+    }
+
+    .sidebar-toggle:hover {
+      background: linear-gradient(135deg, #2980b9, #1f5f8b);
+      transform: translateY(-50%) translateX(3px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, .3)
+    }
+
+    .sidebar-toggle.open {
+      left: 300px
+    }
+
+    #mapCanvas {
+      display: block;
+      cursor: grab;
+      background: #2c3e50
+    }
+
+    #mapCanvas:active {
+      cursor: grabbing
+    }
+
+    .info-panel {
+      position: fixed;
+      top: 70px;
+      right: 10px;
+      background: rgba(52, 73, 94, .9);
+      color: #fff;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      min-width: 100px;
+      backdrop-filter: blur(5px);
+      z-index: 999
+    }
+
+    .legend {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(52, 73, 94, .9);
+      color: #fff;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      backdrop-filter: blur(5px);
+      z-index: 999
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px
+    }
+
+    .legend-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      margin-right: 8px
+    }
+
+    /* 普通路段：蓝色带箭头的实线示例 */
+    .legend-route-normal {
+      position: relative;
+      width: 30px;
+      height: 0;
+      border-top: 2px solid #3498db;
+      margin-right: 8px;
+    }
+    .legend-route-normal::after {
+      content: '';
+      position: absolute;
+      right: -6px;
+      top: -5px;
+      border-left: 6px solid #3498db;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+    }
+
+    /* 路段 pass 类型图例样式 */
+    .legend-route-pass-0 {
+      position: relative;
+      width: 30px;
+      height: 0;
+      border-top: 2px solid #3498db;
+      margin-right: 8px;
+    }
+    .legend-route-pass-0::after {
+      content: '';
+      position: absolute;
+      right: -6px;
+      top: -5px;
+      border-left: 6px solid #3498db;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+    }
+    .legend-route-pass-1 {
+      position: relative;
+      width: 30px;
+      height: 0;
+      border-top: 2px solid #f1c40f;
+      margin-right: 8px;
+    }
+    .legend-route-pass-1::after {
+      content: '';
+      position: absolute;
+      right: -6px;
+      top: -5px;
+      border-left: 6px solid #f1c40f;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+    }
+    .legend-route-pass-2 {
+      position: relative;
+      width: 30px;
+      height: 0;
+      border-top: 2px solid #e67e22;
+      margin-right: 8px;
+    }
+    .legend-route-pass-2::after {
+      content: '';
+      position: absolute;
+      right: -6px;
+      top: -5px;
+      border-left: 6px solid #e67e22;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+    }
+    .legend-route-pass-10 {
+      position: relative;
+      width: 30px;
+      height: 0;
+      border-top: 2px dashed #e74c3c;
+      margin-right: 8px;
+    }
+    .legend-route-pass-10::after {
+      content: '';
+      position: absolute;
+      right: -6px;
+      top: -5px;
+      border-left: 6px solid #e74c3c;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+    }
+
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #fff;
+      font-size: 16px
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <div class="title">AGV地图查看器</div>
+    <div class="controls">
+      <div class="status" id="status">准备就绪</div>
+      <select id="floorSelect" class="form-select" style="width:auto;" onchange="switchFloor(this.value)">
+        <option value="">加载中...</option>
+      </select>
+      <button class="btn" onclick="cycleFloor()">切换楼层</button>
+      <button class="btn" onclick="resetView()">重置视图</button>
+      <button class="btn" onclick="toggleGrid()">网格</button>
+    </div>
+  </div>
+
+  <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">打开</button>
+
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">仿真机器人管理</div>
+      <button class="sidebar-close" onclick="toggleSidebar()">×</button>
+    </div>
+    <div class="sidebar-tabs">
+      <button class="tab-button active" onclick="switchTab('register')">注册机器人</button>
+      <button class="tab-button" onclick="switchTab('list')">机器人列表</button>
+    </div>
+    <div class="sidebar-content">
+      <div class="tab-content active" id="registerTab">
+        <div class="robot-form">
+          <div class="form-group"><label class="form-label">机器人名称</label><input type="text" class="form-input"
+              id="robotName" placeholder=""></div>
+          <div class="form-group"><label class="form-label">机器人类型</label><select class="form-select" id="robotType">
+              <option value="AGV">AGV</option>
+              <option value="AMR">AMR</option>
+              <option value="Forklift">叉车</option>
+            </select></div>
+          <div class="form-group"><label class="form-label">机器人IP地址</label><input type="text" class="form-input"
+              id="robotIP" placeholder=""></div>
+          <div class="form-group"><label class="form-label">厂商</label><input type="text" class="form-input"
+              id="robotManufacturer" placeholder="厂商名称" value="SEER"></div>
+          <div class="form-group"><label class="form-label">版本</label><input type="text" class="form-input"
+              id="robotVersion" placeholder="版本号" value="v2"></div>
+          <div class="form-group"><label class="form-label">加载地图</label><select class="form-select" id="registerMapSelect" style="width:100%"><option value="">请选择地图</option></select><div id="registerMapSelectedText" class="form-hint" style="font-size:12px;color:#bdc3c7;word-break:break-all;margin-top:4px;">当前: <span id="registerMapSelectedLabel"></span></div></div>
+          <div class="form-group"><label class="form-label">初始位置</label><select class="form-select"
+              id="initialPosition" disabled>
+              <option value="">请先选择地图</option>
+            </select></div>
+          <div class="form-group"><button class="btn-primary" onclick="registerRobot()">注册机器人</button></div>
+        </div>
+      </div>
+      <div class="tab-content" id="listTab">
+        <div class="robot-list">
+          <div id="robotListContainer"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="canvas-container" id="canvasContainer">
+    <canvas id="mapCanvas"></canvas>
+    <div class="loading" id="loading" style="display:none;">正在加载地图数据...</div>
+    <div class="info-panel">
+      <div><strong>地图信息</strong></div>
+      <div>站点数量: <span id="pointCount">0</span></div>
+      <div>路段数量: <span id="routeCount">0</span></div>
+      <div>缩放: <span id="zoomLevel">100%</span></div>
+      <div>坐标: <span id="mousePos">0, 0</span></div>
+      <div style="margin-top:8px;"><strong>站点详情</strong></div>
+      <div id="stationDetails" style="font-size:12px;color:#bdc3c7;line-height:1.6; display:none;">
+        <div>类型: <span id="stType">-</span></div>
+        <div>ID: <span id="stId">-</span></div>
+        <div>名称: <span id="stName">-</span></div>
+        <div>坐标: <span id="stPos">-</span></div>
+        <div>朝向: <span id="stDir">-</span></div>
+        <div>随动点: <span id="stSpin">-</span></div>
+        <div>库位: <span id="stStorage">-</span></div>
+      </div>
+      <div style="margin-top:8px;"><strong>路段详情</strong></div>
+      <div id="routeDetails" style="font-size:12px;color:#bdc3c7;line-height:1.6; display:none;">
+        <div>路段ID: <span id="rtId">-</span></div>
+        <div>名称: <span id="rtDesc">-</span></div>
+        <div>曲线类型: <span id="rtType">-</span></div>
+        <div>路段类型: <span id="rtPass">-</span></div>
+      </div>
+    </div>
+    <div class="legend">
+      <div style="margin-bottom:6px;"><strong>图例</strong></div>
+      <div id="stationLegendItems"></div>
+      <div class="legend-item">
+        <div class="legend-route-normal"></div><span>普通路段</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-route-pass-1"></div><span>仅空载可通行</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-route-pass-2"></div><span>仅载货可通行</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-route-pass-10"></div><span>禁行路段</span>
+      </div>
+    </div>
+    <!-- 机器人右键菜单 -->
+    <div id="robotContextMenu" style="display:none; position:absolute; z-index:1000; background:#2c3e50; color:#ecf0f1; border:1px solid #34495e; border-radius:4px; box-shadow:0 6px 18px rgba(0,0,0,0.35); min-width:140px;">
+      <!-- 动态填充菜单项 -->
+    </div>
+    <!-- 站点右键菜单 -->
+    <div id="stationContextMenu" style="display:none; position:absolute; z-index:1000; background:#2c3e50; color:#ecf0f1; border:1px solid #34495e; border-radius:4px; box-shadow:0 6px 18px rgba(0,0,0,0.35); min-width:160px;">
+      <!-- 动态填充菜单项 -->
+    </div>
+  </div>
+  
+  <script src="/static/src/services/pathfinding.js?v=20251030"></script>
+  <script>
+    // 全局错误拦截：将所有请求错误打印到状态框（#status）
+    (function () {
+      function setStatusMessage(msg) {
+        try { const el = document.getElementById('status'); if (el) el.textContent = String(msg); } catch (e) {}
+      }
+      // 暴露辅助函数，供业务代码在 catch 中打印详细错误
+      window.printErrorToStatus = function (err, context) {
+        const msg = (err && err.message) ? err.message : String(err);
+        const prefix = context ? '[' + String(context) + '] ' : '';
+        setStatusMessage(prefix + msg);
+      };
+      const originalFetch = window.fetch;
+      window.fetch = async function (input, init) {
+        const url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
+        const method = (init && init.method) || (typeof input === 'object' && input && input.method) || 'GET';
+        try {
+          const res = await originalFetch(input, init);
+          if (!res.ok) {
+            let detail = '';
+            try {
+              const txt = await res.clone().text();
+              try {
+                const obj = JSON.parse(txt);
+                detail = obj && (obj.detail || obj.message) ? (obj.detail || obj.message) : txt;
+              } catch (_) {
+                detail = txt;
+              }
+            } catch (_) {
+              detail = res.statusText || '未知错误';
+            }
+            setStatusMessage(`错误 ${res.status} ${method} ${url}: ${String(detail).trim()}`);
+          }
+          return res;
+        } catch (err) {
+          setStatusMessage(`网络错误 ${method} ${url}: ${err && err.message ? err.message : String(err)}`);
+          throw err;
+        }
+      };
+      // 捕获未处理的 promise 异常与脚本错误
+      window.addEventListener('unhandledrejection', function (ev) {
+        const reason = ev && ev.reason ? (ev.reason.message || String(ev.reason)) : '未知异常';
+        setStatusMessage(`未捕获错误: ${reason}`);
+      });
+      window.addEventListener('error', function (ev) {
+        setStatusMessage(`脚本错误: ${ev.message} @ ${ev.filename}:${ev.lineno}`);
+      });
+    })();
+    // 配置
+    const API_BASE_URL = window.location.origin + '/api';
+    // 可配置的前端轮询间隔（毫秒），从后端 /api/config 读取，默认 100ms
+    window.FRONTEND_POLL_INTERVAL_MS = 1000;
+    async function loadFrontendConfig() {
+      try {
+        const resp = await fetch(`${API_BASE_URL}/config`);
+        if (resp && resp.ok) {
+          const data = await resp.json();
+          const v = Number(data && data.polling_interval_ms);
+          if (isFinite(v) && v > 0) {
+            window.FRONTEND_POLL_INTERVAL_MS = v;
+          }
+        }
+      } catch (_) { /* ignore */ }
+    }
+    const CURRENT_MAP_ID = 'ViewerMap/testmap.scene';
+    const POINT_TYPE_INFO = {
+      1: { label: '普通点', color: '#f39c12' },
+      2: { label: '等待点', color: '#2980b9' },
+      3: { label: '避让点', color: '#8e44ad' },
+      4: { label: '临时避让点', color: '#9b59b6' },
+      5: { label: '库区点', color: '#16a085' },
+      7: { label: '不可避让点', color: '#c0392b' },
+      11: { label: '电梯点', color: '#e91e63' },
+      12: { label: '自动门点', color: '#00bcd4' },
+      13: { label: '充电点', color: '#4caf50' },
+      14: { label: '停靠点', color: '#7f8c8d' },
+      15: { label: '动作点', color: '#e74c3c' },
+      16: { label: '禁行点', color: '#ff3860' }
+    };
+
+    // 路段 pass 类型映射
+    const PASS_TYPE_INFO = {
+      0: { label: '普通路段', color: '#3498db' },
+      1: { label: '仅空载可通行', color: '#f1c40f' },
+      2: { label: '仅载货可通行', color: '#e67e22' },
+      10: { label: '禁行路段', color: '#e74c3c' }
+    };
+
+    // 动态填充站点类型图例
+    function populateStationLegend() {
+      const container = document.getElementById('stationLegendItems');
+      if (!container) return;
+      container.innerHTML = '';
+      const codes = Object.keys(POINT_TYPE_INFO).map(Number).sort((a, b) => a - b);
+      codes.forEach(code => {
+        const info = POINT_TYPE_INFO[code];
+        if (!info) return;
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+
+        const colorEl = document.createElement('div');
+        colorEl.className = 'legend-color';
+        colorEl.style.background = info.color;
+
+        const labelEl = document.createElement('span');
+        labelEl.textContent = `${info.label}`;
+
+        item.appendChild(colorEl);
+        item.appendChild(labelEl);
+        container.appendChild(item);
+      });
+    }
+
+    // 画布与视图态
+    let canvas, ctx, mapData = null;
+    let viewTransform = { x: 0, y: 0, scale: 1 };
+    let isDragging = false; let lastMousePos = { x: 0, y: 0 }; let showGrid = true; let sidebarOpen = false;
+    let registeredRobots = [];
+    let ws = null;
+    let selectedRobotId = null;
+    let selectedStationId = null;
+    let selectedRouteId = null;
+    let selectedNavStation = null;
+    // 路段切换记忆：用于在重叠路段之间循环选择
+    let lastRouteCandidates = [];
+    let lastRouteCandidateIndex = 0;
+    // 已移除 SMAP 站点/拓扑缓存；使用 scene 点信息
+    let mapLayers = [];
+    let floorNames = [];
+    let currentFloorIndex = 0;
+
+  window.onload = function () { initCanvas(); loadMapData(); setupEventListeners(); updateRegisterMapOptions(); Promise.all([loadFrontendConfig(), loadRobotList()]).catch(() => {}); initWebSocket(); startRenderLoop(); setupKeyboardControl(); startCommStatusGuard(); populateStationLegend(); };
+
+    function initCanvas() { canvas = document.getElementById('mapCanvas'); ctx = canvas.getContext('2d'); resizeCanvas(); window.addEventListener('resize', resizeCanvas); }
+    function resizeCanvas() { const c = document.querySelector('.canvas-container'); canvas.width = c.clientWidth; canvas.height = c.clientHeight; if (mapData) { drawMap(); } }
+    function setupEventListeners() {
+      canvas.addEventListener('mousedown', onMouseDown);
+      canvas.addEventListener('mousemove', onMouseMove);
+      canvas.addEventListener('mouseup', onMouseUp);
+      canvas.addEventListener('wheel', onWheel);
+      canvas.addEventListener('contextmenu', e => e.preventDefault());
+      document.addEventListener('click', () => { hideRobotContextMenu(); hideStationContextMenu(); });
+      const regMapSel = document.getElementById('registerMapSelect');
+      if (regMapSel) {
+        regMapSel.addEventListener('change', () => {
+          const lbl = document.getElementById('registerMapSelectedLabel');
+          if (lbl) lbl.textContent = regMapSel.value || '未设置';
+          updateRegisterInitialPositionOptions();
+        });
+      }
+    }
+    async function onMouseDown(e) {
+      const p = getMousePos(e);
+      // 右键：优先命中小车，其次站点
+      if (e.button === 2) {
+        const robot = findRobotAtScreenPoint(p.x, p.y);
+        if (robot) {
+          selectedRobotId = robot.robot_name;
+          showRobotContextMenu(p.x, p.y, robot);
+        } else {
+          const hitPoint = findPointAtScreenPos(p.x, p.y);
+          if (hitPoint) {
+            showStationContextMenu(p.x, p.y, hitPoint);
+          } else {
+            hideRobotContextMenu();
+            hideStationContextMenu();
+          }
+        }
+        return; // 右键不进入拖拽
+      }
+      // 左键：优先命中站点（scene points）
+      const hitPoint = findPointAtScreenPos(p.x, p.y);
+      if (hitPoint) {
+        selectedStationId = hitPoint.id;
+        const info = getStationDetails(hitPoint);
+        updateStationInfoPanel(info);
+        selectedRouteId = null;
+        lastRouteCandidates = [];
+        lastRouteCandidateIndex = 0;
+        updateRouteInfoPanel(null);
+        drawMap();
+        hideRobotContextMenu();
+        return;
+      }
+      // 次优命中路段：支持在重叠的双向路段之间循环切换
+      const routeCandidates = findRoutesAtScreenPos(p.x, p.y);
+      if (routeCandidates.length > 0) {
+        const candidateIds = routeCandidates.map(rt => String(rt.id ?? (`${rt.from}->${rt.to}`)));
+        const sameSet = (lastRouteCandidates.length === candidateIds.length) && lastRouteCandidates.every((id, idx) => id === candidateIds[idx]);
+        if (!sameSet) {
+          lastRouteCandidates = candidateIds;
+          lastRouteCandidateIndex = 0; // 第一次点击选择上面的（绘制顺序更靠后的）
+        } else {
+          lastRouteCandidateIndex = (lastRouteCandidateIndex + 1) % lastRouteCandidates.length; // 再次点击在同一组内轮换
+        }
+        const targetRoute = routeCandidates[lastRouteCandidateIndex];
+        selectedRouteId = lastRouteCandidates[lastRouteCandidateIndex];
+        const rinfo = getRouteDetails(targetRoute);
+        updateRouteInfoPanel(rinfo);
+        selectedStationId = null;
+        updateStationInfoPanel(null);
+        drawMap();
+        hideRobotContextMenu();
+        return;
+      }
+      // 否则开始拖拽
+      isDragging = true;
+      lastMousePos = p;
+      canvas.style.cursor = 'grabbing';
+      hideRobotContextMenu();
+      hideStationContextMenu();
+    }
+    function onMouseMove(e) { const p = getMousePos(e); const wp = screenToWorld(p.x, p.y); document.getElementById('mousePos').textContent = `${wp.x.toFixed(2)}, ${wp.y.toFixed(2)}`; if (isDragging) { viewTransform.x += p.x - lastMousePos.x; viewTransform.y += p.y - lastMousePos.y; drawMap(); lastMousePos = p; } }
+    function onMouseUp() { isDragging = false; canvas.style.cursor = 'grab'; }
+    function onWheel(e) { e.preventDefault(); const p = getMousePos(e); const wp = screenToWorld(p.x, p.y); const sf = e.deltaY > 0 ? 0.9 : 1.1; const ns = Math.max(0.1, Math.min(5, viewTransform.scale * sf)); if (ns !== viewTransform.scale) { viewTransform.scale = ns; const nwp = screenToWorld(p.x, p.y); viewTransform.x += (wp.x - nwp.x) * viewTransform.scale; viewTransform.y += (wp.y - nwp.y) * viewTransform.scale; updateZoomDisplay(); drawMap(); } }
+    function getMousePos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+    // 坐标系约定：世界坐标采用数学坐标（x 向右为正、y 向上为正）。
+    // 屏幕坐标 y 向下为正，因此在坐标换算中对 y 做一次性取反。
+    function screenToWorld(sx, sy) { return { x: (sx - viewTransform.x) / viewTransform.scale / 20, y: -((sy - viewTransform.y) / viewTransform.scale / 20) }; }
+    function worldToScreen(wx, wy) { return { x: (wx * 20) * viewTransform.scale + viewTransform.x, y: (-wy * 20) * viewTransform.scale + viewTransform.y }; }
+
+    // 站点类型推导（根据名称前缀常见约定，如: CP/DP等）
+    function deriveClassFromName(name) {
+      if (!name) return 'Station';
+      if (/^CP/i.test(name)) return 'CP';
+      if (/^DP/i.test(name)) return 'DP';
+      if (/^WP/i.test(name)) return 'WP';
+      if (/^Pallet/i.test(name)) return 'Pallet';
+      return 'Station';
+    }
+
+    // 根据缩放动态设置站点绘制半径，便于命中
+    function pointDrawSize() {
+      const base = 3; // 基础像素半径
+      const s = Math.max(4, Math.min(24, base * viewTransform.scale));
+      return s;
+    }
+
+    // 命中检测：在屏幕坐标系判断是否点击到站点（点）
+    function findPointAtScreenPos(sx, sy) {
+      if (!mapData || !mapData.points) return null;
+      const radius = pointDrawSize() + 2; // 扩大一点命中范围
+      const currentFloorName = floorNames[currentFloorIndex] || null;
+      for (const p of mapData.points) {
+        // 楼层过滤
+        const pfloor = extractFloorNameFromLayer(p.layer || '');
+        if (currentFloorName && pfloor && pfloor !== currentFloorName) continue;
+        const sp = worldToScreen(p.x, p.y);
+        const dx = sx - sp.x, dy = sy - sp.y;
+        if (dx * dx + dy * dy <= radius * radius) {
+          return {
+            id: String(p.id || p.name || `${p.x},${p.y}`),
+            name: p.name || p.id || '未知',
+            type: p.type,
+            properties: (Array.isArray(p.properties) ? p.properties : (Array.isArray(p.property) ? p.property : [])),
+            associatedStorageLocations: (Array.isArray(p.associatedStorageLocations) ? p.associatedStorageLocations : []),
+            layer: p.layer || '',
+            pos: { x: p.x, y: p.y },
+            dir: p.dir || 0
+          };
+        }
+      }
+      return null;
+    }
+
+    // 兼容占位：项目不再使用 SMAP 站点缓存；scene 点信息直接来自当前楼层的 points
+    async function loadSceneStations() { /* no-op */ }
+
+    // 合并基础点信息（scene），得到展示数据
+    function getStationDetails(pt) {
+      const id = String(pt.id || pt.name || '');
+      const name = String(pt.name || pt.id || '');
+      const typeCode = (pt.type !== undefined) ? Number(pt.type) : NaN;
+      const className = (POINT_TYPE_INFO[typeCode]?.label) || '未知类型';
+      const dir = (typeof pt.dir === 'number') ? pt.dir : undefined;
+      const ignoreDir = false;
+      let spin = false;
+      const props = Array.isArray(pt.properties) ? pt.properties : (Array.isArray(pt.property) ? pt.property : []);
+      for (const prop of props) {
+        if (prop && prop.key === 'spin' && prop.boolValue === true) { spin = true; break; }
+      }
+      const stor = Array.isArray(pt.associatedStorageLocations) ? pt.associatedStorageLocations : [];
+      return { id, className, instanceName: name, pos: pt.pos, dir, ignoreDir, spin, associatedStorageLocations: stor };
+    }
+
+    function updateStationInfoPanel(info) {
+      if (!info) {
+        document.getElementById('stId').textContent = '-';
+        document.getElementById('stType').textContent = '-';
+        document.getElementById('stName').textContent = '-';
+        document.getElementById('stPos').textContent = '-';
+        document.getElementById('stDir').textContent = '-';
+        document.getElementById('stSpin').textContent = '-';
+        document.getElementById('stStorage').textContent = '-';
+        const sd = document.getElementById('stationDetails');
+        if (sd) sd.style.display = 'none';
+        return;
+      }
+      document.getElementById('stId').textContent = info.id || '-';
+      document.getElementById('stType').textContent = info.className || '-';
+      document.getElementById('stName').textContent = info.instanceName || '-';
+      const posStr = info.pos ? `(${Number(info.pos.x).toFixed(2)}, ${Number(info.pos.y).toFixed(2)})` : '-';
+      document.getElementById('stPos').textContent = posStr;
+      const orientationText = (info.ignoreDir === true)
+        ? '任意'
+        : (typeof info.dir === 'number' ? `${Number(info.dir * 180 / Math.PI).toFixed(2)}°` : '-');
+      document.getElementById('stDir').textContent = orientationText;
+      document.getElementById('stSpin').textContent = (info.spin === true) ? 'true' : 'false';
+      const stor = Array.isArray(info.associatedStorageLocations) ? info.associatedStorageLocations : [];
+      document.getElementById('stStorage').textContent = stor.length > 0 ? stor.join(', ') : '-';
+      const sd = document.getElementById('stationDetails');
+      if (sd) sd.style.display = 'block';
+      const rd = document.getElementById('routeDetails');
+      if (rd) rd.style.display = 'none';
+    }
+
+    function getRoutePassLabel(passCode) {
+      const code = Number(passCode);
+      const info = Object.prototype.hasOwnProperty.call(PASS_TYPE_INFO, code) ? PASS_TYPE_INFO[code] : PASS_TYPE_INFO[0];
+      return info.label;
+    }
+
+    function getRouteColorByPass(passCode) {
+      const code = Number(passCode);
+      const info = Object.prototype.hasOwnProperty.call(PASS_TYPE_INFO, code) ? PASS_TYPE_INFO[code] : PASS_TYPE_INFO[0];
+      return info.color;
+    }
+
+    function getRouteDetails(route) {
+      if (!route) return null;
+      const id = String(route.id ?? (`${route.from}->${route.to}`));
+      const desc = String(route.desc || route.name || '-');
+      const type = String(route.type || '-');
+      const pass = (route.pass !== undefined) ? Number(route.pass) : 0;
+      return { id, desc, type, passLabel: getRoutePassLabel(pass), passCode: pass };
+    }
+
+    function updateRouteInfoPanel(info) {
+      const panel = document.getElementById('routeDetails');
+      if (!panel) return;
+      if (!info) {
+        document.getElementById('rtId').textContent = '-';
+        document.getElementById('rtDesc').textContent = '-';
+        document.getElementById('rtType').textContent = '-';
+        document.getElementById('rtPass').textContent = '-';
+        panel.style.display = 'none';
+        return;
+      }
+      document.getElementById('rtId').textContent = info.id || '-';
+      document.getElementById('rtDesc').textContent = info.desc || '-';
+      document.getElementById('rtType').textContent = info.type || '-';
+      document.getElementById('rtPass').textContent = info.passLabel || '-';
+      panel.style.display = 'block';
+      const sd = document.getElementById('stationDetails');
+      if (sd) sd.style.display = 'none';
+    }
+
+    function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
+      const dx = x2 - x1, dy = y2 - y1;
+      if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1);
+      const t = ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy);
+      const tt = Math.max(0, Math.min(1, t));
+      const cx = x1 + tt * dx, cy = y1 + tt * dy;
+      return Math.hypot(px - cx, py - cy);
+    }
+
+    function findRoutesAtScreenPos(sx, sy) {
+      if (!mapData || !Array.isArray(mapData.routes)) return [];
+      const pmap = {};
+      (mapData.points || []).forEach(p => { pmap[p.id] = p; });
+      const threshold = Math.max(6, 8 * (viewTransform.scale));
+      const candidates = [];
+      // 倒序遍历，保证绘制顺序靠后的（更“上面”的）先进入列表
+      for (let i = (mapData.routes.length - 1); i >= 0; i--) {
+        const route = mapData.routes[i];
+        const fp = pmap[route.from], tp = pmap[route.to];
+        if (!fp || !tp) continue;
+        if (route.type === 'bezier3' && route.c1 && route.c2) {
+          const N = 24;
+          let minD = Infinity;
+          let prev = worldToScreen(fp.x, fp.y);
+          for (let j = 1; j <= N; j++) {
+            const t = j / N;
+            const bt = bezierPoint({ x: fp.x, y: fp.y }, { x: route.c1.x, y: route.c1.y }, { x: route.c2.x, y: route.c2.y }, { x: tp.x, y: tp.y }, t);
+            const cur = worldToScreen(bt.x, bt.y);
+            const d = pointToSegmentDistance(sx, sy, prev.x, prev.y, cur.x, cur.y);
+            if (d < minD) minD = d;
+            prev = cur;
+          }
+          if (minD <= threshold) candidates.push(route);
+        } else {
+          const s1 = worldToScreen(fp.x, fp.y);
+          const s2 = worldToScreen(tp.x, tp.y);
+          const d = pointToSegmentDistance(sx, sy, s1.x, s1.y, s2.x, s2.y);
+          if (d <= threshold) candidates.push(route);
+        }
+      }
+      return candidates;
+    }
+
+    // 命中检测：在屏幕坐标系根据当前位置与朝向判断鼠标是否位于机器人图形内
+    function findRobotAtScreenPoint(sx, sy) {
+      for (const robot of registeredRobots) {
+        // 楼层过滤
+        if (robot.currentMap) {
+          const robotFloor = extractFloorFromMapId(robot.currentMap);
+          const currentFloorName = floorNames[currentFloorIndex] || null;
+          if (robotFloor && currentFloorName && robotFloor !== currentFloorName) continue;
+        }
+        const pos = robot.currentPosition || robot.initialPosition || null;
+        if (!pos) continue;
+        const sp = worldToScreen(pos.x, pos.y);
+        // 转到机器人局部坐标系
+        const dx = sx - sp.x;
+        const dy = sy - sp.y;
+        const ang = (pos.theta ?? pos.orientation ?? 0);
+        const cosA = Math.cos(-ang), sinA = Math.sin(-ang);
+        const lx = dx * cosA - dy * sinA;
+        const ly = dx * sinA + dy * cosA;
+        const s = Math.max(0.5, Math.min(2, viewTransform.scale));
+        // 身体的包围盒（随缩放）
+        const half = 12 * s;
+        if (lx >= -half && lx <= half && ly >= -half && ly <= half) {
+          return robot;
+        }
+      }
+      return null;
+    }
+
+    // 右键菜单展示/隐藏
+    function showRobotContextMenu(sx, sy, robot) {
+      const menu = document.getElementById('robotContextMenu');
+      if (!menu) return;
+      // 填充菜单项
+      const hasPallet = !!robot.hasPallet;
+      menu.innerHTML = '';
+      const item = document.createElement('div');
+      item.style.padding = '8px 12px';
+      item.style.cursor = 'pointer';
+      item.textContent = hasPallet ? '卸载托盘' : '加载托盘';
+      item.onclick = function () {
+        if (hasPallet) unloadPallet(robot.robot_name); else loadPallet(robot.robot_name);
+        hideRobotContextMenu();
+      };
+      menu.appendChild(item);
+      // 位置与显示
+      const container = document.getElementById('canvasContainer');
+      const rect = container.getBoundingClientRect();
+      menu.style.left = (sx + rect.left - rect.left) + 'px';
+      menu.style.top = (sy + rect.top - rect.top) + 'px';
+      menu.style.display = 'block';
+    }
+    function hideRobotContextMenu() {
+      const menu = document.getElementById('robotContextMenu');
+      if (menu) menu.style.display = 'none';
+    }
+
+    // 站点右键菜单
+    function showStationContextMenu(sx, sy, point) {
+      const menu = document.getElementById('stationContextMenu');
+      if (!menu) return;
+      menu.innerHTML = '';
+      const itemNav = document.createElement('div');
+      itemNav.style.padding = '8px 12px';
+      itemNav.style.cursor = 'pointer';
+      itemNav.textContent = '导航到该站点';
+      itemNav.onclick = async function () {
+        try {
+          await navigateRobotToStation(point);
+        } catch (err) {
+          console.error('导航失败:', err);
+          try { window.printErrorToStatus(err, '导航失败'); } catch (_) {}
+          
+        } finally {
+          hideStationContextMenu();
+        }
+      };
+      // 如果未选中机器人，则禁用提示
+      if (!selectedRobotId) {
+        itemNav.style.opacity = '0.6';
+        itemNav.style.pointerEvents = 'none';
+        const tip = document.createElement('div');
+        tip.style.padding = '6px 12px';
+        tip.style.fontSize = '12px';
+        tip.style.color = '#bdc3c7';
+        tip.textContent = '请先在列表中选中机器人';
+        menu.appendChild(tip);
+      }
+      menu.appendChild(itemNav);
+      const container = document.getElementById('canvasContainer');
+      const rect = container.getBoundingClientRect();
+      menu.style.left = (sx + rect.left - rect.left) + 'px';
+      menu.style.top = (sy + rect.top - rect.top) + 'px';
+      menu.style.display = 'block';
+    }
+    function hideStationContextMenu() {
+      const menu = document.getElementById('stationContextMenu');
+      if (menu) menu.style.display = 'none';
+    }
+
+    // 导航逻辑：基于 VehicleMap .scene，规划路径并发布 VDA 订单到后端
+    async function navigateRobotToStation(point) {
+      if (!selectedRobotId) { try { window.printErrorToStatus('请先在机器人列表中选中机器人', '导航'); } catch (_) {} return; }
+      const robot = registeredRobots.find(r => r.robot_name === selectedRobotId);
+      if (!robot) { try { window.printErrorToStatus('未找到选中机器人', '导航'); } catch (_) {} return; }
+      const pos = robot.currentPosition || robot.initialPosition;
+      if (!pos) { try { window.printErrorToStatus('机器人没有当前位置或初始位置', '导航'); } catch (_) {} return; }
+
+      const mapName = resolveMapNameForNav(robot, point);
+      if (!mapName) { try { window.printErrorToStatus('无法解析地图文件名', '导航'); } catch (_) {} return; }
+
+      document.getElementById('status').textContent = '正在读取地图并规划路径...';
+      // 读取 scene 地图、构建拓扑
+      const resp = await fetch('/maps/' + mapName);
+      if (!resp.ok) { try { window.printErrorToStatus(`读取地图失败: HTTP ${resp.status}`, '导航'); } catch (_) {} return; }
+      const sceneData = await resp.json();
+      const topo = parseSceneTopology(sceneData);
+      if (!Array.isArray(topo.anchors) || topo.anchors.length === 0 || !Array.isArray(topo.paths) || topo.paths.length === 0) {
+        try { window.printErrorToStatus('地图缺少锚点或路段（routes），无法规划', '导航'); } catch (_) {}
+        return;
+      }
+
+      // 站点匹配：找到目标站点及其位置
+      const stations = await getSceneStationsForMap(mapName);
+      const targetId = findStationIdForPoint(stations, point);
+      if (!targetId) { try { window.printErrorToStatus('无法匹配到对应的站点', '导航'); } catch (_) {} return; }
+      const targetStation = (stations || []).find(s => String(s.instanceName || s.id || s.pointName) === String(targetId));
+      if (!targetStation || !targetStation.pos) { try { window.printErrorToStatus('无法获取目标站点坐标', '导航'); } catch (_) {} return; }
+
+      // 选取起止锚点（最近点）
+      const startAnchorId = findNearestAnchor({ x: Number(pos.x), y: Number(pos.y) }, topo.anchors);
+      const endAnchorId = findNearestAnchor({ x: Number(targetStation.pos.x), y: Number(targetStation.pos.y) }, topo.anchors);
+      if (!startAnchorId || !endAnchorId) { try { window.printErrorToStatus('无法选取起止锚点', '导航'); } catch (_) {} return; }
+
+      // A* 规划
+      const nodePath = aStar(String(startAnchorId), String(endAnchorId), topo.anchors, topo.paths);
+      if (!nodePath || nodePath.length < 2) { try { window.printErrorToStatus('未找到可达路径，请检查地图 routes', '导航'); } catch (_) {} return; }
+
+      // 构造并发布 VDA 订单
+      const agvInfo = { serial_number: selectedRobotId, manufacturer: robot.manufacturer || 'SEER', version: (robot.version || '2.0.0') };
+      const order = generateVdaOrder(nodePath, agvInfo, topo);
+      try {
+        const pubResp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(selectedRobotId)}/order`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(order)
+        });
+        if (!pubResp.ok) throw new Error(`HTTP ${pubResp.status}: ${pubResp.statusText}`);
+        const resJson = await pubResp.json();
+        // 使用站点名称（anchors.name）替换锚点ID进行路径提示展示
+        const anchorNameById = new Map((topo.anchors || []).map(a => [String(a.id), a.name || String(a.id)]));
+        const displayPath = nodePath.map(id => anchorNameById.get(String(id)) || String(id));
+        document.getElementById('status').textContent = `订单已发布，路径: ${displayPath.join(' -> ')}`;
+      } catch (e) {
+        console.error('订单发布失败:', e);
+        try { window.printErrorToStatus(e, '订单发布失败'); } catch (_) {}
+      }
+    }
+
+    function resolveMapNameForNav(robot, point) {
+      // 优先使用当前楼层的 VehicleMap scene；否则回退机器人当前地图（需为 .scene）
+      const fname = floorNames[currentFloorIndex];
+      if (fname && typeof fname === 'string' && fname.trim() !== '') {
+        return `VehicleMap/${fname}.scene`;
+      }
+      if (robot && typeof robot.currentMap === 'string' && /\.scene$/.test(robot.currentMap)) {
+        return robot.currentMap;
+      }
+      return null;
+    }
+
+    function distanceXY(a, b) {
+      const dx = Number(a.x) - Number(b.x);
+      const dy = Number(a.y) - Number(b.y);
+      return Math.hypot(dx, dy);
+    }
+
+    // 已移除：SMAP 拓扑拉取（项目不再支持 .smap）
+
+    async function getSceneStationsForMap(mapName) {
+      try {
+        const path = String(mapName || '').trim();
+        if (!path) return [];
+        const resp = await fetch('/maps/' + path);
+        if (!resp.ok) return [];
+        const raw = await resp.json();
+        const root = Array.isArray(raw) ? raw[0] : raw;
+        const points = (root && Array.isArray(root.points)) ? root.points : [];
+        const allowedPrefixes = ['AP','CP','PP','LM','WP'];
+        const startsAllowed = (txt) => allowedPrefixes.some(pref => String(txt || '').trim().toUpperCase().startsWith(pref));
+        const out = [];
+        for (const p of points) {
+          const nm = String(p.name || p.id || '').trim();
+          if (!nm || !startsAllowed(nm)) continue;
+          out.push({ id: String(p.id || nm), instanceName: nm, pointName: nm, className: deriveClassFromName(nm), pos: { x: Number(p.x), y: Number(p.y) } });
+        }
+        return out;
+      } catch (err) {
+        console.error('getSceneStationsForMap error:', err);
+        return [];
+      }
+    }
+
+    function findNearestSceneStation(stations, worldPos) {
+      const allowedPrefixes = ['AP','CP','PP','LM','WP'];
+      const allowedClasses = new Set(['ActionPoint','LocationMark','ChargingPoint','ParkingPoint','WayPoint','Waypoint']);
+      let best = null; let bestD = Infinity;
+      (stations || []).forEach(s => {
+        const id = String(s.id || '').trim();
+        const iName = String(s.instanceName || '').trim();
+        const pName = String(s.pointName || '').trim();
+        const cls = String(s.className || '').trim();
+        const startsAllowed = (txt) => allowedPrefixes.some(pref => txt.startsWith(pref));
+        const isAllowed = allowedClasses.has(cls) || startsAllowed(id) || startsAllowed(iName) || startsAllowed(pName);
+        if (!isAllowed) return;
+        const sx = (s && s.pos && typeof s.pos.x !== 'undefined') ? Number(s.pos.x) : Number(s.x);
+        const sy = (s && s.pos && typeof s.pos.y !== 'undefined') ? Number(s.pos.y) : Number(s.y);
+        const d = Math.hypot(Number(worldPos.x) - sx, Number(worldPos.y) - sy);
+        if (d < bestD) { bestD = d; best = s; }
+      });
+      return best;
+    }
+
+    function findStationIdForPoint(stations, pt) {
+      const key1 = (pt?.name || '').trim();
+      const key2 = (pt?.id || '').trim();
+      const allowedPrefixes = ['AP','CP','PP','LM','WP'];
+      const allowedClasses = new Set(['ActionPoint','LocationMark','ChargingPoint','ChargePoint','ParkingPoint','ParkPoint','WayPoint','Waypoint']);
+      const startsAllowed = (txt) => allowedPrefixes.some(pref => String(txt || '').trim().startsWith(pref));
+      const isAllowedStation = (s) => {
+        const id = String(s.id || '').trim();
+        const iName = String(s.instanceName || '').trim();
+        const pName = String(s.pointName || '').trim();
+        const cls = String(s.className || '').trim();
+        return allowedClasses.has(cls) || startsAllowed(id) || startsAllowed(iName) || startsAllowed(pName);
+      };
+      // 先尝试按名称/ID 精确匹配，但仅接受导航相关站点
+      for (const s of (stations || [])) {
+        const iName = (s.instanceName || '').trim();
+        const pName = (s.pointName || '').trim();
+        if (!isAllowedStation(s)) continue;
+        if (key1 && (iName === key1 || pName === key1)) return s.instanceName || s.id || s.pointName;
+        if (key2 && (iName === key2 || pName === key2)) return s.instanceName || s.id || s.pointName;
+      }
+      // 否则按位置最近匹配（仅限导航相关站点类型）
+      const nearest = findNearestSceneStation(stations, pt.pos || { x: 0, y: 0 });
+      return nearest ? (nearest.instanceName || nearest.id || nearest.pointName) : null;
+    }
+
+    async function callNavToStation(robotId, stationId, mapName) {
+      const url = `${API_BASE_URL}/sim/agv/${encodeURIComponent(robotId)}/nav/station?station_id=${encodeURIComponent(stationId)}&map_name=${encodeURIComponent(mapName)}`;
+      const resp = await fetch(url, { method: 'POST' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      return await resp.json();
+    }
+
+    async function pollNavUntilDone(robotId, timeoutMs = 60000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        try {
+          const resp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(robotId)}/nav/status`);
+          if (resp.ok) {
+            const st = await resp.json();
+            if (!st.running) return true; // 已停止，认为完成一个阶段
+          }
+        } catch (e) { /* 忽略一次失败重试 */ }
+        await new Promise(r => setTimeout(r, window.FRONTEND_POLL_INTERVAL_MS || 100));
+      }
+      return false;
+    }
+
+    // 托盘逻辑：加载/卸载与动画
+    function loadPallet(id) {
+      const robot = registeredRobots.find(r => r.robot_name === id);
+      if (!robot) return;
+      if (robot.hasPallet) return; // 已有则忽略
+      // 初始化动画参数
+      robot._palletAnimLoading = true;
+      robot._palletAnimStart = performance.now();
+      robot._palletAnimProgress = 0;
+      startPalletAnimationLoop();
+    }
+    function unloadPallet(id) {
+      const robot = registeredRobots.find(r => r.robot_name === id);
+      if (!robot) return;
+      robot.hasPallet = false;
+      robot._palletAnimLoading = false;
+      robot._palletAnimProgress = 0;
+      drawMap();
+    }
+
+    // 动画循环（16ms）
+    let palletAnimTimer = null;
+    function startPalletAnimationLoop() {
+      if (palletAnimTimer) return;
+      palletAnimTimer = setInterval(() => {
+        const now = performance.now();
+        let any = false;
+        registeredRobots.forEach(r => {
+          if (r._palletAnimLoading) {
+            const dur = 3000;
+            const p = Math.max(0, Math.min(1, (now - (r._palletAnimStart || now)) / dur));
+            r._palletAnimProgress = p;
+            if (p >= 1) {
+              r._palletAnimLoading = false;
+              r.hasPallet = true;
+            } else {
+              any = true;
+            }
+          }
+        });
+        drawMap();
+        if (!any) {
+          clearInterval(palletAnimTimer);
+          palletAnimTimer = null;
+        }
+      }, 16);
+    }
+
+    // 路段方向与箭头渲染辅助函数
+    function getRouteDirection(route) {
+      let d = route.direction;
+      if (d === undefined && Array.isArray(route.properties)) {
+        const p = route.properties.find(pr => (pr.name === 'direction' || pr.key === 'direction'));
+        if (p) d = Number(p.value);
+      }
+      if (typeof d !== 'number' || isNaN(d)) return 1; // 默认正向
+      if (d === 0) return 0; // 双向
+      return d > 0 ? 1 : -1;
+    }
+
+    function drawArrowAt(x, y, angle) {
+      const arrowLength = 10;
+      const arrowAngle = Math.PI / 6;
+      ctx.save();
+      // 使用当前路段描边颜色
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(
+        x - arrowLength * Math.cos(angle - arrowAngle),
+        y - arrowLength * Math.sin(angle - arrowAngle)
+      );
+      ctx.lineTo(
+        x - arrowLength * Math.cos(angle + arrowAngle),
+        y - arrowLength * Math.sin(angle + arrowAngle)
+      );
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 直线路段箭头：在末端绘制，角度取线段方向
+    function drawArrow(start, end) {
+      const angle = Math.atan2(end.y - start.y, end.x - start.x);
+      drawArrowAt(end.x, end.y, angle);
+    }
+
+    function bezierPoint(p0, p1, p2, p3, t) {
+      const u = 1 - t;
+      const tt = t * t;
+      const uu = u * u;
+      const uuu = uu * u;
+      const ttt = tt * t;
+      return {
+        x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
+        y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y
+      };
+    }
+
+    function bezierTangent(p0, p1, p2, p3, t) {
+      const u = 1 - t;
+      return {
+        x: 3 * u * u * (p1.x - p0.x) + 6 * u * t * (p2.x - p1.x) + 3 * t * t * (p3.x - p2.x),
+        y: 3 * u * u * (p1.y - p0.y) + 6 * u * t * (p2.y - p1.y) + 3 * t * t * (p3.y - p2.y)
+      };
+    }
+
+    async function loadMapData() {
+      try {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('status').textContent = '正在加载地图数据...';
+        const resp = await fetch('/maps/' + CURRENT_MAP_ID);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        const raw = await resp.json();
+        mapLayers = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+        // 预取每个楼层（layer）的名称：从 scene 的 list 组中递归查找 name 为纯数字的字段
+        floorNames = mapLayers.map(extractFloorNameFromLayer);
+        currentFloorIndex = 0;
+      mapData = mapLayers.length > 0 ? normalizeScene(mapLayers[currentFloorIndex]) : null;
+      await loadSceneStations();
+        populateFloorSelect();
+        updateMapInfo();
+        fitMapToView();
+        drawMap();
+        document.getElementById('status').textContent = '地图加载完成';
+      } catch (err) {
+        console.error('加载地图数据失败:', err);
+        document.getElementById('status').textContent = '加载失败: ' + err.message;
+      } finally {
+        document.getElementById('loading').style.display = 'none';
+      }
+    }
+    function normalizeScene(scene) {
+      // 方案A：统一世界坐标为 y 向上；不再对数据进行 y 取反，
+      // 仅在 world<->screen 换算中处理屏幕坐标的 y 反向。
+      if (!scene) return null;
+      return JSON.parse(JSON.stringify(scene));
+    }
+
+    function populateFloorSelect() {
+      const sel = document.getElementById('floorSelect');
+      if (!sel) return;
+      sel.innerHTML = '';
+      if (!Array.isArray(mapLayers) || mapLayers.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '无楼层';
+        sel.appendChild(opt);
+        sel.disabled = true;
+        return;
+      }
+      sel.disabled = false;
+      mapLayers.forEach((_, i) => {
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        const fname = floorNames[i];
+        opt.textContent = fname ? `${fname}` : `${i + 1}层`;
+        sel.appendChild(opt);
+      });
+      sel.value = String(currentFloorIndex);
+    }
+
+    function switchFloor(idx) {
+      const i = parseInt(idx, 10);
+      if (isNaN(i) || i < 0 || i >= mapLayers.length) return;
+      currentFloorIndex = i;
+      mapData = normalizeScene(mapLayers[currentFloorIndex]);
+      // 切换楼层后预取该层站点详情（scene）
+      loadSceneStations();
+      updateMapInfo();
+      fitMapToView();
+      drawMap();
+      document.getElementById('status').textContent = `已切换到${i + 1}层`;
+    }
+
+    function cycleFloor() {
+      if (!Array.isArray(mapLayers) || mapLayers.length === 0) return;
+      const next = (currentFloorIndex + 1) % mapLayers.length;
+      switchFloor(next);
+      const sel = document.getElementById('floorSelect');
+      if (sel) sel.value = String(next);
+    }
+
+    function updateMapInfo() { const pc = mapData?.points?.length || 0; const rc = mapData?.routes?.length || 0; document.getElementById('pointCount').textContent = pc; document.getElementById('routeCount').textContent = rc; updateInitialPositionOptions(); }
+    function updateInitialPositionOptions() {
+      const regMapSel = document.getElementById('registerMapSelect');
+      const chosen = regMapSel ? regMapSel.value : '';
+      if (regMapSel && /(^|\/)VehicleMap\/[^\/]+\.scene$/.test(chosen)) { updateRegisterInitialPositionOptions(); return; }
+      const sel = document.getElementById('initialPosition');
+      sel.innerHTML = '<option value="">选择初始位置</option>';
+      (mapData?.points || []).forEach(p => { if (p.name) { const opt = document.createElement('option'); opt.value = p.id; opt.textContent = `${p.name} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`; sel.appendChild(opt); } });
+      sel.disabled = false;
+    }
+    function fitMapToView() { if (!mapData || !mapData.points || mapData.points.length === 0) return; let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity; mapData.points.forEach(p => { const sx = p.x * 20, sy = p.y * 20; minX = Math.min(minX, sx); minY = Math.min(minY, sy); maxX = Math.max(maxX, sx); maxY = Math.max(maxY, sy); }); const mapW = maxX - minX, mapH = maxY - minY, cx = (minX + maxX) / 2, cy = (minY + maxY) / 2; const pad = 50; const sX = (canvas.width - pad * 2) / mapW; const sY = (canvas.height - pad * 2) / mapH; viewTransform.scale = Math.min(sX, sY, 2); viewTransform.x = canvas.width / 2 - cx * viewTransform.scale; viewTransform.y = canvas.height / 2 + cy * viewTransform.scale; updateZoomDisplay(); }
+    function updateZoomDisplay() { document.getElementById('zoomLevel').textContent = Math.round(viewTransform.scale * 100) + '%'; }
+    function drawMap() { if (!mapData) return; ctx.clearRect(0, 0, canvas.width, canvas.height); if (showGrid) drawGrid(); if (mapData.routes) drawRoutes(); if (mapData.points) drawPoints(); if (registeredRobots.length > 0) drawRobots(); }
+    function drawGrid() { ctx.save(); ctx.strokeStyle = '#34495e'; ctx.lineWidth = 1; const g = 50 * viewTransform.scale; const ox = viewTransform.x % g, oy = viewTransform.y % g; for (let x = ox; x < canvas.width; x += g) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); } for (let y = oy; y < canvas.height; y += g) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); } ctx.restore(); }
+    function drawPoints() {
+      (mapData.points || []).forEach(point => {
+        const sp = worldToScreen(point.x, point.y);
+        if (sp.x < -20 || sp.x > canvas.width + 20 || sp.y < -20 || sp.y > canvas.height + 20) return;
+        ctx.save();
+
+        // 动态尺寸与颜色
+        let color = '#95a5a6';
+        let size = pointDrawSize();
+        const t = Number(point.type);
+        if (!Number.isNaN(t) && POINT_TYPE_INFO[t]) {
+          color = POINT_TYPE_INFO[t].color;
+        } else {
+          const nm = point.name || '';
+          if (nm.startsWith('AP')) { color = '#e74c3c'; }
+          else if (nm.startsWith('LM')) { color = '#f39c12'; }
+          else if (nm.startsWith('CP')) { color = '#27ae60'; }
+        }
+
+        // 绘制圆点
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, size, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = '#2c3e50';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        const name = point.name || '';
+        // 选中高亮：外圈描边与闪烁轻微效果
+        const key = name || point.id;
+        let isSelected = !!selectedStationId && key === selectedStationId;
+        if (!isSelected && selectedNavStation && selectedNavStation.pos) {
+          const hitRadius = pointDrawSize() + 2;
+          const spSel = worldToScreen(selectedNavStation.pos.x, selectedNavStation.pos.y);
+          const dxs = sp.x - spSel.x, dys = sp.y - spSel.y;
+          if (dxs * dxs + dys * dys <= (hitRadius + 4) * (hitRadius + 4)) {
+            isSelected = true;
+          }
+        }
+        if (isSelected) {
+          ctx.strokeStyle = '#f1c40f';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(sp.x, sp.y, size + 4, 0, 2 * Math.PI);
+          ctx.stroke();
+        }
+
+        // 标签
+        if (viewTransform.scale > 0.5 && name) {
+          ctx.fillStyle = '#ecf0f1';
+          ctx.font = '12px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(name, sp.x, sp.y - size - 6);
+        }
+        ctx.restore();
+      });
+    }
+    function drawRoutes() {
+      if (!mapData || !mapData.points) return;
+      const pmap = {};
+      mapData.points.forEach(p => pmap[p.id] = p);
+    
+      (mapData.routes || []).forEach(route => {
+        const fp = pmap[route.from], tp = pmap[route.to];
+        if (!fp || !tp) return;
+    
+        const dir = getRouteDirection(route);
+
+        ctx.save();
+        const passCode = (route.pass !== undefined) ? Number(route.pass) : 0;
+        const baseColor = getRouteColorByPass(passCode);
+        ctx.strokeStyle = baseColor;
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        if (passCode === 10) {
+          ctx.setLineDash([6, 4]);
+        } else {
+          ctx.setLineDash([]);
+        }
+
+        const rid = String(route.id ?? (`${route.from}->${route.to}`));
+        const isSelected = !!selectedRouteId && String(selectedRouteId) === rid;
+        if (isSelected) {
+          ctx.lineWidth = 3;
+        }
+
+        if (route.type === 'bezier3' && route.c1 && route.c2) {
+          // 世界坐标下的控制点
+          const p0 = { x: fp.x, y: fp.y };
+          const p1 = { x: route.c1.x, y: route.c1.y };
+          const p2 = { x: route.c2.x, y: route.c2.y };
+          const p3 = { x: tp.x, y: tp.y };
+    
+          // 绘制曲线
+          const fromScreen = worldToScreen(p0.x, p0.y);
+          const c1Screen = worldToScreen(p1.x, p1.y);
+          const c2Screen = worldToScreen(p2.x, p2.y);
+          const toScreen = worldToScreen(p3.x, p3.y);
+    
+          ctx.beginPath();
+          ctx.moveTo(fromScreen.x, fromScreen.y);
+          ctx.bezierCurveTo(c1Screen.x, c1Screen.y, c2Screen.x, c2Screen.y, toScreen.x, toScreen.y);
+          ctx.stroke();
+    
+          // 方向箭头
+          if (viewTransform.scale > 0.3) {
+            if (dir !== 0) {
+              const t = 0.7;
+              const q0 = dir > 0 ? p0 : p3;
+              const q1 = dir > 0 ? p1 : p2;
+              const q2 = dir > 0 ? p2 : p1;
+              const q3 = dir > 0 ? p3 : p0;
+              const pt = bezierPoint(q0, q1, q2, q3, t);
+              const tg = bezierTangent(q0, q1, q2, q3, t);
+              const ptScreen = worldToScreen(pt.x, pt.y);
+              const tgScreen = {
+                x: worldToScreen(q0.x + tg.x, q0.y + tg.y).x - worldToScreen(q0.x, q0.y).x,
+                y: worldToScreen(q0.x + tg.x, q0.y + tg.y).y - worldToScreen(q0.x, q0.y).y
+              };
+              const angle = Math.atan2(tgScreen.y, tgScreen.x);
+              drawArrowAt(ptScreen.x, ptScreen.y, angle);
+            } else {
+              // 双向：两端各画一个箭头
+              const t1 = 0.3;
+              const pt1 = bezierPoint(p0, p1, p2, p3, t1);
+              const tg1 = bezierTangent(p0, p1, p2, p3, t1);
+              const pt1Screen = worldToScreen(pt1.x, pt1.y);
+              const tg1Screen = {
+                x: worldToScreen(p0.x + tg1.x, p0.y + tg1.y).x - worldToScreen(p0.x, p0.y).x,
+                y: worldToScreen(p0.x + tg1.x, p0.y + tg1.y).y - worldToScreen(p0.x, p0.y).y
+              };
+              drawArrowAt(pt1Screen.x, pt1Screen.y, Math.atan2(tg1Screen.y, tg1Screen.x));
+    
+              const r0 = p3, r1 = p2, r2 = p1, r3 = p0;
+              const pt2 = bezierPoint(r0, r1, r2, r3, t1);
+              const tg2 = bezierTangent(r0, r1, r2, r3, t1);
+              const pt2Screen = worldToScreen(pt2.x, pt2.y);
+              const tg2Screen = {
+                x: worldToScreen(r0.x + tg2.x, r0.y + tg2.y).x - worldToScreen(r0.x, r0.y).x,
+                y: worldToScreen(r0.x + tg2.x, r0.y + tg2.y).y - worldToScreen(r0.x, r0.y).y
+              };
+              drawArrowAt(pt2Screen.x, pt2Screen.y, Math.atan2(tg2Screen.y, tg2Screen.x));
+            }
+          }
+        } else {
+          // 直线
+          const fromScreen = worldToScreen(fp.x, fp.y);
+          const toScreen = worldToScreen(tp.x, tp.y);
+    
+          ctx.beginPath();
+          ctx.moveTo(fromScreen.x, fromScreen.y);
+          ctx.lineTo(toScreen.x, toScreen.y);
+          ctx.stroke();
+    
+          if (viewTransform.scale > 0.3) {
+            if (dir === 0) {
+              drawArrow(fromScreen, toScreen);
+              drawArrow(toScreen, fromScreen);
+            } else {
+              const start = dir > 0 ? fromScreen : toScreen;
+              const end = dir > 0 ? toScreen : fromScreen;
+              drawArrow(start, end);
+            }
+          }
+        }
+    
+        ctx.restore();
+      });
+    }
+    function drawRobots() {
+      registeredRobots.forEach(robot => {
+        // 楼层过滤：根据 scene 的楼层名与机器人当前加载 scene 的文件名匹配
+        if (robot.currentMap) {
+          const robotFloor = extractFloorFromMapId(robot.currentMap);
+          const currentFloorName = floorNames[currentFloorIndex] || null;
+          if (robotFloor && currentFloorName && robotFloor !== currentFloorName) {
+            return; // 不在当前楼层，不渲染
+          }
+        }
+        let pos = robot.currentPosition || robot.initialPosition || null;
+        if (!pos) return;
+        const sp = worldToScreen(pos.x, pos.y);
+        if (sp.x < -50 || sp.x > canvas.width + 50 || sp.y < -50 || sp.y > canvas.height + 50) return;
+        drawRobotIcon(sp.x, sp.y, ((pos.theta ?? pos.orientation) || 0), robot);
+      });
+    }
+
+    function extractFloorNameFromLayer(layer) {
+      try {
+        // 按照 scene 的 list，依次提取对象下的一级 key: name（字符串）
+        if (layer && Array.isArray(layer.list)) {
+          for (const item of layer.list) {
+            if (item && typeof item.name === 'string') {
+              const v = item.name.trim();
+              if (v) return v; // 不限制为数字，直接使用字符串名称
+            }
+          }
+        }
+        // 兜底：如果楼层对象本身有 name
+        if (layer && typeof layer.name === 'string' && layer.name.trim() !== '') {
+          return layer.name.trim();
+        }
+      } catch (e) { /* 忽略异常并返回 null */ }
+      return null;
+    }
+    function extractFloorFromMapId(mapId) {
+      const mScene = /^VehicleMap\/(.+)\.scene$/.exec(mapId || '');
+      if (mScene) return mScene[1];
+      const mViewer = /^ViewerMap\/(.+)\.scene$/.exec(mapId || '');
+      if (mViewer) return mViewer[1];
+      return null;
+    }
+
+    function drawRobotIcon(x, y, rotationDeg, robot) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rotationDeg);
+      const s = Math.max(0.5, Math.min(2, viewTransform.scale));
+      ctx.scale(s, s);
+
+      // 机器人身体（24x24）
+      ctx.fillStyle = '#4A90E2';
+      ctx.strokeStyle = '#2E5C8A';
+      ctx.lineWidth = 1;
+      ctx.fillRect(-12, -12, 24, 24);
+      ctx.strokeRect(-12, -12, 24, 24);
+
+      // 顶部半圆盖
+      ctx.fillStyle = '#6BB6FF';
+      ctx.beginPath();
+      ctx.arc(0, -12, 12, 0, Math.PI, true);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 朝向箭头（指向前方：局部坐标 -Y）
+      ctx.fillStyle = '#FF6B6B';
+      ctx.strokeStyle = '#D63031';
+      ctx.beginPath();
+      ctx.moveTo(0, -22);
+      ctx.lineTo(-4, -14);
+      ctx.lineTo(4, -14);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 托盘绘制：宽比正方形身体大10%，长比正方形身体大15%，与正方体身体重合居中
+      const bodySize = 24;
+      const palletW = bodySize * 1.20; 
+      const palletL = bodySize * 1.10; 
+      const shouldDrawPallet = !!robot.hasPallet || !!robot._palletAnimLoading;
+      if (shouldDrawPallet) {
+        // 动画：加载时 3 秒淡入，并略微上滑（+6px 到 0），最终与身体居中重合
+        let alpha = 1.0;
+        let slide = 0;
+        if (robot._palletAnimLoading) {
+          const p = Math.max(0, Math.min(1, robot._palletAnimProgress || 0));
+          alpha = p;
+          slide = (1 - p) * 6; // 初始更靠后，逐步贴近
+        }
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = '#8B5E3C'; // 木质托盘色
+        ctx.strokeStyle = '#5D3A1A';
+        ctx.lineWidth = 1;
+        // 矩形托盘：与机器人正方体身体居中重合
+        ctx.fillRect(-palletW / 2, -palletL / 2 + slide, palletW, palletL);
+        ctx.strokeRect(-palletW / 2, -palletL / 2 + slide, palletW, palletL);
+        // 简单栈板纹理线
+        ctx.strokeStyle = '#704A2B';
+        for (let i = 1; i <= 2; i++) {
+          const y = -palletL / 2 + slide + (i * palletL / 3);
+          ctx.beginPath();
+          ctx.moveTo(-palletW / 2 + 2, y);
+          ctx.lineTo(palletW / 2 - 2, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      ctx.restore();
+
+      // 名称标注
+      if (viewTransform.scale > 0.5 && robot.robot_name) {
+        ctx.save();
+        ctx.fillStyle = '#ecf0f1';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#2c3e50';
+        ctx.lineWidth = 3;
+        ctx.strokeText(robot.robot_name, x, y - 5);
+        ctx.fillText(robot.robot_name, x, y - 5);
+        ctx.restore();
+      }
+    }
+
+    // 控制
+    function resetView() { fitMapToView(); drawMap(); }
+    function toggleGrid() { showGrid = !showGrid; drawMap(); }
+    function toggleSidebar() { const s = document.getElementById('sidebar'), t = document.getElementById('sidebarToggle'), c = document.getElementById('canvasContainer'); sidebarOpen = !sidebarOpen; if (sidebarOpen) { s.classList.add('open'); c.classList.add('sidebar-open'); t.classList.add('open'); t.textContent = '收起'; } else { s.classList.remove('open'); c.classList.remove('sidebar-open'); t.classList.remove('open'); t.textContent = '打开'; } setTimeout(resizeCanvas, 400); }
+    function switchTab(name) { document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active')); document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); if (name === 'register') { document.querySelector('.tab-button[onclick="switchTab(\'register\')"]').classList.add('active'); document.getElementById('registerTab').classList.add('active'); updateRegisterMapOptions(); } else { document.querySelector('.tab-button[onclick="switchTab(\'list\')"]').classList.add('active'); document.getElementById('listTab').classList.add('active'); } }
+
+    // 机器人管理（适配当前后端）
+    async function loadRobotList() { try { const resp = await fetch(`${API_BASE_URL}/agvs`); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); const agvs = await resp.json(); registeredRobots = (agvs || []).map(info => ({ robot_name: info.serial_number, type: info.type, ip: info.IP, manufacturer: info.manufacturer, vda_version: info.vda_version, battery: 100, initialPosition: null, currentPosition: null, currentMap: null, commConnected: false, instanceStatus: '停止', lastUpdateTs: 0, hasPallet: false })); updateRobotList(); drawMap(); } catch (err) { console.error('加载机器人列表失败:', err); document.getElementById('status').textContent = '加载机器人列表失败: ' + err.message; } }
+    function clearRobotForm() {
+      document.getElementById('robotName').value = '';
+      document.getElementById('robotType').value = 'AGV';
+      document.getElementById('robotIP').value = '';
+      const regMapSel = document.getElementById('registerMapSelect');
+      if (regMapSel) regMapSel.value = '';
+      const lbl = document.getElementById('registerMapSelectedLabel');
+      if (lbl) lbl.textContent = '未设置';
+      const sel = document.getElementById('initialPosition');
+      if (sel) {
+        sel.innerHTML = '<option value="">请先选择地图</option>';
+        sel.disabled = true;
+      }
+    }
+
+    async function updateRegisterMapOptions() {
+      const sel = document.getElementById('registerMapSelect');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">请选择地图</option>';
+      try {
+        const resp = await fetch(`${API_BASE_URL}/maps`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        const files = await resp.json();
+        (files || []).forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          sel.appendChild(opt);
+        });
+        if (CURRENT_MAP_ID && CURRENT_MAP_ID.startsWith('VehicleMap/')) {
+          sel.value = CURRENT_MAP_ID;
+        }
+      } catch (err) {
+        console.error('加载地图列表失败:', err);
+        const opt = document.createElement('option');
+        opt.value = CURRENT_MAP_ID;
+        opt.textContent = `已加载地图 (${CURRENT_MAP_ID})`;
+        sel.appendChild(opt);
+        sel.value = CURRENT_MAP_ID;
+      }
+      const mapLabel = document.getElementById('registerMapSelectedLabel');
+      if (mapLabel) mapLabel.textContent = sel.value || '未设置';
+      updateRegisterInitialPositionOptions();
+    }
+
+    async function updateRegisterInitialPositionOptions() {
+      const sel = document.getElementById('initialPosition');
+      const selMap = document.getElementById('registerMapSelect');
+      const chosen = selMap ? selMap.value : '';
+      sel.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = (typeof chosen === 'string' && /(^|\/)VehicleMap\/[^\/]+\.scene$/.test(chosen)) ? '站点加载中...' : '请先选择地图';
+      sel.appendChild(placeholder);
+      sel.disabled = true;
+
+      if (!chosen || !(/(^|\/)VehicleMap\/[^\/]+\.scene$/.test(chosen))) {
+        return;
+      }
+
+      const fname = String(chosen).split('/').pop();
+      window.registerSceneStationsCache = window.registerSceneStationsCache || {};
+      let stations = window.registerSceneStationsCache[fname];
+      if (!stations) {
+        try {
+          const resp = await fetch(`/maps/VehicleMap/${encodeURIComponent(fname)}`);
+          if (!resp.ok) throw new Error(`站点获取失败: ${resp.status}`);
+          const data = await resp.json();
+          const allowedPrefixes = ['AP','CP','PP','LM','WP'];
+          const startsAllowed = (txt) => allowedPrefixes.some(pref => String(txt || '').trim().startsWith(pref));
+          const root = Array.isArray(data) ? data[0] : data;
+          const points = (root && Array.isArray(root.points)) ? root.points : [];
+          stations = points.filter(p => {
+            const nm = String(p.name || p.id || '').trim();
+            return nm && startsAllowed(nm);
+          }).map(p => ({ id: String(p.id || p.name), instanceName: String(p.name || p.id), pointName: String(p.name || p.id), pos: { x: Number(p.x), y: Number(p.y) } }));
+          window.registerSceneStationsCache[fname] = stations;
+        } catch (e) {
+          console.error('加载站点失败:', e);
+          stations = [];
+        }
+      }
+
+      sel.innerHTML = '<option value="">选择初始位置</option>';
+      stations.forEach(s => {
+        const id = String(s.id || s.instanceName || s.pointName);
+        const name = String(s.instanceName || s.pointName || id);
+        const px = (s && s.pos && typeof s.pos.x !== 'undefined') ? Number(s.pos.x) : Number(s.x);
+        const py = (s && s.pos && typeof s.pos.y !== 'undefined') ? Number(s.pos.y) : Number(s.y);
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = `${name} (${isFinite(px) ? px.toFixed(2) : 'NaN'}, ${isFinite(py) ? py.toFixed(2) : 'NaN'})`;
+        sel.appendChild(opt);
+      });
+      sel.disabled = false;
+    }
+    async function registerRobot() { const name = document.getElementById('robotName').value.trim(); const type = document.getElementById('robotType').value; const ip = document.getElementById('robotIP').value.trim(); const manu = document.getElementById('robotManufacturer').value.trim() || 'SEER'; const ver = document.getElementById('robotVersion').value.trim() || 'v2'; const initId = document.getElementById('initialPosition').value; const mapVal = document.getElementById('registerMapSelect').value; if (!name) { try { window.printErrorToStatus('请输入机器人名称','注册'); } catch (_) {} return; } if (!ip) { try { window.printErrorToStatus('请输入机器人IP地址','注册'); } catch (_) {} return; } if (!initId) { try { window.printErrorToStatus('请选择初始位置','注册'); } catch (_) {} return; } const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/; if (!ipRegex.test(ip)) { try { window.printErrorToStatus('请输入有效的IP地址格式','注册'); } catch (_) {} return; } const payload = [{ serial_number: name, manufacturer: manu, type: type, vda_version: ver, IP: ip }]; try { const resp = await fetch(`${API_BASE_URL}/agvs/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); const result = await resp.json(); if ((result.registered || []).includes(name)) { await loadRobotList(); const robot = registeredRobots.find(r => r.robot_name === name); let pos = null; if (mapVal && /(^|\/)VehicleMap\/[^\/]+\.scene$/.test(mapVal)) { const fname = String(mapVal).split('/').pop(); window.registerSceneStationsCache = window.registerSceneStationsCache || {}; let stations = window.registerSceneStationsCache[fname]; if (!stations) { try { const sresp = await fetch(`/maps/VehicleMap/${encodeURIComponent(fname)}`); if (sresp.ok) { const data = await sresp.json(); const root = Array.isArray(data) ? data[0] : data; const points = (root && Array.isArray(root.points)) ? root.points : []; const allowedPrefixes = ['AP','CP','PP','LM','WP']; const startsAllowed = (txt) => allowedPrefixes.some(pref => String(txt || '').trim().toUpperCase().startsWith(pref)); stations = points.filter(p => startsAllowed(String(p.name || p.id || ''))).map(p => ({ id: String(p.id || p.name), instanceName: String(p.name || p.id), pointName: String(p.name || p.id), pos: { x: Number(p.x), y: Number(p.y) } })); } } catch (e) { /* 忽略一次失败 */ } } const s = (stations || []).find(x => String(x.id || x.instanceName || x.pointName) === initId); if (s) { const px = (s && s.pos && typeof s.pos.x !== 'undefined') ? Number(s.pos.x) : Number(s.x); const py = (s && s.pos && typeof s.pos.y !== 'undefined') ? Number(s.pos.y) : Number(s.y); if (isFinite(px) && isFinite(py)) { pos = { x: px, y: py, theta: 0 }; } } } else { const point = (mapData?.points || []).find(p => String(p.id || p.name) === initId); if (point) { pos = { x: point.x, y: point.y, theta: 0 }; } } if (robot && pos) { robot.initialPosition = pos; if (mapVal) robot.currentMap = mapVal; } clearRobotForm(); document.getElementById('status').textContent = `机器人 ${name} 注册成功`; setTimeout(() => document.getElementById('status').textContent = '准备就绪', 3000); } else { try { window.printErrorToStatus('注册失败: ' + JSON.stringify(result),'注册'); } catch (_) {} } } catch (err) { console.error('注册机器人失败:', err); try { window.printErrorToStatus('注册机器人失败: ' + (err && err.message ? err.message : String(err)),'注册'); } catch (_) {} document.getElementById('status').textContent = '注册失败: ' + (err && err.message ? err.message : String(err)); } }
+    async function removeRobot(serial) { if (!confirm('确定要删除这个机器人吗？')) return; try { const resp = await fetch(`${API_BASE_URL}/agvs/${serial}`, { method: 'DELETE' }); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); await loadRobotList(); document.getElementById('status').textContent = '机器人已删除'; setTimeout(() => document.getElementById('status').textContent = '准备就绪', 2000); } catch (err) { console.error('删除机器人失败:', err); try { window.printErrorToStatus('删除机器人失败: ' + (err && err.message ? err.message : String(err)),'删除'); } catch (_) {} } }
+
+ function updateRobotList() { const c = document.getElementById('robotListContainer'); if (registeredRobots.length === 0) { c.innerHTML = '<p style="color:#bdc3c7;font-style:italic;">暂无注册的机器人</p>'; return; } c.innerHTML = registeredRobots.map(robot => { const battery = robot.battery || 0; const batteryText = truncateToOneDecimal(Number(battery)).toFixed(1); const pos = robot.currentPosition || robot.initialPosition; const posText = pos ? `当前位置: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}) | 方向: ${(pos.theta || 0).toFixed(2)}` : '位置未知'; const selectedStyle = (selectedRobotId === robot.robot_name) ? 'border-left:4px solid #2ecc71;background:#3b4f63;' : ''; const commText = robot.commConnected ? '连接' : '断开'; const commColor = robot.commConnected ? '#00ff00' : '#ff0000'; const instStatus = robot.instanceStatus || '停止'; const instText = instStatus; const instColor = instStatus === '启动' ? '#00ff00' : '#ff0000'; const mapText = robot.currentMap ? robot.currentMap : '未设置'; return `<div class=\"robot-item\" style=\"${selectedStyle}\" onclick=\"selectRobot('${robot.robot_name}')\"><div class=\"robot-header\"><div class=\"robot-name\">${robot.robot_name}</div></div><div class=\"robot-info\" style=\"word-break:break-all;\">类型: ${robot.type} | IP: ${robot.ip}<br>厂商: ${robot.manufacturer || '未知'} | 电量: ${batteryText}%<br>地图: ${mapText}<br>${posText}<br><span style=\"color:${commColor}\">通信状态: ${commText}</span> | <span style=\"color:${instColor}\">实例状态: ${instText}</span></div><div class=\"robot-actions\"><button class=\"btn-small btn-danger\" onclick=\"removeRobot('${robot.robot_name}')\">删除</button><button class=\"btn-small btn-config-small\" onclick=\"openRobotConfig('${robot.robot_name}')\">配置</button></div></div>`; }).join(''); }
+
+    // 配置模态框（实例卡片配置菜单）
+    let currentConfigRobotId = null;
+    async function openRobotConfig(id) {
+      currentConfigRobotId = id;
+      const robot = registeredRobots.find(r => r.robot_name === id);
+      if (!robot) return;
+      // 预填数据
+      document.getElementById('configRobotName').value = robot.robot_name || '';
+      const t = robot.type || 'AGV';
+      document.getElementById('configRobotType').value = (t === 'Forklift' ? 'Fork' : (t === 'AMR' ? 'Load' : t));
+      await updateConfigMapOptions();
+      const selMap = document.getElementById('configMapSelect');
+      if (selMap) { selMap.addEventListener('change', () => { updateConfigInitialPositionOptions(); }); }
+      if (robot.currentMap && robot.currentMap.startsWith('VehicleMap/')) {
+        // 如果列表中存在，则预选当前地图
+        const exists = Array.from(selMap.options).some(o => o.value === robot.currentMap);
+        if (exists) selMap.value = robot.currentMap;
+      }
+      const mapLabel = document.getElementById('configMapSelectedLabel');
+      if (mapLabel) mapLabel.textContent = robot.currentMap || '未设置';
+      document.getElementById('configRobotIP').value = robot.ip || '';
+      document.getElementById('configRobotManufacturer').value = robot.manufacturer || '';
+      document.getElementById('configRobotVersion').value = 'v2';
+      if (selMap && !selMap.value && robot.currentMap && /(^|\/)VehicleMap\/[^\/]+\.scene$/.test(robot.currentMap)) { selMap.value = robot.currentMap; }
+      updateConfigInitialPositionOptions();
+      const pos = robot.currentPosition || robot.initialPosition || { x: 0, y: 0, theta: 0 };
+      document.getElementById('configBattery').value = robot.battery ?? 100;
+      document.getElementById('configOrientation').value = pos.theta ?? 0;
+      // 打开弹窗
+      const modal = document.getElementById('configModal');
+      modal.style.display = 'flex';
+    }
+    function closeConfigModal() {
+      const modal = document.getElementById('configModal');
+      modal.style.display = 'none';
+      currentConfigRobotId = null;
+    }
+    async function updateConfigInitialPositionOptions() {
+      const sel = document.getElementById('configInitialPosition');
+      const selMap = document.getElementById('configMapSelect');
+      const chosen = selMap ? selMap.value : '';
+      // 先清空并禁用，要求先选择地图
+      sel.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = (typeof chosen === 'string' && /(^|\/)VehicleMap\/[^\/]+\.scene$/.test(chosen)) ? '站点加载中...' : '请先选择地图';
+      sel.appendChild(placeholder);
+      sel.disabled = true;
+
+      if (!chosen || !(/(^|\/)VehicleMap\/[^\/]+\.scene$/.test(chosen))) {
+        return; // 未选择 VehicleMap scene 地图，不提供初始位置选项
+      }
+
+      // 获取并缓存站点
+      const fname = String(chosen).split('/').pop();
+      window.configSceneStationsCache = window.configSceneStationsCache || {};
+      let stations = window.configSceneStationsCache[fname];
+      if (!stations) {
+        try {
+          const resp = await fetch(`/maps/VehicleMap/${encodeURIComponent(fname)}`);
+          if (!resp.ok) throw new Error(`站点获取失败: ${resp.status}`);
+          const data = await resp.json();
+          const allowedPrefixes = ['AP','CP','PP','LM','WP'];
+          const allowedClasses = new Set(['ActionPoint','LocationMark','ChargingPoint','ChargePoint','ParkingPoint','ParkPoint','WayPoint','Waypoint']);
+          const startsAllowed = (txt) => allowedPrefixes.some(pref => String(txt || '').trim().startsWith(pref));
+          const root = Array.isArray(data) ? data[0] : data;
+          const points = (root && Array.isArray(root.points)) ? root.points : [];
+          stations = points.filter(p => {
+            const nm = String(p.name || p.id || '').trim();
+            return nm && startsAllowed(nm);
+          }).map(p => ({ id: String(p.id || p.name), instanceName: String(p.name || p.id), pointName: String(p.name || p.id), pos: { x: Number(p.x), y: Number(p.y) } }));
+          window.configSceneStationsCache[fname] = stations;
+        } catch (e) {
+          console.error('加载站点失败:', e);
+          stations = [];
+        }
+      }
+
+      sel.innerHTML = '<option value="">选择初始位置</option>';
+      stations.forEach(s => {
+        const id = String(s.id || s.instanceName || s.pointName);
+        const name = String(s.instanceName || s.pointName || id);
+        const px = (s && s.pos && typeof s.pos.x !== 'undefined') ? Number(s.pos.x) : Number(s.x);
+        const py = (s && s.pos && typeof s.pos.y !== 'undefined') ? Number(s.pos.y) : Number(s.y);
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = `${name} (${isFinite(px) ? px.toFixed(2) : 'NaN'}, ${isFinite(py) ? py.toFixed(2) : 'NaN'})`;
+        sel.appendChild(opt);
+      });
+      sel.disabled = false;
+    }
+    async function updateConfigMapOptions() {
+      const sel = document.getElementById('configMapSelect');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">不变</option>';
+      try {
+        const resp = await fetch(`${API_BASE_URL}/maps`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        const files = await resp.json();
+        (files || []).forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          sel.appendChild(opt);
+        });
+        const robot = registeredRobots.find(r => r.robot_name === currentConfigRobotId);
+        if (robot && robot.currentMap && robot.currentMap.startsWith('VehicleMap/')) {
+          const exists = Array.from(sel.options).some(o => o.value === robot.currentMap);
+          if (exists) sel.value = robot.currentMap;
+        }
+      } catch (err) {
+        console.error('加载地图列表失败:', err);
+        const opt = document.createElement('option');
+        opt.value = CURRENT_MAP_ID;
+        opt.textContent = `已加载地图 (${CURRENT_MAP_ID})`;
+        sel.appendChild(opt);
+        sel.value = CURRENT_MAP_ID;
+      }
+      const mapLabel = document.getElementById('configMapSelectedLabel');
+      if (mapLabel) {
+        const robot = registeredRobots.find(r => r.robot_name === currentConfigRobotId);
+        mapLabel.textContent = (robot && robot.currentMap) ? robot.currentMap : '未设置';
+      }
+    }
+    async function saveConfig() {
+      const id = currentConfigRobotId;
+      if (!id) { closeConfigModal(); return; }
+      const robot = registeredRobots.find(r => r.robot_name === id);
+      if (!robot) { closeConfigModal(); return; }
+      const newName = document.getElementById('configRobotName').value.trim();
+      const newType = document.getElementById('configRobotType').value;
+      const newIP = document.getElementById('configRobotIP').value.trim();
+      const newManu = document.getElementById('configRobotManufacturer').value.trim();
+      const newVer = document.getElementById('configRobotVersion').value.trim() || 'v2';
+      const battery = parseInt(document.getElementById('configBattery').value, 10);
+      const orientation = parseFloat(document.getElementById('configOrientation').value);
+      const initId = document.getElementById('configInitialPosition').value;
+      const mapVal = document.getElementById('configMapSelect').value;
+      // 位置组装
+      let pos = robot.currentPosition || robot.initialPosition || { x: 0, y: 0, theta: 0 };
+      if (initId) {
+        if (mapVal && /(^|\/)VehicleMap\/[^\/]+\.scene$/.test(mapVal)) {
+          const fname = String(mapVal).split('/').pop();
+          window.configSceneStationsCache = window.configSceneStationsCache || {};
+          let stations = window.configSceneStationsCache[fname];
+          if (!stations) {
+            try {
+              const resp = await fetch(`/maps/VehicleMap/${encodeURIComponent(fname)}`);
+              if (resp.ok) {
+                const data = await resp.json();
+                const root = Array.isArray(data) ? data[0] : data;
+                const points = (root && Array.isArray(root.points)) ? root.points : [];
+                const allowedPrefixes = ['AP','CP','PP','LM','WP'];
+                const startsAllowed = (txt) => allowedPrefixes.some(pref => String(txt || '').trim().toUpperCase().startsWith(pref));
+                stations = points.filter(p => startsAllowed(String(p.name || p.id || '')))
+                  .map(p => ({ id: String(p.id || p.name), instanceName: String(p.name || p.id), pointName: String(p.name || p.id), pos: { x: Number(p.x), y: Number(p.y) } }));
+              }
+            } catch (e) { /* 忽略一次失败 */ }
+          }
+          const s = (stations || []).find(x => String(x.id || x.instanceName || x.pointName) === initId);
+          if (s) {
+            const px = (s && s.pos && typeof s.pos.x !== 'undefined') ? Number(s.pos.x) : Number(s.x);
+            const py = (s && s.pos && typeof s.pos.y !== 'undefined') ? Number(s.pos.y) : Number(s.y);
+            if (!isFinite(px) || !isFinite(py)) { try { window.printErrorToStatus('站点坐标无效，无法保存配置','配置'); } catch (_) {} return; }
+            pos = { x: px, y: py, theta: isNaN(orientation) ? 0 : orientation };
+          }
+        } else {
+          const point = (mapData?.points || []).find(p => p.id === initId);
+          if (point) { pos = { x: point.x, y: point.y, theta: isNaN(orientation) ? 0 : orientation }; }
+        }
+      } else {
+        pos = { x: pos.x, y: pos.y, theta: isNaN(orientation) ? (pos.theta || 0) : orientation };
+      }
+      try {
+        // 静态配置更新（仅 IP）
+        if (newIP && newIP !== robot.ip) {
+          const sResp = await fetch(`${API_BASE_URL}/agv/${id}/config/static`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ IP: newIP })
+          });
+          if (!sResp.ok) throw new Error(`静态配置更新失败: HTTP ${sResp.status}`);
+          robot.ip = newIP;
+        }
+        // 动态配置更新：电量 + 位置（含朝向）
+        const dBody = { battery_level: isNaN(battery) ? undefined : battery, position: pos, current_map: mapVal || undefined };
+        const dResp = await fetch(`${API_BASE_URL}/agv/${id}/config/dynamic`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dBody)
+        });
+        if (!dResp.ok) throw new Error(`动态配置更新失败: HTTP ${dResp.status}`);
+        const status = await dResp.json();
+        if (newType) robot.type = newType;
+        if (newManu) robot.manufacturer = newManu;
+        if (newVer) robot.version = newVer;
+        updateRobotList();
+        drawMap();
+        document.getElementById('status').textContent = `机器人 ${id} 配置已更新`;
+        setTimeout(() => document.getElementById('status').textContent = '准备就绪', 2000);
+      } catch (err) {
+        console.error('更新配置失败:', err);
+        try { window.printErrorToStatus('更新配置失败: ' + (err && err.message ? err.message : String(err)),'配置'); } catch (_) {}
+      } finally {
+        closeConfigModal();
+      }
+    }
+    // WebSocket 和基础运动辅助函数
+    function initWebSocket() {
+      try {
+        const url = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws';
+        ws = new WebSocket(url);
+        ws.onopen = () => { document.getElementById('status').textContent = 'WS已连接'; setTimeout(() => document.getElementById('status').textContent = '准备就绪', 2000); };
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg && msg.type === 'mqtt_state' && msg.payload) {
+              applyWSState(msg.payload);
+            }
+          } catch (e) {
+            console.error('WS消息解析失败', e);
+          }
+        };
+        ws.onclose = () => {
+          document.getElementById('status').textContent = 'WS断开，重连中...';
+          try {
+            registeredRobots.forEach(r => { r.commConnected = false; r.instanceStatus = '断开'; });
+            // 统一渲染循环会刷新画布，这里只更新列表
+            updateRobotList();
+          } catch (e) { console.warn('WS关闭状态更新失败', e); }
+          setTimeout(initWebSocket, 1000);
+        };
+        ws.onerror = () => { try { ws.close(); } catch (e) {} };
+      } catch (err) {
+        console.error('WS初始化失败:', err);
+      }
+    }
+    // 电量显示辅助：截断到 1 位小数，限制在 [0,100]
+    function truncateToOneDecimal(v) {
+      const num = Number(v);
+      if (!isFinite(num)) return 0;
+      const t = Math.floor(num * 10) / 10;
+      return Math.max(0, Math.min(100, t));
+    }
+
+    // 解析 WS 推送的 VDA5050 state，更新内存状态但不立即渲染
+    function applyWSState(stateMsg) {
+      try {
+        const payload = stateMsg || {};
+        const sn = String(payload.serial_number || payload.serialNumber || '').trim();
+        if (!sn) return;
+        const robot = registeredRobots.find(r => r.robot_name === sn);
+        if (!robot) return;
+        const agvPos = payload.agv_position || payload.agvPosition || {};
+        const batt = payload.battery_state || payload.batteryState || {};
+        const mapId = (agvPos && (agvPos.map_id || agvPos.mapId)) || null;
+        const px = Number(agvPos && agvPos.x);
+        const py = Number(agvPos && agvPos.y);
+        const th = Number(agvPos && (agvPos.theta ?? agvPos.orientation));
+        const bc = Number(batt && (batt.battery_charge || batt.batteryCharge));
+        if (isFinite(bc)) robot.battery = truncateToOneDecimal(bc);
+        if (mapId) robot.currentMap = String(mapId);
+        if (isFinite(px) && isFinite(py)) {
+          robot.currentPosition = { x: px, y: py, theta: isFinite(th) ? th : (robot.currentPosition?.theta || 0) };
+        }
+        robot.instanceStatus = '启动';
+        robot.commConnected = true;
+        robot.lastUpdateTs = Date.now();
+        // 列表信息变化较慢，交给独立节流逻辑
+      } catch (e) {
+        console.warn('应用 WS 状态失败:', e);
+      }
+    }
+
+    // 统一 10ms 渲染调度：仅重绘画布，避免频繁 DOM 变更
+    let renderTimer = null;
+    let lastListUpdate = 0;
+    function startRenderLoop() {
+      if (renderTimer) return;
+      renderTimer = setInterval(() => {
+        try { drawMap(); } catch (e) { /* 忽略单帧错误 */ }
+        const now = Date.now();
+        if (now - lastListUpdate > 250) {
+          lastListUpdate = now;
+          try { updateRobotList(); } catch (e) { /* 忽略 */ }
+        }
+      }, 10);
+    }
+
+    function applyStatusUpdates(list) {
+      (list || []).forEach(st => {
+        const robot = registeredRobots.find(r => r.robot_name === st.serial_number);
+        if (robot) {
+          if (st.battery_level !== undefined && st.battery_level !== null) {
+            const bc = Number(st.battery_level);
+            if (isFinite(bc)) robot.battery = truncateToOneDecimal(bc);
+          }
+          robot.currentPosition = st.position || robot.currentPosition;
+          robot.currentMap = st.current_map || robot.currentMap;
+          robot.instanceStatus = (st.status === 'running') ? '启动' : '停止';
+          robot.commConnected = true;
+          robot.lastUpdateTs = Date.now();
+        }
+      });
+      // 统一渲染循环会刷新画布和定期刷新列表，这里不立即渲染
+    }
+
+    // 状态改为从后端实例状态接口直接读取（电量、地图、位置、方向）
+    async function fetchRobotStatus(id) {
+      try {
+        const resp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(id)}/status`);
+        if (!resp.ok) return;
+        const st = await resp.json();
+        const robot = registeredRobots.find(r => r.robot_name === (st.serial_number || id));
+        if (!robot) return;
+        // 电量
+        if (st.battery_level !== undefined && st.battery_level !== null) {
+          const bc = Number(st.battery_level);
+          if (isFinite(bc)) robot.battery = truncateToOneDecimal(bc);
+        }
+        // 地图
+        if (st.current_map) {
+          robot.currentMap = st.current_map;
+        }
+        // 位置与方向
+        if (st.position && typeof st.position.x !== 'undefined' && typeof st.position.y !== 'undefined') {
+          const px = Number(st.position.x);
+          const py = Number(st.position.y);
+          const th = Number(st.position.theta ?? 0);
+          if (isFinite(px) && isFinite(py)) {
+            robot.currentPosition = { x: px, y: py, theta: isFinite(th) ? th : (robot.currentPosition?.theta || 0) };
+          }
+        }
+        // 实例运行状态与通信标记
+        robot.instanceStatus = (st.status === 'running') ? '启动' : '停止';
+        robot.commConnected = true;
+        robot.lastUpdateTs = Date.now();
+      } catch (_) {
+        // 单次失败忽略，保持上次状态
+      }
+    }
+
+    async function pollAllRobotStatus() {
+      const ids = registeredRobots.map(r => r.robot_name);
+      if (ids.length === 0) return;
+      await Promise.all(ids.map(id => fetchRobotStatus(id)));
+      updateRobotList();
+      drawMap();
+    }
+
+    // 移除状态轮询，改由 WS 推送 + 10ms 统一渲染
+
+    async function selectRobot(id) { selectedRobotId = id; updateRobotList(); }
+
+    function setupKeyboardControl() {
+      window.addEventListener('keydown', function (e) {
+        // 避免输入框等控件下触发
+        const tag = document.activeElement && document.activeElement.tagName;
+        if (tag && ['INPUT','TEXTAREA','SELECT'].includes(tag)) return;
+        if (!selectedRobotId) return;
+        const key = e.key.toLowerCase();
+        if (key === 'w') { moveForward(selectedRobotId); }
+        else if (key === 's') { moveBackward(selectedRobotId); }
+        else if (key === 'a') { rotateLeft(selectedRobotId); }
+        else if (key === 'd') { rotateRight(selectedRobotId); }
+      });
+    }
+
+    async function moveBackward(id) {
+      const step = 0.1;
+      const robot = registeredRobots.find(r => r.robot_name === id);
+      const pos = robot?.currentPosition || robot?.initialPosition || { x: 0, y: 0, theta: 0 };
+      const heading = (pos.theta ?? pos.orientation ?? 0);
+      const dx = -step * Math.sin(heading);
+      const dy = -step * Math.cos(heading);
+      try {
+        const resp = await fetch(`${API_BASE_URL}/agv/${id}/move/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dx, dy, movement_state: 'backward' }) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      } catch (err) { console.error('后退失败:', err); }
+    }
+
+    async function moveForward(id) {
+      const step = 0.1;
+      const robot = registeredRobots.find(r => r.robot_name === id);
+      const pos = robot?.currentPosition || robot?.initialPosition || { x: 0, y: 0, theta: 0 };
+      const heading = (pos.theta ?? pos.orientation ?? 0);
+      const dx = step * Math.sin(heading);
+      const dy = step * Math.cos(heading);
+      try {
+        const resp = await fetch(`${API_BASE_URL}/agv/${id}/move/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dx, dy, movement_state: 'forward' }) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      } catch (err) { console.error('前进失败:', err); }
+    }
+
+    async function rotateLeft(id) { const dtheta = -0.15; try { const resp = await fetch(`${API_BASE_URL}/agv/${id}/move/rotate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dtheta }) }); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); } catch (err) { console.error('左转失败:', err); } }
+    async function rotateRight(id) { const dtheta = 0.15; try { const resp = await fetch(`${API_BASE_URL}/agv/${id}/move/rotate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dtheta }) }); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); } catch (err) { console.error('右转失败:', err); } }
+
+    let commGuardTimer = null;
+    function startCommStatusGuard() {
+      if (commGuardTimer) return;
+      commGuardTimer = setInterval(() => {
+        const now = Date.now();
+        let changed = false;
+        registeredRobots.forEach(r => {
+          if (!r.lastUpdateTs || (now - r.lastUpdateTs > 5000)) {
+            if (r.commConnected || r.instanceStatus === '启动') {
+              r.commConnected = false;
+              r.instanceStatus = '断开';
+              changed = true;
+            }
+          }
+        });
+        if (changed) {
+          updateRobotList();
+          drawMap();
+        }
+      }, 1000);
+    }
+  </script>
+  <!-- 配置弹窗（参考 SimulatorViewer 设计，简化样式） -->
+  <div id="configModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:2000;">
+    <div class="modal-content" style="width:420px; background:#2c3e50; color:#ecf0f1; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,.3);">
+      <div class="modal-header" style="padding:12px 16px; border-bottom:1px solid #34495e; display:flex; align-items:center; justify-content:space-between;">
+        <div class="modal-title" style="font-weight:bold;">机器人高级配置</div>
+        <button class="modal-close" onclick="closeConfigModal()" style="background:transparent; border:none; color:#ecf0f1; font-size:20px; cursor:pointer;">&times;</button>
+      </div>
+      <div style="padding:16px;">
+        <div class="form-group"><label class="form-label">机器人名称</label><input type="text" class="form-input" id="configRobotName" placeholder=""></div>
+        <div class="form-group"><label class="form-label">机器人类型</label><select class="form-select" id="configRobotType"><option value="AGV">AGV</option><option value="Fork">Fork</option><option value="Load">Load</option></select></div>
+        <div class="form-group"><label class="form-label">机器人IP地址</label><input type="text" class="form-input" id="configRobotIP" placeholder=""></div>
+        <div class="form-group"><label class="form-label">厂商</label><input type="text" class="form-input" id="configRobotManufacturer" placeholder="厂商名称"></div>
+        <div class="form-group"><label class="form-label">版本</label><input type="text" class="form-input" id="configRobotVersion" placeholder="版本号" value="v2"></div>
+        <div class="form-group"><label class="form-label">已加载地图</label><select class="form-select" id="configMapSelect" style="width:100%"><option value="">不变</option><option value="testmap">已加载地图 (testmap)</option></select><div id="configMapSelectedText" class="form-hint" style="font-size:12px;color:#bdc3c7;word-break:break-all;margin-top:4px;">当前: <span id="configMapSelectedLabel"></span></div></div>
+        <div class="form-group"><label class="form-label">初始位置</label><select class="form-select" id="configInitialPosition"><option value="">选择初始位置</option></select></div>
+        <div class="form-group"><label class="form-label">电量 (%)</label><input type="number" class="form-input" id="configBattery" value="100" min="0" max="100"></div>
+        <div class="form-group"><label class="form-label">朝向 (弧度)</label><input type="number" class="form-input" id="configOrientation" value="0" step="0.01" min="-3.14" max="3.14"></div>
+        <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn-saveconfig" onclick="saveConfig()">保存配置</button>
+          <button class="btn-cancel-small" onclick="closeConfigModal()">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+ <script>
+   document.addEventListener('contextmenu', function (e) {
+     e.preventDefault();
+   }, { capture: true });
+ </script>
+ </body>
+
+</html>

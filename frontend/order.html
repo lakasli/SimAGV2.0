@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VDA 2.0 Order 生成器</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #dbdbdb;
+      --muted: #6b7280;
+      --text: #111827;
+      --primary: #1677ff;
+      --primary-2: #0958d9;
+      --danger: #e74c3c;
+      --success: #16a34a;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+    header { background: #ffffff; color: var(--text); border-bottom: 1px solid var(--border); padding: 14px 18px; position: sticky; top: 0; z-index: 10; }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: .2px; }
+    header .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 12px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 12px; }
+    .grid-1 { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+    .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .card-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    .card-actions { display:flex; gap:8px; }
+    label { font-size: 12px; color: var(--muted); display:block; }
+    input[type="text"], input[type="number"], select, textarea { width: 100%; margin-top: 6px; padding: 8px 10px; background: #ffffff; border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; }
+    textarea { min-height: 140px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    details { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: #ffffff; margin-top: 32px; margin-bottom: 32px; }
+    details + details { margin-top: 5px; }
+    details summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+    .btn { border: 1px solid var(--border); background: #ffffff; color: var(--text); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+    .btn.primary { background: var(--primary); border-color: var(--primary); color: white; }
+    .btn.primary:hover { background: var(--primary-2); border-color: var(--primary-2); }
+    .btn.ghost { background: transparent; }
+    .btn.small { padding: 6px 10px; font-size: 12px; }
+    .row { display:flex; gap:10px; align-items:center; }
+    .muted { color: var(--muted); }
+    .hr { height: 1px; background: var(--border); margin: 14px 0; }
+    .pill { display:inline-block; padding: 2px 8px; border:1px solid var(--border); border-radius: 999px; font-size: 11px; color: var(--muted); }
+    .section-title { font-size: 16px; font-weight: 700; margin: 16px 0 8px; }
+    .help { font-size: 12px; color: var(--muted); }
+  </style>
+  </head>
+  <body>
+    <header>
+      <h1>VDA 2.0 Order 生成器</h1>
+    </header>
+    <main class="container">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">站点导航（路径规划）</div>
+        </div>
+        <div class="grid">
+          <div>
+            <label>地图文件路径（相对 /maps）
+              <input type="text" id="map_path" value="VehicleMap/test1.scene" placeholder="示例：VehicleMap/test1.scene" />
+            </label>
+          </div>
+          <div>
+            <label>选择仿真车（serial_number）
+              <select id="agv_select"></select>
+            </label>
+          </div>
+          <div>
+            <label>起点站（如 LM1）
+              <input type="text" id="start_station" value="LM1" placeholder="示例：LM1" />
+            </label>
+          </div>
+          <div>
+            <label>终点站（如 LM4）
+              <input type="text" id="end_station" value="LM4" placeholder="示例：LM4" />
+            </label>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn primary" id="plan_btn">规划路径并填充节点/边</button>
+          <span class="muted" id="plan_status" style="margin-left:8px;"></span>
+        </div>
+      </div>
+    <datalist id="boolOptions">
+      <option value="true"></option>
+      <option value="false"></option>
+    </datalist>
+    <div class="card">
+      <div class="card-header"><div class="card-title">订单头部信息</div></div>
+      <div class="grid">
+        <div>
+          <label>header_id（int）
+            <input type="number" id="header_id" min="0" value="1" placeholder="示例：1" />
+          </label>
+        </div>
+        <div>
+          <label>timestamp（ISO8601）
+            <input type="text" id="timestamp" placeholder="示例：2025-01-01T12:00:00Z" />
+          </label>
+        </div>
+        <div>
+          <label>version（字符串）
+            <input type="text" id="version" value="2.0.0" placeholder="示例：2.0.0" />
+          </label>
+        </div>
+        <div>
+          <label>manufacturer（字符串）
+            <input type="text" id="manufacturer" value="SEER" placeholder="制造商" />
+          </label>
+        </div>
+        <div>
+          <label>serial_number（字符串）
+            <input type="text" id="serial_number" placeholder="序列号" />
+          </label>
+        </div>
+        <div>
+          <label>order_id（字符串）
+            <input type="text" id="order_id" placeholder="订单ID" />
+          </label>
+        </div>
+        <div>
+          <label>order_update_id（int）
+            <input type="number" id="order_update_id" min="0" value="0" placeholder="示例：0" />
+          </label>
+        </div>
+        <div>
+          <label>zone_set_id（可选）
+            <input type="text" id="zone_set_id" placeholder="可留空" />
+          </label>
+        </div>
+      </div>
+      <div class="help">说明：字段命名与 <code>SimAGV/protocol/vda_2_0_0/order.py</code> 一致。</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">节点列表（Nodes）</div>
+        <div class="card-actions">
+          <button class="btn primary" id="add_node_btn">添加节点</button>
+        </div>
+      </div>
+      <div id="nodes_container"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">边列表（Edges）</div>
+        <div class="card-actions">
+          <button class="btn primary" id="add_edge_btn">添加边</button>
+        </div>
+      </div>
+      <div id="edges_container"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">导出</div></div>
+      <div class="grid-2">
+        <button class="btn primary" id="generate_btn">生成 Order JSON</button>
+        <button class="btn" id="copy_btn">复制到剪贴板</button>
+        <button class="btn" id="publish_btn">发送到后端发布</button>
+      </div>
+      <div class="hr"></div>
+      <textarea id="output" placeholder="生成的JSON会显示在这里"></textarea>
+    </div>
+  </main>
+
+  <template id="tpl_action">
+    <div class="card" data-action>
+      <div class="card-header">
+        <div class="card-title">Action</div>
+        <div class="card-actions">
+          <button class="btn small" data-remove-action>删除动作</button>
+        </div>
+      </div>
+      <div class="grid">
+        <div>
+          <label>action_type
+            <input type="text" data-action-type placeholder="示例：LOAD" />
+          </label>
+        </div>
+        <div>
+          <label>action_id
+            <input type="text" data-action-id placeholder="示例：act-1" />
+          </label>
+        </div>
+        <div>
+          <label>blocking_type
+            <select data-blocking-type>
+              <option value="NONE">NONE</option>
+              <option value="SOFT">SOFT</option>
+              <option value="HARD">HARD</option>
+            </select>
+          </label>
+        </div>
+        <div>
+          <label>action_description（可选）
+            <input type="text" data-action-desc placeholder="可留空" />
+          </label>
+        </div>
+      </div>
+      <details>
+        <summary>ActionParameters（可选）</summary>
+        <div data-action-params></div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn small" data-add-param>添加参数</button>
+        </div>
+      </details>
+    </div>
+  </template>
+
+  <template id="tpl_action_param">
+    <div class="grid">
+      <div>
+        <label>key
+          <input type="text" data-param-key placeholder="key" />
+        </label>
+      </div>
+      <div>
+        <label>value
+          <input type="text" data-param-value placeholder="值（按类型解析）" />
+        </label>
+      </div>
+      <div>
+        <label>type
+          <select data-param-type>
+            <option value="string">string</option>
+            <option value="int">int</option>
+            <option value="float">float</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl_control_point">
+    <div class="card" data-control-point>
+      <div class="card-header">
+        <div class="card-title">ControlPoint</div>
+        <div class="card-actions">
+          <button class="btn small" data-remove-cp>删除点</button>
+        </div>
+      </div>
+      <div class="grid">
+        <div><label>x<input type="number" step="any" data-cp-x placeholder="0"/></label></div>
+        <div><label>y<input type="number" step="any" data-cp-y placeholder="0"/></label></div>
+        <div><label>weight（可选）<input type="number" step="any" data-cp-weight placeholder=""/></label></div>
+        <div><label>orientation（可选）<input type="number" step="any" data-cp-orient placeholder=""/></label></div>
+      </div>
+    </div>
+  </template>
+
+  <template id="tpl_node">
+    <div class="card" data-node>
+      <div class="card-header">
+        <div class="card-title">Node</div>
+        <div class="card-actions">
+          <button class="btn small" data-remove-node>删除节点</button>
+        </div>
+      </div>
+      <div class="grid">
+        <div><label>node_id<input type="text" data-node-id placeholder="node-1"/></label></div>
+        <div><label>sequence_id<input type="number" min="0" data-node-seq placeholder="0"/></label></div>
+        <div><label>released
+          <select data-node-released>
+            <option value="true" selected>true</option>
+            <option value="false">false</option>
+          </select>
+        </label></div>
+        <div class="grid-1"><label>node_description（可选）<input type="text" data-node-desc placeholder=""/></label></div>
+      </div>
+      <details>
+        <summary>NodePosition（可选）</summary>
+        <div class="grid">
+          <div><label>x<input type="number" step="any" data-np-x placeholder=""/></label></div>
+          <div><label>y<input type="number" step="any" data-np-y placeholder=""/></label></div>
+          <div><label>theta（可选）<input type="number" step="any" data-np-theta placeholder=""/></label></div>
+          <div><label>allowed_deviation_xy（可选）<input type="number" step="any" data-np-devxy placeholder=""/></label></div>
+          <div><label>allowed_deviation_theta（可选）<input type="number" step="any" data-np-devtheta placeholder=""/></label></div>
+          <div><label>map_id<input type="text" data-np-map placeholder="map-1"/></label></div>
+          <div class="grid-1"><label>map_description（可选）<input type="text" data-np-mapdesc placeholder=""/></label></div>
+        </div>
+      </details>
+      <details>
+        <summary>Actions（可选）</summary>
+        <div data-node-actions></div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn small" data-add-node-action>添加动作</button>
+        </div>
+      </details>
+    </div>
+  </template>
+
+  <template id="tpl_edge">
+    <div class="card" data-edge>
+      <div class="card-header">
+        <div class="card-title">Edge</div>
+        <div class="card-actions">
+          <button class="btn small" data-remove-edge>删除边</button>
+        </div>
+      </div>
+      <div class="grid">
+        <div><label>edge_id<input type="text" data-edge-id placeholder="edge-1"/></label></div>
+        <div><label>sequence_id<input type="number" min="0" data-edge-seq placeholder="0"/></label></div>
+        <div><label>released
+          <select data-edge-released>
+            <option value="true" selected>true</option>
+            <option value="false">false</option>
+          </select>
+        </label></div>
+        <div><label>start_node_id<input type="text" data-edge-start placeholder="node-1"/></label></div>
+        <div><label>end_node_id<input type="text" data-edge-end placeholder="node-2"/></label></div>
+        <div><label>max_speed（可选）<input type="number" step="any" data-edge-maxspeed placeholder=""/></label></div>
+        <div><label>max_height（可选）<input type="number" step="any" data-edge-maxh placeholder=""/></label></div>
+        <div><label>min_height（可选）<input type="number" step="any" data-edge-minh placeholder=""/></label></div>
+        <div><label>orientation（可选）<input type="number" step="any" data-edge-orient placeholder=""/></label></div>
+        <div><label>orientation_type（可选）<input type="text" data-edge-orient-type placeholder=""/></label></div>
+        <div><label>direction（可选）<input type="text" data-edge-direction placeholder=""/></label></div>
+        <div><label>rotation_allowed（勾选=true）<input type="checkbox" data-edge-rotallow /></label></div>
+        <div><label>max_rotation_speed（可选）<input type="number" step="any" data-edge-maxrotspeed placeholder=""/></label></div>
+        <div><label>length（可选）<input type="number" step="any" data-edge-length placeholder=""/></label></div>
+      </div>
+      <details>
+        <summary>Trajectory（可选）</summary>
+        <div class="grid">
+          <div><label>degree<input type="number" min="0" data-traj-degree placeholder=""/></label></div>
+          <div><label>knot_vector（逗号分隔）<input type="text" data-traj-knots placeholder="0,0,0,1,1,1"/></label></div>
+        </div>
+        <div class="hr"></div>
+        <div class="row"><span class="pill">ControlPoints</span><button class="btn small" data-add-cp style="margin-left:8px;">添加点</button></div>
+        <div data-traj-cps></div>
+      </details>
+      <details>
+        <summary>Actions（可选）</summary>
+        <div data-edge-actions></div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn small" data-add-edge-action>添加动作</button>
+        </div>
+      </details>
+    </div>
+  </template>
+
+  <script src="/static/src/services/pathfinding.js"></script>
+  <script>
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+    const valOrNull = (v) => {
+      if (v === undefined || v === null) return null;
+      const s = String(v).trim();
+      return s === '' ? null : s;
+    };
+    const parseNum = (v) => {
+      const s = String(v).trim();
+      if (s === '') return null;
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    // 初始化头部默认时间戳
+    const tsInput = () => $('#timestamp');
+    document.addEventListener('DOMContentLoaded', () => {
+      // 默认值
+      const nowIso = new Date().toISOString();
+      if (tsInput()) tsInput().value = nowIso;
+      const versionEl = $('#version'); if (versionEl && !versionEl.value) versionEl.value = '2.0.0';
+      const manufacturerEl = $('#manufacturer'); if (manufacturerEl && !manufacturerEl.value) manufacturerEl.value = 'SEER';
+      const headerIdEl = $('#header_id'); if (headerIdEl && !headerIdEl.value) headerIdEl.value = '1';
+      const updateIdEl = $('#order_update_id'); if (updateIdEl && !updateIdEl.value) updateIdEl.value = '0';
+
+      // 根据时间戳生成 order_id
+      const orderIdEl = $('#order_id');
+      const genOrderId = (ts) => {
+        const s = String(ts || '').trim();
+        if (!s) return 'order-' + Date.now();
+        return 'order-' + s.replace(/[^0-9]/g, '');
+      };
+      if (orderIdEl) orderIdEl.value = genOrderId(tsInput()?.value);
+      tsInput()?.addEventListener('input', () => { if (orderIdEl) { orderIdEl.value = genOrderId(tsInput().value); } ensureEdgesMatchNodes(); });
+      orderIdEl?.addEventListener('input', () => { ensureEdgesMatchNodes(); });
+
+      $('#add_node_btn').addEventListener('click', addNode);
+      $('#add_edge_btn').addEventListener('click', addEdge);
+      $('#generate_btn').addEventListener('click', generateOrderJson);
+      $('#copy_btn').addEventListener('click', copyOutput);
+      $('#publish_btn').addEventListener('click', publishToBackend);
+      $('#plan_btn').addEventListener('click', planAndPopulateFromMap);
+
+      // 加载 AGV 列表
+      loadAgvList();
+      // 初始化一次（当有预填数据时）
+      renumberNodes();
+      ensureEdgesMatchNodes();
+    });
+
+    function addNode() {
+      const tpl = $('#tpl_node');
+      const nodeEl = tpl.content.cloneNode(true);
+      const root = nodeEl.querySelector('[data-node]');
+
+      root.querySelector('[data-remove-node]').addEventListener('click', () => { root.remove(); renumberNodes(); ensureEdgesMatchNodes(); });
+      root.querySelector('[data-add-node-action]').addEventListener('click', () => {
+        const act = createActionElement();
+        root.querySelector('[data-node-actions]').appendChild(act);
+      });
+      $('#nodes_container').appendChild(nodeEl);
+      // 设置顺序号并监听 node_id 变化联动边列表
+      const idx = $$('#nodes_container > [data-node]').length;
+      root.querySelector('[data-node-seq]').value = String(idx);
+      root.querySelector('[data-node-id]').addEventListener('input', () => { ensureEdgesMatchNodes(); });
+      renumberNodes();
+      ensureEdgesMatchNodes();
+    }
+
+    function createEdgeElement() {
+      const tpl = $('#tpl_edge');
+      const edgeEl = tpl.content.cloneNode(true);
+      const root = edgeEl.querySelector('[data-edge]');
+      root.querySelector('[data-remove-edge]').addEventListener('click', () => { root.remove(); ensureEdgesMatchNodes(); });
+      root.querySelector('[data-add-edge-action]').addEventListener('click', () => {
+        const act = createActionElement();
+        root.querySelector('[data-edge-actions]').appendChild(act);
+      });
+      root.querySelector('[data-add-cp]').addEventListener('click', () => {
+        const cp = createControlPointElement();
+        root.querySelector('[data-traj-cps]').appendChild(cp);
+      });
+      return edgeEl;
+    }
+
+    function addEdge() {
+      const edgeEl = createEdgeElement();
+      $('#edges_container').appendChild(edgeEl);
+      ensureEdgesMatchNodes();
+    }
+
+    function createActionElement() {
+      const tpl = $('#tpl_action');
+      const el = tpl.content.cloneNode(true);
+      const root = el.querySelector('[data-action]');
+      root.querySelector('[data-remove-action]').addEventListener('click', () => root.remove());
+      root.querySelector('[data-add-param]').addEventListener('click', () => {
+        const p = createActionParamElement();
+        root.querySelector('[data-action-params]').appendChild(p);
+      });
+      return el;
+    }
+
+    function createActionParamElement() {
+      const tpl = $('#tpl_action_param');
+      return tpl.content.cloneNode(true);
+    }
+
+    function createControlPointElement() {
+      const tpl = $('#tpl_control_point');
+      const el = tpl.content.cloneNode(true);
+      const root = el.querySelector('[data-control-point]');
+      root.querySelector('[data-remove-cp]').addEventListener('click', () => root.remove());
+      return el;
+    }
+
+    function renumberNodes() {
+      const nodes = $$('#nodes_container > [data-node]');
+      nodes.forEach((n, i) => {
+        const inp = n.querySelector('[data-node-seq]');
+        if (inp) inp.value = String(i + 1);
+      });
+    }
+
+    function ensureEdgesMatchNodes() {
+      const nodeEls = $$('#nodes_container > [data-node]');
+      const nodeIds = nodeEls.map(n => valOrNull(n.querySelector('[data-node-id]')?.value));
+      const edgesCont = $('#edges_container');
+      const curEdges = $$('#edges_container > [data-edge]');
+      const required = Math.max(0, nodeEls.length - 1);
+
+      // 调整数量
+      if (curEdges.length < required) {
+        for (let i = curEdges.length; i < required; i++) {
+          edgesCont.appendChild(createEdgeElement());
+        }
+      } else if (curEdges.length > required) {
+        for (let i = curEdges.length - 1; i >= required; i--) {
+          curEdges[i].remove();
+        }
+      }
+
+      // 更新字段
+      const orderIdRaw = valOrNull($('#order_id')?.value) || ('order-' + Date.now());
+      const orderIdSan = String(orderIdRaw).replace(/[^a-zA-Z0-9_-]/g, '');
+      const edges = $$('#edges_container > [data-edge]');
+      edges.forEach((e, i) => {
+        const seq = i + 1;
+        const seqInp = e.querySelector('[data-edge-seq]');
+        if (seqInp) seqInp.value = String(seq);
+        const startInp = e.querySelector('[data-edge-start]');
+        const endInp = e.querySelector('[data-edge-end]');
+        if (startInp) startInp.value = nodeIds[i] || '';
+        if (endInp) endInp.value = nodeIds[i + 1] || '';
+        const edgeIdInp = e.querySelector('[data-edge-id]');
+        // 优先保留已有 edge_id（如使用 routes.desc），否则回退为合成 ID
+        if (edgeIdInp && String(edgeIdInp.value).trim() === '') {
+          edgeIdInp.value = `edge-${orderIdSan}-${seq}`;
+        }
+      });
+    }
+
+    async function loadAgvList() {
+      const sel = $('#agv_select');
+      if (!sel) return;
+      sel.innerHTML = '';
+      try {
+        const res = await fetch('/api/agvs');
+        const list = await res.json();
+        for (const info of list) {
+          const opt = document.createElement('option');
+          opt.value = info.serial_number;
+          opt.textContent = `${info.serial_number} (${info.manufacturer})`;
+          sel.appendChild(opt);
+        }
+        // 同步到头部 serial_number
+        if (list.length > 0) {
+          $('#serial_number').value = list[0].serial_number;
+          $('#manufacturer').value = list[0].manufacturer || $('#manufacturer').value || 'SEER';
+        }
+      } catch (e) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '加载失败';
+        sel.appendChild(opt);
+      }
+    }
+
+    async function planAndPopulateFromMap() {
+      const statusEl = $('#plan_status');
+      const mapRel = ($('#map_path')?.value || '').trim();
+      const startName = ($('#start_station')?.value || '').trim();
+      const endName = ($('#end_station')?.value || '').trim();
+      const serial = $('#agv_select')?.value || ($('#serial_number')?.value || '').trim();
+      if (!mapRel || !startName || !endName || !serial) {
+        alert('请填写地图、起点、终点以及仿真车 serial_number');
+        return;
+      }
+      statusEl.textContent = '加载地图中...';
+      try {
+        const url = `/maps/${mapRel}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`地图加载失败: HTTP ${res.status}`);
+        const sceneData = await res.json();
+        // 解析拓扑
+        const topo = parseSceneTopology(sceneData);
+        const points = (Array.isArray(sceneData) ? sceneData[0]?.points : sceneData.points) || [];
+        const nameById = new Map(points.filter(p => p.id !== undefined && p.name).map(p => [String(p.id), String(p.name)]));
+        const idByName = new Map(points.filter(p => p.id !== undefined && p.name).map(p => [String(p.name), String(p.id)]));
+        const resolveId = (nameOrId) => {
+          const s = String(nameOrId);
+          if (idByName.has(s)) return idByName.get(s);
+          return s; // 假定传入的就是 id
+        };
+        const startId = resolveId(startName);
+        const endId = resolveId(endName);
+        // A* 规划
+        const pathIds = aStar(String(startId), String(endId), topo.anchors, topo.paths);
+        if (!pathIds || pathIds.length === 0) throw new Error('未找到可用路径');
+        // 转换为展示名称（如 LM1），若无名称则回退到 id
+        const pathNames = pathIds.map(id => nameById.get(String(id)) || String(id));
+
+        // 清空现有节点/边
+        $$('#nodes_container > [data-node]').forEach(n => n.remove());
+        $$('#edges_container > [data-edge]').forEach(e => e.remove());
+        // 填充节点（使用站点名称）
+        for (const name of pathNames) {
+          addNode();
+          const nodeEl = $$('#nodes_container > [data-node]').slice(-1)[0];
+          nodeEl.querySelector('[data-node-id]').value = name;
+          nodeEl.querySelector('[data-node-released]').value = 'true';
+        }
+        renumberNodes();
+        ensureEdgesMatchNodes();
+
+        // 更新边的 edge_id：使用 routes.desc
+        const edges = $$('#edges_container > [data-edge]');
+        const paths = topo.paths || [];
+        for (let i = 0; i < pathIds.length - 1 && i < edges.length; i++) {
+          const fromId = String(pathIds[i]);
+          const toId = String(pathIds[i + 1]);
+          const match = paths.find(p => String(p.from) === fromId && String(p.to) === toId);
+          const desc = match && typeof match.desc === 'string' ? match.desc : `${pathNames[i]}-${pathNames[i + 1]}`;
+          const edgeRoot = edges[i];
+          const edgeIdInp = edgeRoot.querySelector('[data-edge-id]');
+          if (edgeIdInp) edgeIdInp.value = desc;
+        }
+
+        // 更新头部信息
+        $('#serial_number').value = serial;
+        $('#manufacturer').value = ($('#agv_select')?.selectedOptions[0]?.textContent?.split('(')[1] || 'SEER').replace(')', '').trim();
+        $('#timestamp').value = new Date().toISOString();
+        $('#version').value = '2.0.0';
+        $('#order_update_id').value = '0';
+        $('#header_id').value = '1';
+
+        statusEl.textContent = `已规划：${pathNames.join(' -> ')}`;
+        // 自动生成一次 JSON 供预览
+        generateOrderJson();
+      } catch (e) {
+        statusEl.textContent = '';
+        alert('路径规划失败：' + (e?.message || String(e)));
+      }
+    }
+
+    function readAction(root) {
+      const action_type = valOrNull(root.querySelector('[data-action-type]')?.value);
+      const action_id = valOrNull(root.querySelector('[data-action-id]')?.value);
+      const blocking_type = root.querySelector('[data-blocking-type]')?.value || 'NONE';
+      const action_description = valOrNull(root.querySelector('[data-action-desc]')?.value);
+      const paramsRoot = root.querySelector('[data-action-params]');
+      const params = $$('[data-param-key]', paramsRoot).map((_, idx) => {
+        const row = paramsRoot.children[idx];
+        const key = valOrNull(row.querySelector('[data-param-key]')?.value);
+        const valueRaw = row.querySelector('[data-param-value]')?.value;
+        const type = row.querySelector('[data-param-type]')?.value || 'string';
+        if (!key) return null;
+        let value = valueRaw;
+        if (type === 'int') value = parseInt(valueRaw, 10);
+        if (type === 'float') value = parseFloat(valueRaw);
+        if (value === '' || value === null || Number.isNaN(value)) return null;
+        return { key, value };
+      }).filter(Boolean);
+      const act = { action_type, action_id, blocking_type };
+      if (action_description !== null) act.action_description = action_description;
+      if (params.length > 0) act.action_parameters = params;
+      return act;
+    }
+
+    function readNode(root) {
+      const node_id = valOrNull(root.querySelector('[data-node-id]')?.value);
+      const sequence_id = parseNum(root.querySelector('[data-node-seq]')?.value);
+      const releasedStr = valOrNull(root.querySelector('[data-node-released]')?.value);
+      const released = (releasedStr || '').toLowerCase() === 'true';
+      const node_description = valOrNull(root.querySelector('[data-node-desc]')?.value);
+
+      const np = {
+        x: parseNum(root.querySelector('[data-np-x]')?.value),
+        y: parseNum(root.querySelector('[data-np-y]')?.value),
+        theta: parseNum(root.querySelector('[data-np-theta]')?.value),
+        allowed_deviation_xy: parseNum(root.querySelector('[data-np-devxy]')?.value),
+        allowed_deviation_theta: parseNum(root.querySelector('[data-np-devtheta]')?.value),
+        map_id: valOrNull(root.querySelector('[data-np-map]')?.value),
+        map_description: valOrNull(root.querySelector('[data-np-mapdesc]')?.value)
+      };
+      const hasNP = np.x !== null || np.y !== null || np.map_id !== null || np.theta !== null || np.allowed_deviation_xy !== null || np.allowed_deviation_theta !== null || np.map_description !== null;
+      const actions = $$('[data-action]', root.querySelector('[data-node-actions]')).map(a => readAction(a));
+
+      const node = { node_id, sequence_id, released };
+      if (node_description !== null) node.node_description = node_description;
+      if (hasNP) node.node_position = np;
+      if (actions.length > 0) node.actions = actions;
+      return node;
+    }
+
+    function readEdge(root) {
+      const edge_id = valOrNull(root.querySelector('[data-edge-id]')?.value);
+      const sequence_id = parseNum(root.querySelector('[data-edge-seq]')?.value);
+      const releasedStr = valOrNull(root.querySelector('[data-edge-released]')?.value);
+      const released = (releasedStr || '').toLowerCase() === 'true';
+      const start_node_id = valOrNull(root.querySelector('[data-edge-start]')?.value);
+      const end_node_id = valOrNull(root.querySelector('[data-edge-end]')?.value);
+
+      const edge = { edge_id, sequence_id, released, start_node_id, end_node_id };
+      const addOpt = (key, v) => { if (v !== null && v !== undefined && v !== '') edge[key] = v; };
+
+      addOpt('max_speed', parseNum(root.querySelector('[data-edge-maxspeed]')?.value));
+      addOpt('max_height', parseNum(root.querySelector('[data-edge-maxh]')?.value));
+      addOpt('min_height', parseNum(root.querySelector('[data-edge-minh]')?.value));
+      addOpt('orientation', parseNum(root.querySelector('[data-edge-orient]')?.value));
+      addOpt('orientation_type', valOrNull(root.querySelector('[data-edge-orient-type]')?.value));
+      addOpt('direction', valOrNull(root.querySelector('[data-edge-direction]')?.value));
+      if (root.querySelector('[data-edge-rotallow]')?.checked) edge.rotation_allowed = true; // 初稿：仅提供 true
+      addOpt('max_rotation_speed', parseNum(root.querySelector('[data-edge-maxrotspeed]')?.value));
+      addOpt('length', parseNum(root.querySelector('[data-edge-length]')?.value));
+
+      // Trajectory（可选）
+      const degree = parseNum(root.querySelector('[data-traj-degree]')?.value);
+      const knotStr = valOrNull(root.querySelector('[data-traj-knots]')?.value);
+      let traj = null;
+      if (degree !== null || knotStr !== null || root.querySelector('[data-traj-cps]')?.children.length > 0) {
+        const knot_vector = (knotStr ? knotStr.split(',') : []).map(s => parseNum(s)).filter(v => v !== null);
+        const cps = $$('[data-control-point]', root.querySelector('[data-traj-cps]')).map(cp => {
+          const x = parseNum(cp.querySelector('[data-cp-x]')?.value);
+          const y = parseNum(cp.querySelector('[data-cp-y]')?.value);
+          const weight = parseNum(cp.querySelector('[data-cp-weight]')?.value);
+          const orientation = parseNum(cp.querySelector('[data-cp-orient]')?.value);
+          const obj = { x, y };
+          if (weight !== null) obj.weight = weight;
+          if (orientation !== null) obj.orientation = orientation;
+          return obj;
+        });
+        traj = {};
+        if (degree !== null) traj.degree = degree;
+        if (knot_vector.length > 0) traj.knot_vector = knot_vector;
+        if (cps.length > 0) traj.control_points = cps;
+      }
+      if (traj && (traj.degree !== undefined || traj.knot_vector || traj.control_points)) edge.trajectory = traj;
+
+      const actions = $$('[data-action]', root.querySelector('[data-edge-actions]')).map(a => readAction(a));
+      if (actions.length > 0) edge.actions = actions;
+      return edge;
+    }
+
+    function generateOrderJson() {
+      renumberNodes();
+      ensureEdgesMatchNodes();
+      const header_id = parseNum($('#header_id')?.value);
+      const timestamp = valOrNull($('#timestamp')?.value);
+      const version = valOrNull($('#version')?.value);
+      const manufacturer = valOrNull($('#manufacturer')?.value);
+      const serial_number = valOrNull($('#serial_number')?.value);
+      const order_id = valOrNull($('#order_id')?.value);
+      const order_update_id = parseNum($('#order_update_id')?.value);
+      const zone_set_id = valOrNull($('#zone_set_id')?.value);
+
+      const nodes = $$('#nodes_container > [data-node]').map(n => readNode(n));
+      const edges = $$('#edges_container > [data-edge]').map(e => readEdge(e));
+
+      const order = { header_id, timestamp, version, manufacturer, serial_number, order_id, order_update_id, zone_set_id, nodes, edges };
+
+      // 简单必填校验（初稿）
+      const required = ['header_id','timestamp','version','manufacturer','serial_number','order_id','order_update_id'];
+      const missing = required.filter(k => order[k] === null || order[k] === undefined || order[k] === '');
+      if (missing.length) {
+        alert('缺少必填字段：' + missing.join(', '));
+        return;
+      }
+
+      // 移除空值（null/undefined/''）
+      function prune(obj) {
+        if (Array.isArray(obj)) return obj.map(prune).filter(v => v !== undefined);
+        if (obj && typeof obj === 'object') {
+          const out = {};
+          for (const [k, v] of Object.entries(obj)) {
+            if (v === null || v === undefined || v === '') continue;
+            out[k] = prune(v);
+          }
+          return out;
+        }
+        return obj;
+      }
+
+      const cleaned = prune(order);
+      $('#output').value = JSON.stringify(cleaned, null, 2);
+    }
+
+    async function copyOutput() {
+      const txt = $('#output').value;
+      if (!txt) return;
+      try {
+        await navigator.clipboard.writeText(txt);
+        alert('已复制到剪贴板');
+      } catch (e) {
+        alert('复制失败，请手动选择复制');
+      }
+    }
+
+    async function publishToBackend() {
+      // 先生成最新 JSON
+      generateOrderJson();
+      const txt = $('#output').value;
+      if (!txt) { alert('请先生成订单 JSON'); return; }
+      let payload;
+      try { payload = JSON.parse(txt); } catch (e) { alert('JSON 解析失败，请检查内容'); return; }
+      const serial = (payload.serial_number || ($('#serial_number')?.value || '').trim());
+      if (!serial) { alert('请填写 serial_number'); return; }
+      const url = `/api/agv/${encodeURIComponent(serial)}/order`;
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        alert(`发布成功：订单 ${data.order_id || '(无ID)'} 已发送`);
+      } catch (e) {
+        alert('发布失败：' + (e?.message || String(e)));
+      }
+    }
+  </script>
+</body>
+</html>

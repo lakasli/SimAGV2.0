@@ -1,0 +1,9 @@
+[
+  {
+    "serial_number": "AMB-01",
+    "manufacturer": "SEER",
+    "type": "AGV",
+    "vda_version": "v2",
+    "IP": "192.168.9.1"
+  }
+]

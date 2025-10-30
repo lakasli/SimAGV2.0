@@ -1,0 +1,6 @@
+paho-mqtt>=1.6.1
+Tomli>=2.0.1
+fastapi>=0.115.0
+uvicorn>=0.30.0
+aiofiles>=23.2.1
+pydantic>=2.7.0

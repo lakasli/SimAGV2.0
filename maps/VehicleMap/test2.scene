@@ -1,0 +1,2013 @@
+[
+  {
+    "id": 1760426882,
+    "setting": "",
+    "ratio": 100,
+    "name": "test2",
+    "width": 66.301,
+    "height": 71.584,
+    "scale": 0.66,
+    "origin": {
+      "x": 0,
+      "y": 0
+    },
+    "robotGroups": [],
+    "robotLabels": [],
+    "floors": 1,
+    "robots": [],
+    "points": [
+      {
+        "id": "10000489",
+        "name": "LM489",
+        "x": 14.206,
+        "y": -7.579,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000490",
+        "name": "LM490",
+        "x": 15.944,
+        "y": -7.579,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "14000575",
+        "name": "AP575",
+        "x": 18.011,
+        "y": -7.579,
+        "type": 15,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "11000484",
+        "name": "PP484",
+        "x": 11.815,
+        "y": -9.529,
+        "type": 14,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000491",
+        "name": "LM491",
+        "x": 14.206,
+        "y": -9.529,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000492",
+        "name": "LM492",
+        "x": 15.944,
+        "y": -9.529,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "14000576",
+        "name": "AP576",
+        "x": 18.011,
+        "y": -9.529,
+        "type": 15,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000579",
+        "name": "LM579",
+        "x": 15.944,
+        "y": -11.441,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000577",
+        "name": "LM577",
+        "x": 14.206,
+        "y": -11.497,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000578",
+        "name": "LM578",
+        "x": 14.206,
+        "y": -14.856,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000580",
+        "name": "LM580",
+        "x": 15.944,
+        "y": -14.856,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "14000643",
+        "name": "AP643",
+        "x": 14.206,
+        "y": -16.21,
+        "type": 15,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "14000644",
+        "name": "AP644",
+        "x": 15.944,
+        "y": -16.21,
+        "type": 15,
+        "config": {},
+        "properties": [
+          {
+            "key": "executor",
+            "type": "string",
+            "value": "Zm9yaw==",
+            "boolValue": false,
+            "stringValue": "fork"
+          },
+          {
+            "key": "recfile",
+            "type": "string",
+            "value": "Qmx1ZS5wYWxsZXQ=",
+            "boolValue": false,
+            "stringValue": "Blue.pallet"
+          },
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "14000346",
+        "name": "AP346",
+        "x": 11.058,
+        "y": -17.538,
+        "type": 15,
+        "config": {},
+        "properties": [
+          {
+            "key": "executor",
+            "type": "string",
+            "value": "Zm9yaw==",
+            "boolValue": false,
+            "stringValue": "fork"
+          },
+          {
+            "key": "recfile",
+            "type": "string",
+            "value": "Qmx1ZS5wYWxsZXQ=",
+            "boolValue": false,
+            "stringValue": "Blue.pallet"
+          },
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000497",
+        "name": "LM497",
+        "x": 12.407,
+        "y": -17.538,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000645",
+        "name": "LM645",
+        "x": 14.206,
+        "y": -17.538,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000646",
+        "name": "LM646",
+        "x": 15.944,
+        "y": -17.538,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "14000348",
+        "name": "AP348",
+        "x": 11.058,
+        "y": -18.968,
+        "type": 15,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "10000648",
+        "name": "LM648",
+        "x": 12.407,
+        "y": -18.968,
+        "type": 1,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      },
+      {
+        "id": "11000649",
+        "name": "PP649",
+        "x": 14.206,
+        "y": -18.968,
+        "type": 14,
+        "config": {},
+        "properties": [
+          {
+            "key": "spin",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "boolValue": false
+          }
+        ],
+        "associatedStorageLocations": [],
+        "robots": [],
+        "enabled": 1
+      }
+    ],
+    "routes": [
+      {
+        "id": "1000057710000578",
+        "desc": "LM577-LM578",
+        "from": "10000577",
+        "to": "10000578",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -12.617
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -13.736
+        }
+      },
+      {
+        "id": "1000057810000577",
+        "desc": "LM578-LM577",
+        "from": "10000578",
+        "to": "10000577",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -13.736
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -12.617
+        }
+      },
+      {
+        "id": "1000049714000346",
+        "desc": "LM497-AP346",
+        "from": "10000497",
+        "to": "14000346",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MQ==",
+            "int32Value": 1,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 11.957,
+          "y": -17.538
+        },
+        "c2": {
+          "x": 11.508,
+          "y": -17.538
+        }
+      },
+      {
+        "id": "1400034610000497",
+        "desc": "AP346-LM497",
+        "from": "14000346",
+        "to": "10000497",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 11.508,
+          "y": -17.538
+        },
+        "c2": {
+          "x": 11.957,
+          "y": -17.538
+        }
+      },
+      {
+        "id": "1000064814000348",
+        "desc": "LM648-AP348",
+        "from": "10000648",
+        "to": "14000348",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MQ==",
+            "int32Value": 1,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 11.957,
+          "y": -18.968
+        },
+        "c2": {
+          "x": 11.508,
+          "y": -18.968
+        }
+      },
+      {
+        "id": "1400034810000648",
+        "desc": "AP348-LM648",
+        "from": "14000348",
+        "to": "10000648",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 11.508,
+          "y": -18.968
+        },
+        "c2": {
+          "x": 11.957,
+          "y": -18.968
+        }
+      },
+      {
+        "id": "1400064310000578",
+        "desc": "AP643-LM578",
+        "from": "14000643",
+        "to": "10000578",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -15.759
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -15.307
+        }
+      },
+      {
+        "id": "1000057814000643",
+        "desc": "LM578-AP643",
+        "from": "10000578",
+        "to": "14000643",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -15.307
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -15.759
+        }
+      },
+      {
+        "id": "1000049111000484",
+        "desc": "LM491-PP484",
+        "from": "10000491",
+        "to": "11000484",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 13.409,
+          "y": -9.529
+        },
+        "c2": {
+          "x": 12.612,
+          "y": -9.529
+        }
+      },
+      {
+        "id": "1100048410000491",
+        "desc": "PP484-LM491",
+        "from": "11000484",
+        "to": "10000491",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MQ==",
+            "int32Value": 1,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 12.612,
+          "y": -9.529
+        },
+        "c2": {
+          "x": 13.409,
+          "y": -9.529
+        }
+      },
+      {
+        "id": "1000064514000643",
+        "desc": "LM645-AP643",
+        "from": "10000645",
+        "to": "14000643",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -17.095
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -16.653
+        }
+      },
+      {
+        "id": "1400064310000645",
+        "desc": "AP643-LM645",
+        "from": "14000643",
+        "to": "10000645",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "3DCameraHole",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "3DCameraObstacle",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -16.653
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -17.095
+        }
+      },
+      {
+        "id": "1100064910000648",
+        "desc": "PP649-LM648",
+        "from": "11000649",
+        "to": "10000648",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MQ==",
+            "int32Value": 1,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "3DCameraHole",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "3DCameraObstacle",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 13.606,
+          "y": -18.968
+        },
+        "c2": {
+          "x": 13.007,
+          "y": -18.968
+        }
+      },
+      {
+        "id": "1000064811000649",
+        "desc": "LM648-PP649",
+        "from": "10000648",
+        "to": "11000649",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 13.007,
+          "y": -18.968
+        },
+        "c2": {
+          "x": 13.606,
+          "y": -18.968
+        }
+      },
+      {
+        "id": "1000049010000492",
+        "desc": "LM490-LM492",
+        "from": "10000490",
+        "to": "10000492",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.944,
+          "y": -8.229
+        },
+        "c2": {
+          "x": 15.944,
+          "y": -8.879
+        }
+      },
+      {
+        "id": "1000049210000490",
+        "desc": "LM492-LM490",
+        "from": "10000492",
+        "to": "10000490",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.944,
+          "y": -8.879
+        },
+        "c2": {
+          "x": 15.944,
+          "y": -8.229
+        }
+      },
+      {
+        "id": "1000049110000577",
+        "desc": "LM491-LM577",
+        "from": "10000491",
+        "to": "10000577",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -10.185
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -10.841
+        }
+      },
+      {
+        "id": "1000057710000491",
+        "desc": "LM577-LM491",
+        "from": "10000577",
+        "to": "10000491",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -10.841
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -10.185
+        }
+      },
+      {
+        "id": "1000048910000490",
+        "desc": "LM489-LM490",
+        "from": "10000489",
+        "to": "10000490",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MQ==",
+            "int32Value": 1,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.785,
+          "y": -7.579
+        },
+        "c2": {
+          "x": 15.365,
+          "y": -7.579
+        }
+      },
+      {
+        "id": "1000049010000489",
+        "desc": "LM490-LM489",
+        "from": "10000490",
+        "to": "10000489",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.365,
+          "y": -7.579
+        },
+        "c2": {
+          "x": 14.785,
+          "y": -7.579
+        }
+      },
+      {
+        "id": "1400064410000580",
+        "desc": "AP644-LM580",
+        "from": "14000644",
+        "to": "10000580",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.944,
+          "y": -15.759
+        },
+        "c2": {
+          "x": 15.944,
+          "y": -15.307
+        }
+      },
+      {
+        "id": "1000058014000644",
+        "desc": "LM580-AP644",
+        "from": "10000580",
+        "to": "14000644",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.944,
+          "y": -15.307
+        },
+        "c2": {
+          "x": 15.944,
+          "y": -15.759
+        }
+      },
+      {
+        "id": "1000064614000644",
+        "desc": "LM646-AP644",
+        "from": "10000646",
+        "to": "14000644",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.944,
+          "y": -17.095
+        },
+        "c2": {
+          "x": 15.944,
+          "y": -16.653
+        }
+      },
+      {
+        "id": "1400064410000646",
+        "desc": "AP644-LM646",
+        "from": "14000644",
+        "to": "10000646",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.944,
+          "y": -16.653
+        },
+        "c2": {
+          "x": 15.944,
+          "y": -17.095
+        }
+      },
+      {
+        "id": "1000064510000497",
+        "desc": "LM645-LM497",
+        "from": "10000645",
+        "to": "10000497",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MQ==",
+            "int32Value": 1,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 13.606,
+          "y": -17.538
+        },
+        "c2": {
+          "x": 13.007,
+          "y": -17.538
+        }
+      },
+      {
+        "id": "1000049710000645",
+        "desc": "LM497-LM645",
+        "from": "10000497",
+        "to": "10000645",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 13.007,
+          "y": -17.538
+        },
+        "c2": {
+          "x": 13.606,
+          "y": -17.538
+        }
+      },
+      {
+        "id": "1100064910000645",
+        "desc": "PP649-LM645",
+        "from": "11000649",
+        "to": "10000645",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MQ==",
+            "int32Value": 1,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -18.491
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -18.015
+        }
+      },
+      {
+        "id": "1000064511000649",
+        "desc": "LM645-PP649",
+        "from": "10000645",
+        "to": "11000649",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "3DCameraHole",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "3DCameraObstacle",
+            "type": "bool",
+            "value": "ZmFsc2U=",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -18.015
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -18.491
+        }
+      },
+      {
+        "id": "1000057910000580",
+        "desc": "LM579-LM580",
+        "from": "10000579",
+        "to": "10000580",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.944,
+          "y": -12.579
+        },
+        "c2": {
+          "x": 15.944,
+          "y": -13.718
+        }
+      },
+      {
+        "id": "1000058010000579",
+        "desc": "LM580-LM579",
+        "from": "10000580",
+        "to": "10000579",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.944,
+          "y": -13.718
+        },
+        "c2": {
+          "x": 15.944,
+          "y": -12.579
+        }
+      },
+      {
+        "id": "1000049110000492",
+        "desc": "LM491-LM492",
+        "from": "10000491",
+        "to": "10000492",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MQ==",
+            "int32Value": 1,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.785,
+          "y": -9.529
+        },
+        "c2": {
+          "x": 15.365,
+          "y": -9.529
+        }
+      },
+      {
+        "id": "1000049210000491",
+        "desc": "LM492-LM491",
+        "from": "10000492",
+        "to": "10000491",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.365,
+          "y": -9.529
+        },
+        "c2": {
+          "x": 14.785,
+          "y": -9.529
+        }
+      },
+      {
+        "id": "1000048910000491",
+        "desc": "LM489-LM491",
+        "from": "10000489",
+        "to": "10000491",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -8.229
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -8.879
+        }
+      },
+      {
+        "id": "1000049110000489",
+        "desc": "LM491-LM489",
+        "from": "10000491",
+        "to": "10000489",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.206,
+          "y": -8.879
+        },
+        "c2": {
+          "x": 14.206,
+          "y": -8.229
+        }
+      },
+      {
+        "id": "1000049214000576",
+        "desc": "LM492-AP576",
+        "from": "10000492",
+        "to": "14000576",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MQ==",
+            "int32Value": 1,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 16.633,
+          "y": -9.529
+        },
+        "c2": {
+          "x": 17.322,
+          "y": -9.529
+        }
+      },
+      {
+        "id": "1400057610000492",
+        "desc": "AP576-LM492",
+        "from": "14000576",
+        "to": "10000492",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 17.322,
+          "y": -9.529
+        },
+        "c2": {
+          "x": 16.633,
+          "y": -9.529
+        }
+      },
+      {
+        "id": "1000049210000579",
+        "desc": "LM492-LM579",
+        "from": "10000492",
+        "to": "10000579",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.944,
+          "y": -10.166
+        },
+        "c2": {
+          "x": 15.944,
+          "y": -10.804
+        }
+      },
+      {
+        "id": "1000057910000492",
+        "desc": "LM579-LM492",
+        "from": "10000579",
+        "to": "10000492",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.944,
+          "y": -10.804
+        },
+        "c2": {
+          "x": 15.944,
+          "y": -10.166
+        }
+      },
+      {
+        "id": "1000049014000575",
+        "desc": "LM490-AP575",
+        "from": "10000490",
+        "to": "14000575",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MQ==",
+            "int32Value": 1,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 16.633,
+          "y": -7.579
+        },
+        "c2": {
+          "x": 17.322,
+          "y": -7.579
+        }
+      },
+      {
+        "id": "1400057510000490",
+        "desc": "AP575-LM490",
+        "from": "14000575",
+        "to": "10000490",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 17.322,
+          "y": -7.579
+        },
+        "c2": {
+          "x": 16.633,
+          "y": -7.579
+        }
+      },
+      {
+        "id": "1000064510000646",
+        "desc": "LM645-LM646",
+        "from": "10000645",
+        "to": "10000646",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 14.785,
+          "y": -17.538
+        },
+        "c2": {
+          "x": 15.365,
+          "y": -17.538
+        }
+      },
+      {
+        "id": "1000064610000645",
+        "desc": "LM646-LM645",
+        "from": "10000646",
+        "to": "10000645",
+        "type": "bezier3",
+        "pass": 0,
+        "config": {},
+        "properties": [
+          {
+            "key": "direction",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          },
+          {
+            "key": "movestyle",
+            "type": "int",
+            "value": "MA==",
+            "int32Value": 0,
+            "boolValue": false
+          }
+        ],
+        "c1": {
+          "x": 15.365,
+          "y": -17.538
+        },
+        "c2": {
+          "x": 14.785,
+          "y": -17.538
+        }
+      }
+    ],
+    "binLocationsList": [
+      {
+        "binLocationList": [
+          {
+            "className": "GeneralLocation",
+            "instanceName": "GSA-1-1-1",
+            "pointName": "AP346",
+            "pos": {
+              "x": 11.428,
+              "y": -17.538
+            },
+            "property": [
+              {
+                "key": "points",
+                "type": "json",
+                "stringValue": "[{\"x\":11.278000000000002,\"y\":-17.68799999999999},{\"x\":11.578000000000001,\"y\":-17.68799999999999},{\"x\":11.578000000000001,\"y\":-17.388000000000005},{\"x\":11.278000000000002,\"y\":-17.388000000000005}]"
+              },
+              {
+                "key": "binTask",
+                "type": "json",
+                "stringValue": "[\n    {\n        \"JackLoad\": {\n            \"operation\": \"JackLoad\",\n            \"recfile\": \"shelf/BD1.shelf\",\n            \"recognize\": true,\n            \"use_down_pgv\": false,\n            \"use_pgv\": false\n        }\n    },\n    {\n        \"JackUnload\": {\n            \"operation\": \"JackUnload\",\n            \"recognize\": false,\n            \"use_down_pgv\": false,\n            \"use_pgv\": false\n        }\n    },\n    {\n        \"ForkLoad\": {\n            \"end_height\": 0.55,\n            \"operation\": \"ForkLoad\",\n            \"rec_height\": 0.45,\n            \"recfile\": \"pallet/Blue.pallet\",\n            \"recognize\": true,\n            \"start_height\": 0.45\n        }\n    },\n    {\n        \"ForkUnload\": {\n            \"end_height\": 0.455,\n            \"operation\": \"ForkUnload\",\n            \"start_height\": 0.55\n        }\n    },\n    {\n        \"HrLoad\": {\n            \"height\": 0.05,\n            \"loadType\": \"1\",\n            \"loadid\": \"00000015\",\n            \"operation\": \"Forkload\"\n        }\n    },\n    {\n        \"HrUnload\": {\n            \"height\": 0,\n            \"operation\": \"ForkUnload\"\n        }\n    }\n]\n"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "binLocationList": [
+          {
+            "className": "GeneralLocation",
+            "instanceName": "GSA-1-1-2",
+            "pointName": "AP348",
+            "pos": {
+              "x": 11.521,
+              "y": -18.968
+            },
+            "property": [
+              {
+                "key": "points",
+                "type": "json",
+                "stringValue": "[{\"x\":11.371000000000002,\"y\":-19.118},{\"x\":11.671000000000001,\"y\":-19.118},{\"x\":11.671000000000001,\"y\":-18.818},{\"x\":11.371000000000002,\"y\":-18.818}]"
+              },
+              {
+                "key": "binTask",
+                "type": "json",
+                "stringValue": "[\n    {\n        \"JackLoad\": {\n            \"operation\": \"JackLoad\",\n            \"recfile\": \"shelf/BD1.shelf\",\n            \"recognize\": true,\n            \"use_down_pgv\": false,\n            \"use_pgv\": false\n        }\n    },\n    {\n        \"JackUnload\": {\n            \"operation\": \"JackUnload\",\n            \"recognize\": false,\n            \"use_down_pgv\": false,\n            \"use_pgv\": false\n        }\n    },\n    {\n        \"ForkLoad\": {\n            \"end_height\": 0.55,\n            \"operation\": \"ForkLoad\",\n            \"rec_height\": 0.45,\n            \"recfile\": \"pallet/Blue.pallet\",\n            \"recognize\": true,\n            \"start_height\": 0.45\n        }\n    },\n    {\n        \"ForkUnload\": {\n            \"end_height\": 0.455,\n            \"operation\": \"ForkUnload\",\n            \"start_height\": 0.55\n        }\n    }\n]\n"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "binLocationList": [
+          {
+            "className": "GeneralLocation",
+            "instanceName": "PK-3-2",
+            "pointName": "AP644",
+            "pos": {
+              "x": 15.478,
+              "y": -16.21
+            },
+            "property": [
+              {
+                "key": "points",
+                "type": "json",
+                "stringValue": "[{\"x\":15.327999999999998,\"y\":-16.36},{\"x\":15.628000000000002,\"y\":-16.36},{\"x\":15.628000000000002,\"y\":-16.06},{\"x\":15.327999999999998,\"y\":-16.06}]"
+              },
+              {
+                "key": "binTask",
+                "type": "json",
+                "stringValue": "[\n    {\n        \"ForkLoad\": {\n            \"end_height\": 0.25,\n            \"operation\": \"ForkLoad\",\n            \"recfile\": \"pallet/Blue.pallet\",\n            \"recognize\": true\n        }\n    },\n    {\n        \"ForkUnload\": {\n            \"end_height\": 0,\n            \"operation\": \"ForkUnload\",\n            \"recognize\": false,\n            \"start_height\": 0.2\n        }\n    },\n    {\n        \"Load\": {\n            \"operation\": \"ForkLoad\",\n            \"recfile\": \"pallet/Blue.pallet\",\n            \"recognize\": true\n        }\n    },\n    {\n        \"Unload\": {\n            \"end_height\": 0,\n            \"operation\": \"ForkUnload\",\n            \"recognize\": false\n        }\n    }\n]\n"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "binLocationList": [
+          {
+            "className": "GeneralLocation",
+            "instanceName": "PK-3-1",
+            "pointName": "AP643",
+            "pos": {
+              "x": 13.521,
+              "y": -16.161
+            },
+            "property": [
+              {
+                "key": "points",
+                "type": "json",
+                "stringValue": "[{\"x\":13.371000000000002,\"y\":-16.311000000000003},{\"x\":13.671000000000001,\"y\":-16.311000000000003},{\"x\":13.671000000000001,\"y\":-16.011},{\"x\":13.371000000000002,\"y\":-16.011}]"
+              },
+              {
+                "key": "binTask",
+                "type": "json",
+                "stringValue": "[\n    {\n        \"ForkLoad\": {\n            \"end_height\": 0.25,\n            \"operation\": \"ForkLoad\",\n            \"recfile\": \"pallet/Blue.pallet\",\n            \"recognize\": true\n        }\n    },\n    {\n        \"ForkUnload\": {\n            \"end_height\": 0,\n            \"operation\": \"ForkUnload\",\n            \"recognize\": false,\n            \"start_height\": 0.2\n        }\n    },\n    {\n        \"Load\": {\n            \"operation\": \"ForkLoad\",\n            \"recfile\": \"pallet/Blue.pallet\",\n            \"recognize\": true\n        }\n    },\n    {\n        \"Unload\": {\n            \"end_height\": 0,\n            \"operation\": \"ForkUnload\",\n            \"recognize\": false\n        }\n    }\n]\n"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "binLocationList": [
+          {
+            "className": "GeneralLocation",
+            "instanceName": "PK-2-1",
+            "pointName": "AP575",
+            "pos": {
+              "x": 17.501,
+              "y": -7.244
+            },
+            "property": [
+              {
+                "key": "points",
+                "type": "json",
+                "stringValue": "[{\"x\":17.351000000000003,\"y\":-7.394000000000002},{\"x\":17.651,\"y\":-7.394000000000002},{\"x\":17.651,\"y\":-7.093999999999998},{\"x\":17.351000000000003,\"y\":-7.093999999999998}]"
+              },
+              {
+                "key": "binTask",
+                "type": "json",
+                "stringValue": "[\n    {\n        \"ForkLoad\": {\n            \"end_height\": 0.25,\n            \"operation\": \"ForkLoad\",\n            \"recfile\": \"pallet/Blue.pallet\",\n            \"recognize\": true\n        }\n    },\n    {\n        \"ForkUnload\": {\n            \"end_height\": 0,\n            \"operation\": \"ForkUnload\",\n            \"recognize\": false,\n            \"start_height\": 0.2\n        }\n    },\n    {\n        \"Load\": {\n            \"operation\": \"ForkLoad\",\n            \"recfile\": \"pallet/Blue.pallet\",\n            \"recognize\": true\n        }\n    },\n    {\n        \"Unload\": {\n            \"end_height\": 0,\n            \"operation\": \"ForkUnload\",\n            \"recognize\": false\n        }\n    }\n]\n"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "binLocationList": [
+          {
+            "className": "GeneralLocation",
+            "instanceName": "PK-2-2",
+            "pointName": "AP576",
+            "pos": {
+              "x": 17.587,
+              "y": -9.177
+            },
+            "property": [
+              {
+                "key": "points",
+                "type": "json",
+                "stringValue": "[{\"x\":17.436999999999998,\"y\":-9.327000000000005},{\"x\":17.737000000000002,\"y\":-9.327000000000005},{\"x\":17.737000000000002,\"y\":-9.026999999999994},{\"x\":17.436999999999998,\"y\":-9.026999999999994}]"
+              },
+              {
+                "key": "binTask",
+                "type": "json",
+                "stringValue": "[\n    {\n        \"ForkLoad\": {\n            \"end_height\": 0.25,\n            \"operation\": \"ForkLoad\",\n            \"recfile\": \"pallet/Blue.pallet\",\n            \"recognize\": true\n        }\n    },\n    {\n        \"ForkUnload\": {\n            \"end_height\": 0,\n            \"operation\": \"ForkUnload\",\n            \"recognize\": false,\n            \"start_height\": 0.2\n        }\n    },\n    {\n        \"Load\": {\n            \"operation\": \"ForkLoad\",\n            \"recfile\": \"pallet/Blue.pallet\",\n            \"recognize\": true\n        }\n    },\n    {\n        \"Unload\": {\n            \"end_height\": 0,\n            \"operation\": \"ForkUnload\",\n            \"recognize\": false\n        }\n    }\n]\n"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "areas": [],
+    "blocks": ""
+  }
+]
