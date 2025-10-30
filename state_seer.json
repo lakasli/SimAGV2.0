@@ -1,0 +1,56 @@
+{
+  "headerId": 48652,
+  "timestamp": "2025-09-23T14:43:56.295Z",
+  "version": "v2",
+  "manufacturer": "SEER",
+  "serialNumber": "AMB-03",
+  "orderId": "1970377814744842241",
+  "orderUpdateId": 702,
+  "zoneSetId": "beidaceshi-0922",
+  "lastNodeId": "LM60",
+  "lastNodeSequenceId": 495,
+  "nodeStates": [
+  ],
+  "edgeStates": [
+  ],
+  "driving": true,
+  "waitingForInteractionZoneRelease": false,
+  "paused": false,
+  "forkState": {
+    "forkHeight": 0
+  },
+  "newBaseRequest": false,
+  "actionStates": [],
+  "batteryState": {
+    "batteryCharge": 61,
+    "charging": false,
+    "batteryVoltage": 49.193,
+    "batteryHealth": 0,
+    "reach": 0
+  },
+  "operatingMode": "AUTOMATIC",
+  "agvPosition": {
+    "x": 6.9237,
+    "y": -9.5618,
+    "theta": 1.5826,
+    "mapId": "beidaceshi-0922",
+    "positionInitialized": true,
+    "mapDescription": "",
+    "localizationScore": 0.493,
+    "deviationRange": 0
+  },
+  "velocity": {
+    "vx": 0.754,
+    "vy": 0,
+    "omega": -0.0416
+  },
+  "loads": [
+  ],
+  "errors": [],
+  "safetyState": {
+    "eStop": "NONE",
+    "fieldViolation": false
+  },
+  "information": [
+  ]
+}

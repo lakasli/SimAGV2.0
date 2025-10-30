@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional
 
@@ -88,6 +88,12 @@ class BatteryState:
 
 
 @dataclass
+class ForkState:
+    # 货叉状态，默认高度为 0
+    fork_height: int = 0
+
+
+@dataclass
 class Information:
     info_type: str
     info_references: List["InfoReference"]
@@ -109,7 +115,6 @@ class State:
     manufacturer: str
     serial_number: str
     driving: bool
-    distance_since_last_node: Optional[float]
     operating_mode: OperatingMode
     node_states: List[NodeState]
     edge_states: List[EdgeState]
@@ -122,8 +127,13 @@ class State:
     loads: List[Load]
     battery_state: BatteryState
     safety_state: SafetyState
-    paused: Optional[bool] = None
-    new_base_request: Optional[bool] = None
+    paused: bool = False
+    new_base_request: bool = False
     agv_position: Optional[AgvPosition] = None
     velocity: Optional[Velocity] = None
     zone_set_id: Optional[str] = None
+    # 交互区域释放等待标记（默认 false）
+    waiting_for_interaction_zone_release: bool = False
+    # 货叉状态
+    fork_state: ForkState = field(default_factory=ForkState)
+    errors: List[dict] = field(default_factory=list)

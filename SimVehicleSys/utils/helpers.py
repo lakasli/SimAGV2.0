@@ -2,7 +2,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 from dataclasses import asdict, is_dataclass
-from typing import Any, List
+from typing import Any, List, Optional
 import math
 
 
@@ -13,6 +13,25 @@ def get_timestamp() -> str:
 
 def get_topic_type(path: str) -> str:
     return path.rsplit("/", 1)[-1] if "/" in path else path
+
+
+def canonicalize_map_id(map_id: Optional[str]) -> str:
+    """Normalize map identifier to plain name without directories or extension.
+
+    Examples:
+    - "VehicleMap/test1.scene" -> "test1"
+    - "ViewerMap\\test2.scene" -> "test2"
+    - "test3" -> "test3"
+    - None/empty -> "default"
+    """
+    s = str(map_id or "").strip()
+    if not s:
+        return "default"
+    s = s.replace("\\", "/")
+    fname = s.split("/")[-1]
+    if fname.lower().endswith(".scene"):
+        fname = fname[:-6]
+    return fname or "default"
 
 
 def iterate_position(current_x: float, current_y: float, target_x: float, target_y: float, speed: float) -> tuple[float, float, float]:

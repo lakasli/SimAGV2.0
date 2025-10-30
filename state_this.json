@@ -1,0 +1,52 @@
+{
+  "headerId": 11,
+  "timestamp": "2025-10-30T09:58:18.993Z",
+  "version": "v2",
+  "manufacturer": "SEER",
+  "serialNumber": "AMB-01",
+  "driving": false,
+  "operatingMode": "AUTOMATIC",
+  "nodeStates": [],
+  "edgeStates": [],
+  "lastNodeId": "",
+  "orderId": "",
+  "orderUpdateId": 0,
+  "lastNodeSequenceId": 0,
+  "actionStates": [],
+  "information": [],
+  "loads": [],
+  "batteryState": {
+    "batteryCharge": 99.79943648974103,
+    "batteryVoltage": null,
+    "batteryHealth": null,
+    "charging": false,
+    "reach": null
+  },
+  "safetyState": {
+    "eStop": "NONE",
+    "fieldViolation": false
+  },
+  "paused": false,
+  "newBaseRequest": false,
+  "agvPosition": {
+    "x": 1.9189926077754578,
+    "y": 2.334711136322471,
+    "theta": 0,
+    "mapId": "default",
+    "mapDescription": null,
+    "positionInitialized": false,
+    "localizationScore": null,
+    "deviationRange": null
+  },
+  "velocity": {
+    "vx": 0,
+    "vy": 0,
+    "omega": 0
+  },
+  "zoneSetId": null,
+  "waitingForInteractionZoneRelease": false,
+  "forkState": {
+    "forkHeight": 0
+  },
+  "errors": []
+}

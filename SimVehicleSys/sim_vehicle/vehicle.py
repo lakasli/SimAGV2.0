@@ -9,8 +9,8 @@ import paho.mqtt.client as mqtt
 from SimVehicleSys.config.settings import Config
 from SimVehicleSys.config.mqtt_config import generate_vda_mqtt_base_topic
 from SimVehicleSys.mqtt.client import publish_json
-from SimVehicleSys.utils.helpers import get_timestamp, get_distance, iterate_position, iterate_position_with_trajectory
-from SimVehicleSys.protocol.vda5050_common import AgvPosition, NodePosition
+from SimVehicleSys.utils.helpers import get_timestamp, get_distance, iterate_position, iterate_position_with_trajectory, canonicalize_map_id
+from SimVehicleSys.protocol.vda5050_common import AgvPosition, NodePosition, Velocity
 from SimVehicleSys.protocol.vda_2_0_0.connection import Connection, ConnectionState
 from SimVehicleSys.protocol.vda_2_0_0.state import (
     State,
@@ -27,6 +27,7 @@ from SimVehicleSys.protocol.vda_2_0_0.order import Order, Node, Edge
 from SimVehicleSys.protocol.vda_2_0_0.instant_actions import InstantActions
 from SimVehicleSys.protocol.vda_2_0_0.action import Action
 from .error_manager import emit_error
+from .state_manager import global_store
 
 from .navigation import (
     resolve_scene_path,
@@ -119,7 +120,7 @@ class VehicleSimulator:
             y=random_y,
             position_initialized=False,
             theta=0.0,
-            map_id=config.settings.map_id,
+            map_id=canonicalize_map_id(config.settings.map_id),
             deviation_range=None,
             map_description=None,
             localization_score=None,
@@ -131,7 +132,6 @@ class VehicleSimulator:
             manufacturer=config.vehicle.manufacturer,
             serial_number=config.vehicle.serial_number,
             driving=False,
-            distance_since_last_node=None,
             operating_mode=OperatingMode.Automatic,
             node_states=[],
             edge_states=[],
@@ -144,11 +144,12 @@ class VehicleSimulator:
             loads=[],
             battery_state=BatteryState(battery_charge=float(config.settings.battery_default), charging=False),
             safety_state=SafetyState(e_stop=EStop.None_, field_violation=False),
-            paused=None,
-            new_base_request=None,
+            paused=False,
+            new_base_request=False,
             agv_position=agv_position,
-            velocity=None,
+            velocity=Velocity(vx=0.0, vy=0.0, omega=0.0),
             zone_set_id=None,
+            waiting_for_interaction_zone_release=False,
         )
         return state, agv_position
 
@@ -161,7 +162,6 @@ class VehicleSimulator:
             manufacturer=config.vehicle.manufacturer,
             serial_number=config.vehicle.serial_number,
             driving=False,
-            distance_since_last_node=None,
             operating_mode=OperatingMode.Automatic,
             node_states=[],
             edge_states=[],
@@ -174,11 +174,12 @@ class VehicleSimulator:
             loads=[],
             battery_state=BatteryState(battery_charge=float(config.settings.battery_default), charging=False),
             safety_state=SafetyState(e_stop=EStop.None_, field_violation=False),
-            paused=None,
-            new_base_request=None,
+            paused=False,
+            new_base_request=False,
             agv_position=agv_position,
-            velocity=None,
+            velocity=Velocity(vx=0.0, vy=0.0, omega=0.0),
             zone_set_id=None,
+            waiting_for_interaction_zone_release=False,
         )
         return vis
 
@@ -195,6 +196,43 @@ class VehicleSimulator:
     def publish_state(self, mqtt_cli: mqtt.Client) -> None:
         self.state.header_id += 1
         self.state.timestamp = get_timestamp()
+        # 同步集中式错误列表到 VDA5050 state，确保始终包含 errors 列表
+        try:
+            rt = global_store.get_runtime(self.config.vehicle.serial_number)
+            # 无错误时为空数组
+            self.state.errors = list(getattr(rt, "errors", []))
+            # 同步地图名称到 agvPosition.mapId
+            try:
+                cm = getattr(rt, "current_map", None)
+            except Exception:
+                cm = None
+            raw_map = cm or self.nav_map_name or (self.state.agv_position.map_id if self.state.agv_position else None) or self.config.settings.map_id
+            canonical = canonicalize_map_id(raw_map)
+            if self.state.agv_position:
+                self.state.agv_position.map_id = str(canonical)
+        except Exception:
+            self.state.errors = []
+        # 计算速度（vx, vy, omega），基于位置增量与时间间隔
+        try:
+            now_ts = time.time()
+            pos = self.state.agv_position
+            prev = getattr(self, "_last_publish_state", None)
+            vx = vy = omega = 0.0
+            if pos is not None:
+                if prev and isinstance(prev, dict):
+                    dt = max(1e-3, now_ts - float(prev.get("ts", now_ts)))
+                    dx = float(pos.x) - float(prev.get("x", pos.x))
+                    dy = float(pos.y) - float(prev.get("y", pos.y))
+                    dtheta = float(pos.theta) - float(prev.get("theta", pos.theta))
+                    vx = dx / dt
+                    vy = dy / dt
+                    omega = dtheta / dt
+                # 记录当前用于下次增量计算
+                self._last_publish_state = {"ts": now_ts, "x": float(pos.x), "y": float(pos.y), "theta": float(pos.theta)}
+            self.state.velocity = Velocity(vx=vx, vy=vy, omega=omega)
+        except Exception:
+            # 保守容错，保持原值
+            pass
         publish_json(mqtt_cli, self.state_topic, self.state, qos=1, retain=False)
 
     def publish_visualization(self, mqtt_cli: mqtt.Client) -> None:

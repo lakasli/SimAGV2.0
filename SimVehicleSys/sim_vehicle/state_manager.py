@@ -2,7 +2,7 @@ from __future__ import annotations
 import threading
 import math
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 
 from backend.schemas import (
     AGVRuntime,
@@ -120,17 +120,29 @@ class AGVStateStore:
                 position=rt.position,
                 speed=rt.speed,
                 last_update=rt.last_update,
-                error=rt.last_error,
+                # 始终返回 errors 列表：无错误则为空数组
+                errors=list(rt.errors) if getattr(rt, "errors", None) else [],
             )
 
     def set_error(self, serial: str, error_payload: Dict[str, Any]) -> Optional[AGVRuntime]:
-        """记录最近一次错误，用于状态上报携带。"""
+        """追加错误到错误列表，用于状态上报携带。"""
         with self._lock:
             rt = self._ensure_runtime(serial)
+            # 归一化错误载荷
             try:
-                rt.last_error = dict(error_payload) if isinstance(error_payload, dict) else {"raw": error_payload}
+                payload = dict(error_payload) if isinstance(error_payload, dict) else {"raw": error_payload}
             except Exception:
-                rt.last_error = {"raw": str(error_payload)}
+                payload = {"raw": str(error_payload)}
+            # 追加到错误列表，并限制最大长度，避免无限增长
+            try:
+                if not hasattr(rt, "errors") or rt.errors is None:
+                    rt.errors = []  # type: ignore[attr-defined]
+                rt.errors.append(payload)  # type: ignore[attr-defined]
+                # 仅保留最近的 20 条
+                if len(rt.errors) > 20:  # type: ignore[attr-defined]
+                    rt.errors = rt.errors[-20:]  # type: ignore[attr-defined]
+            except Exception:
+                pass
             rt.last_update = datetime.utcnow()
             return rt
 
