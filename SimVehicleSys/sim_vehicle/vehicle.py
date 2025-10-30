@@ -26,6 +26,7 @@ from SimVehicleSys.protocol.vda_2_0_0.state import (
 from SimVehicleSys.protocol.vda_2_0_0.order import Order, Node, Edge
 from SimVehicleSys.protocol.vda_2_0_0.instant_actions import InstantActions
 from SimVehicleSys.protocol.vda_2_0_0.action import Action
+from .error_manager import emit_error
 
 from .navigation import (
     resolve_scene_path,
@@ -621,8 +622,20 @@ class VehicleSimulator:
 
     def start_path_navigation_by_nodes(self, route_node_ids: List[str], map_name: Optional[str]) -> None:
         if not route_node_ids or len(route_node_ids) < 2:
+            # 示例触发：节点不足导致路径规划失败
+            try:
+                emit_error(52702, {"serial_number": self.config.vehicle.serial_number, "map": map_name, "route_node_ids": route_node_ids})
+            except Exception:
+                pass
             raise ValueError("route_node_ids must contain at least 2 nodes")
-        fp = resolve_scene_path(map_name)
+        try:
+            fp = resolve_scene_path(map_name)
+        except FileNotFoundError:
+            try:
+                emit_error(50101, {"serial_number": self.config.vehicle.serial_number, "map": map_name})  # map load error
+            except Exception:
+                pass
+            raise
         topo = parse_scene_topology(fp)
         anchors = topo["anchors"]  # type: ignore
         paths = topo["paths"]      # type: ignore
@@ -639,12 +652,27 @@ class VehicleSimulator:
             except Exception:
                 pos = None
             if pos is None:
+                try:
+                    emit_error(52701, {"serial_number": self.config.vehicle.serial_number, "map": map_name, "missing_node": sid})  # can not find target id
+                except Exception:
+                    pass
                 raise ValueError(f"Node '{sid}' not found as anchor or station name")
             nearest = nearest_anchor(pos, anchors)  # type: ignore
             if not nearest:
+                try:
+                    emit_error(52700, {"serial_number": self.config.vehicle.serial_number, "map": map_name, "station": sid})  # can not find a feasible path
+                except Exception:
+                    pass
                 raise ValueError(f"No nearest anchor found for station '{sid}'")
             route.append(str(nearest))
-        pts = route_polyline(route, anchors, paths, steps_per_edge=20)
+        try:
+            pts = route_polyline(route, anchors, paths, steps_per_edge=20)
+        except Exception:
+            try:
+                emit_error(52702, {"serial_number": self.config.vehicle.serial_number, "map": map_name, "route": route})  # path plan failed
+            except Exception:
+                pass
+            raise
         pts = augment_with_corner_turns(pts, theta_threshold=0.1, step_delta=0.08)
         self.nav_points = pts
         self.nav_idx = 0

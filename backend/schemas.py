@@ -61,6 +61,8 @@ class AGVRuntime(BaseModel):
     speed: float = 0.0
     last_update: datetime = Field(default_factory=datetime.utcnow)
     movement_state: str = "forward"
+    # 最近一次错误（若有），来自集中式错误管理的标准化载荷
+    last_error: Optional[dict] = None
 
 
 class StatusResponse(BaseModel):
@@ -71,6 +73,8 @@ class StatusResponse(BaseModel):
     position: Position
     speed: float
     last_update: datetime
+    # 最近错误，便于前端/监控展示
+    error: Optional[dict] = None
 
 
 class TranslateRequest(BaseModel):

@@ -2,7 +2,7 @@ from __future__ import annotations
 import threading
 import math
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 from backend.schemas import (
     AGVRuntime,
@@ -120,7 +120,19 @@ class AGVStateStore:
                 position=rt.position,
                 speed=rt.speed,
                 last_update=rt.last_update,
+                error=rt.last_error,
             )
+
+    def set_error(self, serial: str, error_payload: Dict[str, Any]) -> Optional[AGVRuntime]:
+        """记录最近一次错误，用于状态上报携带。"""
+        with self._lock:
+            rt = self._ensure_runtime(serial)
+            try:
+                rt.last_error = dict(error_payload) if isinstance(error_payload, dict) else {"raw": error_payload}
+            except Exception:
+                rt.last_error = {"raw": str(error_payload)}
+            rt.last_update = datetime.utcnow()
+            return rt
 
 
 global_store = AGVStateStore()

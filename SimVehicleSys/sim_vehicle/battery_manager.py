@@ -6,6 +6,7 @@ from typing import Optional
 from SimVehicleSys.config.settings import Config
 from .vehicle import VehicleSimulator
 from SimVehicleSys.utils.helpers import get_distance
+from .error_manager import emit_error
 
 
 class BatteryManager:
@@ -101,6 +102,17 @@ class BatteryManager:
                     bs.charging = False
 
                 bs.battery_charge = charge
+
+                # 示例触发点：低电量告警与极低电量致命错误
+                try:
+                    serial = self.sim.config.vehicle.serial_number
+                    ctx = {"serial_number": serial, "battery_charge": round(charge, 2)}
+                    if charge <= 10.0:
+                        emit_error(52503, ctx)  # battery is too low to move
+                    elif charge <= 30.0:
+                        emit_error(54211, ctx)  # low battery
+                except Exception:
+                    pass
             except Exception as e:
                 print(f"BatteryManager error: {e}")
 
