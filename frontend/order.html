@@ -561,7 +561,7 @@
         const startId = resolveId(startName);
         const endId = resolveId(endName);
         // A* 规划
-        const pathIds = aStar(String(startId), String(endId), topo.anchors, topo.paths);
+        const pathIds = aStar(String(startId), String(endId), topo.stations, topo.paths);
         if (!pathIds || pathIds.length === 0) throw new Error('未找到可用路径');
         // 转换为展示名称（如 LM1），若无名称则回退到 id
         const pathNames = pathIds.map(id => nameById.get(String(id)) || String(id));

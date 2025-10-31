@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Union, Iterable
 from SimVehicleSys.protocol.vda_2_0_0.order import Order, Node, Edge
 from SimVehicleSys.protocol.vda_2_0_0.action import Action, ActionParameter, BlockingType
 from SimVehicleSys.protocol.vda5050_common import NodePosition, Trajectory, ControlPoint
+from SimVehicleSys.sim_vehicle.action_executor import execute_pallet_action_in_sim
 
 
 JsonDict = Dict[str, Any]
@@ -228,5 +229,6 @@ def process_order(sim_vehicle: Any, order_raw: Union[Order, JsonDict]) -> None:
         order = _parse_order(order_raw, fallback_map_id, cfg_vehicle)
         _validate_order(sim_vehicle, order)
         sim_vehicle.process_order(order)
+        # 托盘动作不再在接收订单时立即触发，改为在仿真车到站且停止后触发
     except Exception as e:
         raise RuntimeError(f"order_manager.process_order failed: {e}")

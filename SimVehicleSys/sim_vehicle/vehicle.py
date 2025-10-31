@@ -37,7 +37,7 @@ from .navigation import (
     augment_with_corner_turns,
     find_station_position,
     find_point_name_by_id,
-    nearest_anchor,
+    nearest_station,
 )
 
 
@@ -62,6 +62,7 @@ class VehicleSimulator:
     nav_map_name: Optional[str]
     # 订单路由的站点名序列（用于到站检测与状态裁剪）
     nav_route_node_ids: Optional[List[str]]
+    charging_requested: bool = False
 
     @staticmethod
     def create(config: Config) -> "VehicleSimulator":
@@ -467,15 +468,70 @@ class VehicleSimulator:
         idx = self._find_order_last_node_index()
         if idx is None:
             return
+        # 仅在到站且停止后才执行当前节点的动作
+        vp = self.state.agv_position
+        if vp is None:
+            return
+        # 若导航仍在进行或车辆仍在行驶，等待停止
+        if self.nav_running or getattr(self.state, "driving", False):
+            return
+        # 计算与当前节点的距离，并要求 <= 0.05m（停止阈值）
+        try:
+            cur_node = self.order.nodes[idx]
+        except Exception:
+            cur_node = None
+        if not cur_node:
+            return
+        target_x = None
+        target_y = None
+        try:
+            np = getattr(cur_node, "node_position", None)
+            if np:
+                target_x = float(getattr(np, "x", vp.x))
+                target_y = float(getattr(np, "y", vp.y))
+            else:
+                # 无节点坐标时，尝试通过地图解析站点位置
+                try:
+                    fp = resolve_scene_path(self.nav_map_name or (vp.map_id if vp else None))
+                    pos = find_station_position(fp, str(getattr(cur_node, "node_id", "") or ""))
+                    if pos:
+                        target_x = float(pos[0])
+                        target_y = float(pos[1])
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        if target_x is not None and target_y is not None:
+            try:
+                dist = get_distance(vp.x, vp.y, target_x, target_y)
+                if dist > 0.01:
+                    return
+            except Exception:
+                # 距离计算异常则保守不执行
+                return
+        # 执行动作：支持托盘顶升/顶降（JackLoad/JackUnload）以及充电任务（StartCharging）
         node_actions = self.order.nodes[idx].actions or []
         if node_actions:
             for st in self.state.action_states:
                 for a in node_actions:
                     if st.action_id == a.action_id and st.action_status == ActionStatus.Waiting:
-                        print(f"Executing action type: {st.action_type}")
-                        st.action_status = ActionStatus.Finished
-                        self.action_start_time = time.time()
-                        return
+                        try:
+                            atype = str(a.action_type or st.action_type or "").strip()
+                            if atype in ("JackLoad", "JackUnload"):
+                                from SimVehicleSys.sim_vehicle.action_executor import execute_pallet_action_in_sim
+                                execute_pallet_action_in_sim(self, atype, a.action_parameters)
+                            elif atype in ("StartCharging", "startCharging", "ChargingStart"):
+                                from SimVehicleSys.sim_vehicle.action_executor import execute_charging_action_in_sim
+                                execute_charging_action_in_sim(self, a.action_parameters)
+                            # 默认行为：标记完成，并设置动作时长计时器
+                            st.action_status = ActionStatus.Finished
+                            self.action_start_time = time.time()
+                            return
+                        except Exception as e:
+                            print(f"process node action failed: {e}")
+                            st.action_status = ActionStatus.Finished
+                            self.action_start_time = time.time()
+                            return
 
     def _find_order_last_node_index(self) -> Optional[int]:
         for i, n in enumerate(self.order.nodes):
@@ -546,13 +602,13 @@ class VehicleSimulator:
         sp = find_station_position(fp, station_id)
         if sp is None:
             raise ValueError(f"Station '{station_id}' not found")
-        start_anchor = nearest_anchor((cur.x, cur.y), topo["anchors"])  # type: ignore
-        end_anchor = nearest_anchor(sp, topo["anchors"])  # type: ignore
-        if not start_anchor or not end_anchor:
-            raise ValueError("Nearest anchors not found")
-        route = a_star(start_anchor, end_anchor, topo["anchors"], topo["paths"])  # type: ignore
+        start_station = nearest_station((cur.x, cur.y), topo["stations"])  # type: ignore
+        end_station = nearest_station(sp, topo["stations"])  # type: ignore
+        if not start_station or not end_station:
+            raise ValueError("Nearest stations not found")
+        route = a_star(start_station, end_station, topo["stations"], topo["paths"])  # type: ignore
         if not route:
-            raise ValueError("No route found between anchors")
+            raise ValueError("No route found between stations")
         self.start_path_navigation_by_nodes(route, map_name)
         self.nav_target_station = station_id
 
@@ -692,13 +748,13 @@ class VehicleSimulator:
                 pass
             raise
         topo = parse_scene_topology(fp)
-        anchors = topo["anchors"]  # type: ignore
-        paths = topo["paths"]      # type: ignore
-        anchor_ids = {str(a["id"]) for a in anchors}
+        stations = topo["stations"]  # type: ignore
+        paths = topo["paths"]         # type: ignore
+        station_ids = {str(s["id"]) for s in stations}
         route: List[str] = []
         for nid in route_node_ids:
             sid = str(nid)
-            if sid in anchor_ids:
+            if sid in station_ids:
                 route.append(sid)
                 continue
             # 允许使用站点名称（points.name）作为 node_id：映射到最近锚点
@@ -712,16 +768,16 @@ class VehicleSimulator:
                 except Exception:
                     pass
                 raise ValueError(f"Node '{sid}' not found as anchor or station name")
-            nearest = nearest_anchor(pos, anchors)  # type: ignore
+            nearest = nearest_station(pos, stations)  # type: ignore
             if not nearest:
                 try:
                     emit_error(52700, {"serial_number": self.config.vehicle.serial_number, "map": map_name, "station": sid})  # can not find a feasible path
                 except Exception:
                     pass
-                raise ValueError(f"No nearest anchor found for station '{sid}'")
+                raise ValueError(f"No nearest station found for station '{sid}'")
             route.append(str(nearest))
         try:
-            pts = route_polyline(route, anchors, paths, steps_per_edge=20)
+            pts = route_polyline(route, stations, paths, steps_per_edge=20)
         except Exception:
             try:
                 emit_error(52702, {"serial_number": self.config.vehicle.serial_number, "map": map_name, "route": route})  # path plan failed

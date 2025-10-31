@@ -1,36 +1,37 @@
 /**
- * 路径规划与 VDA 5050 Order 生成.
- * 移植自 `SimVehicleSys/sim_vehicle/navigation.py`.
+ * 路径规划与 VDA 5050 Order 生成（基于站点，不使用锚点）。
+ * 移植并对齐至 Python 侧的站点化实现。
  */
 
 /**
- * 解析从后端获取的 scene 地图文件内容.
+ * 解析从后端获取的 scene 地图文件内容（构建站点与路段）。
  * @param {object} sceneData - 地图文件 JSON 对象.
- * @returns {{stations: object[], anchors: object[], paths: object[]}}
+ * @returns {{stations: object[], paths: object[]}}
  */
 function parseSceneTopology(sceneData) {
   const root = Array.isArray(sceneData) ? sceneData[0] : sceneData;
-  if (!root) return { stations: [], anchors: [], paths: [] };
+  if (!root) return { stations: [], paths: [] };
 
   const points = root.points || [];
   const routes = root.routes || [];
 
-  const anchorsMap = new Map();
+  // 使用“站点”统一指代所有图节点（不再区分锚点）。
+  const stationsMap = new Map();
   for (const p of points) {
     const pid = p.id != null ? String(p.id) : null;
     if (!pid) continue;
-    anchorsMap.set(pid, { id: pid, name: String(p.name || pid), x: Number(p.x || 0), y: Number(p.y || 0) });
+    stationsMap.set(pid, { id: pid, name: String(p.name || pid), x: Number(p.x || 0), y: Number(p.y || 0) });
   }
 
   const paths = [];
   for (const r of routes) {
     const fromId = r.from != null ? String(r.from) : null;
     const toId = r.to != null ? String(r.to) : null;
-    if (!fromId || !toId || !anchorsMap.has(fromId) || !anchorsMap.has(toId)) {
+    if (!fromId || !toId || !stationsMap.has(fromId) || !stationsMap.has(toId)) {
       continue;
     }
-    const p0 = anchorsMap.get(fromId);
-    const p3 = anchorsMap.get(toId);
+    const p0 = stationsMap.get(fromId);
+    const p3 = stationsMap.get(toId);
     const length = Math.hypot(p3.x - p0.x, p3.y - p0.y); // 简化为直线距离
     paths.push({
       id: r.id || `${fromId}->${toId}`,
@@ -42,13 +43,8 @@ function parseSceneTopology(sceneData) {
   }
 
   return {
-    stations: root.points.filter(p => /^(AP|CP|PP|LM|WP)/.test(p.name || '')).map(p => ({
-      id: p.id != null ? String(p.id) : p.name,
-      name: p.name,
-      x: Number(p.x || 0),
-      y: Number(p.y || 0),
-    })),
-    anchors: Array.from(anchorsMap.values()),
+    // 路径规划的图节点统一使用“站点”（包含所有 points）
+    stations: Array.from(stationsMap.values()),
     paths: paths,
   };
 }
@@ -73,15 +69,15 @@ class PriorityQueue {
 }
 
 /**
- * A* 路径规划.
- * @param {string} startId - 起始锚点ID.
- * @param {string} endId - 终点锚点ID.
- * @param {object[]} anchors - 锚点列表.
- * @param {object[]} paths - 路径列表.
- * @returns {string[] | null} - 节点ID路径, 或 null (无路径).
+ * A* 路径规划（基于站点）。
+ * @param {string} startId - 起始站点 ID。
+ * @param {string} endId - 终点站点 ID。
+ * @param {object[]} stations - 站点列表。
+ * @param {object[]} paths - 路段列表。
+ * @returns {string[] | null} - 节点 ID 路径, 或 null (无路径)。
  */
-function aStar(startId, endId, anchors, paths) {
-  const anchorsMap = new Map(anchors.map(a => [a.id, a]));
+function aStar(startId, endId, stations, paths) {
+  const stationsMap = new Map(stations.map(s => [s.id, s]));
   const adj = new Map();
   for (const p of paths) {
     if (!adj.has(p.from)) adj.set(p.from, []);
@@ -89,8 +85,8 @@ function aStar(startId, endId, anchors, paths) {
   }
 
   const heuristic = (a, b) => {
-    const pa = anchorsMap.get(a);
-    const pb = anchorsMap.get(b);
+    const pa = stationsMap.get(a);
+    const pb = stationsMap.get(b);
     return pa && pb ? Math.hypot(pa.x - pb.x, pa.y - pb.y) : 0;
   };
 
@@ -130,39 +126,39 @@ function aStar(startId, endId, anchors, paths) {
 }
 
 /**
- * 寻找离指定位置最近的锚点.
+ * 寻找离指定位置最近的站点。
  * @param {{x: number, y: number}} pos
- * @param {object[]} anchors
+ * @param {object[]} stations
  * @returns {string | null}
  */
-function findNearestAnchor(pos, anchors) {
+function findNearestStation(pos, stations) {
   let bestId = null;
   let bestDist = Infinity;
-  for (const a of anchors) {
-    const dist = Math.hypot(a.x - pos.x, a.y - pos.y);
+  for (const s of stations) {
+    const dist = Math.hypot(s.x - pos.x, s.y - pos.y);
     if (dist < bestDist) {
       bestDist = dist;
-      bestId = a.id;
+      bestId = s.id;
     }
   }
   return bestId;
 }
 
 /**
- * 生成 VDA 5050 订单.
- * @param {string[]} path - A* 规划出的节点ID列表（锚点 ID）。
+ * 生成 VDA 5050 订单（节点为站点名称）。
+ * @param {string[]} path - A* 规划出的节点 ID 列表（站点 ID）。
  * @param {{serial_number: string, manufacturer: string, version?: string}} agvInfo - 车辆信息.
- * @param {{anchors: object[], paths: object[]}} topo - 地图拓扑（需含 anchors.name 与 paths.desc）。
+ * @param {{stations: object[], paths: object[]}} topo - 地图拓扑（需含 stations.name 与 paths.desc）。
  * @returns {object} - VDA 5050 Order.
  */
 function generateVdaOrder(path, agvInfo, topo) {
   const timestamp = new Date().toISOString();
   const orderId = 'order-' + timestamp.replace(/\D/g, '');
 
-  const anchorById = new Map((topo?.anchors || []).map(a => [String(a.id), a]));
+  const stationById = new Map((topo?.stations || []).map(s => [String(s.id), s]));
   const nodeNames = path.map(id => {
-    const a = anchorById.get(String(id));
-    return a && a.name ? String(a.name) : String(id);
+    const s = stationById.get(String(id));
+    return s && s.name ? String(s.name) : String(id);
   });
 
   const nodes = nodeNames.map((name, i) => ({

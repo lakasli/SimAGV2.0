@@ -4,6 +4,10 @@ import math
 from typing import Optional, Any, List, Dict, Tuple
 
 from backend.schemas import AGVRuntime, DynamicConfigUpdate, Position
+from SimVehicleSys.protocol.vda_2_0_0.state import Information, InfoReference, Load
+from SimVehicleSys.protocol.vda5050_common import LoadDimensions, BoundingBoxReference
+from pathlib import Path
+import time
 
 
 async def execute_translation_movement(
@@ -141,3 +145,142 @@ async def execute_points_movement(
                 except Exception:
                     pass
                 await asyncio.sleep(delay_sec)
+
+
+def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_parameters: Optional[List[Any]] = None) -> None:
+    """在仿真器状态中写入托盘动作信息，并维护载荷列表，供前端消费。
+
+    - action_type: "JackLoad" 或 "JackUnload"。
+    - action_parameters: 列表，包含带 key/value 的参数，其中可能包括：
+      - operation: 同 action_type
+      - recfile: 例如 "shelf/BD1.shelf"
+    """
+    try:
+        atype = str(action_type or "").strip()
+        if atype not in ("JackLoad", "JackUnload"):
+            return
+        def pval(key: str, default: Any = None) -> Any:
+            try:
+                for p in (action_parameters or []):
+                    if str(getattr(p, "key", "")) == key:
+                        return getattr(p, "value", None)
+            except Exception:
+                pass
+            return default
+        op = str(pval("operation", atype))
+        recfile = str(pval("recfile", ""))
+        try:
+            info = Information(
+                info_type="PalletAction",
+                info_references=[
+                    InfoReference(reference_key="operation", reference_value=op),
+                    InfoReference(reference_key="recfile", reference_value=recfile),
+                ],
+                info_description=None,
+                info_level="INFO",
+            )
+            try:
+                sim_vehicle.state.information = [x for x in sim_vehicle.state.information if x.info_type != "PalletAction"]
+            except Exception:
+                sim_vehicle.state.information = []
+            sim_vehicle.state.information.append(info)
+        except Exception:
+            pass
+        try:
+            if atype == "JackLoad":
+                # 解析托盘/货架模型文件，填充更完整的载荷信息
+                lid = Path(recfile).stem or "shelf"
+                ltype = "shelf"
+                ldim = None
+                bbox = None
+                try:
+                    # 解析 JSON 模型文件（例如 SimVehicleSys/shelf/BD1.shelf）
+                    sim_root = Path(__file__).resolve().parents[1]  # 指向 SimVehicleSys 目录
+                    candidate = None
+                    if recfile:
+                        candidate = sim_root / recfile
+                        if not candidate.exists():
+                            # 允许传入 "shelf/BD1.shelf" 或仅文件名，均可解析
+                            candidate = sim_root / "shelf" / Path(recfile).name
+                    import json
+                    data = json.loads(candidate.read_text(encoding="utf-8")) if (candidate and candidate.exists()) else {}
+                    ltype = str(data.get("type", ltype))
+                    name = str(data.get("name", lid))
+                    lid = name or lid
+                    fp = data.get("footprint", {})
+                    w = float(fp.get("width_m", 0.0))
+                    l = float(fp.get("length_m", 0.0))
+                    h = float(fp.get("height_m", 0.0)) if fp.get("height_m") is not None else None
+                    if l > 0.0 or w > 0.0 or (h or 0.0) > 0.0:
+                        ldim = LoadDimensions(length=l, width=w, height=h)
+                    # 参考框设置为车辆坐标系原点（顶面），theta 使用 0
+                    bbox = BoundingBoxReference(x=0.0, y=0.0, z=0.0, theta=0.0)
+                except Exception:
+                    pass
+                sim_vehicle.state.loads = [
+                    Load(
+                        load_id=lid,
+                        load_type=ltype,
+                        load_position="top",
+                        bounding_box_reference=bbox,
+                        load_dimensions=ldim,
+                    )
+                ]
+            else:
+                sim_vehicle.state.loads = []
+        except Exception:
+            pass
+        try:
+            sim_vehicle.action_start_time = time.time()
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def execute_charging_action_in_sim(sim_vehicle: Any, action_parameters: Optional[List[Any]] = None) -> None:
+    """在仿真器状态中标记充电请求，并写入信息供前端展示。
+
+    - action_parameters: 可选参数列表（key/value），如 { source: 'CPMenu' }。
+    """
+    try:
+        # 信息上报：记录触发源与时间
+        src = None
+        try:
+            for p in (action_parameters or []):
+                if str(getattr(p, "key", getattr(p, "key", ""))) == "source":
+                    src = getattr(p, "value", None)
+                    break
+        except Exception:
+            pass
+        info = Information(
+            info_type="ChargingTask",
+            info_references=[
+                InfoReference(reference_key="source", reference_value=str(src or "order")),
+            ],
+            info_description=None,
+            info_level="INFO",
+        )
+        try:
+            sim_vehicle.state.information = [x for x in sim_vehicle.state.information if x.info_type != "ChargingTask"]
+        except Exception:
+            sim_vehicle.state.information = []
+        sim_vehicle.state.information.append(info)
+    except Exception:
+        pass
+    try:
+        # 设置充电请求标志；由 BatteryManager 决定何时真的进入充电
+        setattr(sim_vehicle, "charging_requested", True)
+    except Exception:
+        pass
+    try:
+        # 直接提示 charging 状态为 true（立即可见）；BatteryManager 会在下一周期统一维护
+        bs = getattr(getattr(sim_vehicle, "state", None), "battery_state", None)
+        if bs:
+            bs.charging = True
+    except Exception:
+        pass
+    try:
+        sim_vehicle.action_start_time = time.time()
+    except Exception:
+        pass

@@ -49,10 +49,14 @@ sim_manager = SimulatorProcessManager(project_root)
 # Static mounts: frontend and maps
 frontend_dir = project_root / "frontend"
 maps_dir = project_root / "maps"
+shelf_dir = project_root / "SimVehicleSys" / "shelf"
 if frontend_dir.exists():
     app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
 if maps_dir.exists():
     app.mount("/maps", StaticFiles(directory=str(maps_dir)), name="maps")
+if shelf_dir.exists():
+    # 公开托盘/货架模型静态文件
+    app.mount("/shelf", StaticFiles(directory=str(shelf_dir)), name="shelf")
 
 @app.get("/api/maps")
 def list_maps() -> List[str]:
@@ -79,14 +83,6 @@ def list_maps_by_kind(kind: str) -> List[str]:
             files.append(f"{kind}/{p.name}")
     return files
 
-# 已移除：SMAP 解析辅助函数（项目不再支持 .smap）
-
-# 已移除：SMAP 拓扑接口（项目不再支持 .smap）
-
-# 已移除：SMAP 站点详情接口（项目不再支持 .smap）
-
-
-# 已移除：SMAP 路由接口（项目不再支持 .smap）
 @app.get("/")
 def index():
     index_file = frontend_dir / "index.html"
@@ -284,8 +280,8 @@ def post_sim_settings(serial_number: str, body: SimSettingsPatch):
         add_err("速度(speed)必须在[0,2]范围内")
     if body.sim_time_scale is not None:
         v = float(body.sim_time_scale)
-        if not (v > 0.0 and v < 10.0):
-            add_err("时间缩放(sim_time_scale)必须在(0,10)范围内")
+        if not (v > 0.0 and v <= 10.0):
+            add_err("时间缩放(sim_time_scale)必须在(0,10]范围内")
     if body.state_frequency is not None:
         v = int(body.state_frequency)
         if not (v >= 1 and v <= 10):

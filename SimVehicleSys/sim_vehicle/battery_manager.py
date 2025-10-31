@@ -38,10 +38,16 @@ class BatteryManager:
     def stop(self) -> None:
         self._stop = True
 
-    def _is_charging(self) -> bool:
+    def _is_at_charging_point(self) -> bool:
         try:
             last_node_id = str(self.sim.state.last_node_id or "")
             return last_node_id.startswith("CP")
+        except Exception:
+            return False
+
+    def _has_charging_command(self) -> bool:
+        try:
+            return bool(getattr(self.sim, "charging_requested", False))
         except Exception:
             return False
 
@@ -85,11 +91,17 @@ class BatteryManager:
                 bs = st.battery_state
                 charge = float(bs.battery_charge)
 
-                if self._is_charging():
+                if self._is_at_charging_point() and self._has_charging_command():
                     rate_per_min = float(self.config.settings.battery_charge_per_min)
                     delta = rate_per_min * (dt / 60.0)
                     charge = min(100.0, charge + delta)
                     bs.charging = True
+                    # 充满则自动清除充电请求
+                    if charge >= 99.9:
+                        try:
+                            setattr(self.sim, "charging_requested", False)
+                        except Exception:
+                            pass
                 else:
                     base = float(self.config.settings.battery_idle_drain_per_min)
                     if self._is_moving():
@@ -100,6 +112,12 @@ class BatteryManager:
                     delta = rate_per_min * (dt / 60.0)
                     charge = max(0.0, charge - delta)
                     bs.charging = False
+                    # 离开 CP 则清除充电请求（避免下次自动充电）
+                    if not self._is_at_charging_point():
+                        try:
+                            setattr(self.sim, "charging_requested", False)
+                        except Exception:
+                            pass
 
                 bs.battery_charge = charge
 

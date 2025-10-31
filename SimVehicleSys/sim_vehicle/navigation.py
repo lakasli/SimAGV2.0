@@ -80,24 +80,25 @@ def parse_scene_topology(fp: Path) -> dict:
     points = root.get("points") or []
     routes = root.get("routes") or []
 
-    anchors_map: Dict[str, dict] = {}
+    # 以 points 作为站点节点集合（原 anchors 概念移除）
+    stations_map: Dict[str, dict] = {}
     for p in points:
         pid = str(p.get("id")) if p.get("id") is not None else None
         if not pid:
             continue
         x = float(p.get("x", 0.0))
         y = float(p.get("y", 0.0))
-        anchors_map[pid] = {"id": pid, "x": x, "y": y}
+        stations_map[pid] = {"id": pid, "x": x, "y": y}
 
     paths: List[dict] = []
     for r in routes:
         rid = str(r.get("id")) if r.get("id") is not None else None
         a = str(r.get("from")) if r.get("from") is not None else None
         b = str(r.get("to")) if r.get("to") is not None else None
-        if not a or not b or a not in anchors_map or b not in anchors_map:
+        if not a or not b or a not in stations_map or b not in stations_map:
             continue
-        P0 = (anchors_map[a]["x"], anchors_map[a]["y"])
-        P3 = (anchors_map[b]["x"], anchors_map[b]["y"])
+        P0 = (stations_map[a]["x"], stations_map[a]["y"])
+        P3 = (stations_map[b]["x"], stations_map[b]["y"])
         cp1 = r.get("c1") or r.get("cp1")
         cp2 = r.get("c2") or r.get("cp2")
         P1 = (float(cp1["x"]), float(cp1["y"])) if isinstance(cp1, dict) else P0
@@ -112,8 +113,11 @@ def parse_scene_topology(fp: Path) -> dict:
             "cp2": {"x": P2[0], "y": P2[1]} if isinstance(cp2, dict) else None,
         })
 
+    # 返回两类站点集合：
+    # 1) stations_nodes：图节点（原 anchors）
+    # 2) stations：带前缀分类的业务站点（AP/LM/CP/PP/WP）
     stations = _extract_scene_stations(root)
-    return {"stations": stations, "anchors": list(anchors_map.values()), "paths": paths}
+    return {"stations": list(stations_map.values()), "stationCatalog": stations, "paths": paths}
 
 
 def _build_graph(paths: list[dict]) -> Tuple[Dict[str, List[Tuple[str, float]]], Dict[Tuple[str, str], dict]]:
@@ -126,9 +130,9 @@ def _build_graph(paths: list[dict]) -> Tuple[Dict[str, List[Tuple[str, float]]],
     return adj, path_map
 
 
-def _heuristic(a: str, b: str, anchors_map: Dict[str, dict]) -> float:
-    pa = anchors_map.get(a)
-    pb = anchors_map.get(b)
+def _heuristic(a: str, b: str, stations_map: Dict[str, dict]) -> float:
+    pa = stations_map.get(a)
+    pb = stations_map.get(b)
     if not pa or not pb:
         return 0.0
     dx = pa["x"] - pb["x"]
@@ -136,8 +140,8 @@ def _heuristic(a: str, b: str, anchors_map: Dict[str, dict]) -> float:
     return (dx * dx + dy * dy) ** 0.5
 
 
-def a_star(start_id: str, end_id: str, anchors: List[dict], paths: List[dict]) -> List[str]:
-    anchors_map = {a["id"]: a for a in anchors}
+def a_star(start_id: str, end_id: str, stations: List[dict], paths: List[dict]) -> List[str]:
+    stations_map = {s["id"]: s for s in stations}
     adj, _ = _build_graph(paths)
     import heapq
     open_set: List[Tuple[float, str]] = []
@@ -160,13 +164,13 @@ def a_star(start_id: str, end_id: str, anchors: List[dict], paths: List[dict]) -
             if tentative < gscore.get(nbr, float("inf")):
                 came_from[nbr] = current
                 gscore[nbr] = tentative
-                fscore = tentative + _heuristic(nbr, end_id, anchors_map)
+                fscore = tentative + _heuristic(nbr, end_id, stations_map)
                 heapq.heappush(open_set, (fscore, nbr))
     return []
 
 
-def route_polyline(route: List[str], anchors: List[dict], paths: List[dict], steps_per_edge: int = 20) -> List[dict]:
-    anchors_map = {a["id"]: a for a in anchors}
+def route_polyline(route: List[str], stations: List[dict], paths: List[dict], steps_per_edge: int = 20) -> List[dict]:
+    stations_map = {s["id"]: s for s in stations}
     edge_lookup: Dict[Tuple[str, str], dict] = {}
     for p in paths:
         edge_lookup[(p["from"], p["to"])] = p
@@ -181,8 +185,8 @@ def route_polyline(route: List[str], anchors: List[dict], paths: List[dict], ste
         if not edge:
             raise ValueError(f"No forward edge for {a}->{b} in polyline generation")
         else:
-            P0 = (anchors_map[a]["x"], anchors_map[a]["y"]) 
-            P3 = (anchors_map[b]["x"], anchors_map[b]["y"]) 
+            P0 = (stations_map[a]["x"], stations_map[a]["y"]) 
+            P3 = (stations_map[b]["x"], stations_map[b]["y"]) 
             cp1 = edge.get("cp1")
             cp2 = edge.get("cp2")
             P1 = (cp1["x"], cp1["y"]) if cp1 else P0
@@ -287,14 +291,14 @@ def find_point_name_by_id(fp: Path, node_id: str) -> Optional[str]:
         return None
 
 
-def nearest_anchor(pos: Tuple[float, float], anchors: List[dict]) -> Optional[str]:
+def nearest_station(pos: Tuple[float, float], stations: List[dict]) -> Optional[str]:
     best_id = None
     best_d = float("inf")
-    for a in anchors:
-        dx = a["x"] - pos[0]
-        dy = a["y"] - pos[1]
+    for s in stations:
+        dx = s["x"] - pos[0]
+        dy = s["y"] - pos[1]
         d = math.hypot(dx, dy)
         if d < best_d:
             best_d = d
-            best_id = a["id"]
+            best_id = s["id"]
     return best_id

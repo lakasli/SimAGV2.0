@@ -75,7 +75,7 @@
 
     .canvas-container {
       position: relative;
-      width: 100vw;
+      width: 120vw;
       height: calc(100vh - 60px);
       overflow: hidden;
       background: #34495e;
@@ -358,121 +358,10 @@
       padding: 12px;
       border-radius: 8px;
       font-size: 12px;
-      min-width: 100px;
+      min-width: 190px;
       backdrop-filter: blur(5px);
       z-index: 999
     }
-
-    .legend {
-      position: fixed;
-      bottom: 10px;
-      right: 10px;
-      background: rgba(52, 73, 94, .9);
-      color: #fff;
-      padding: 10px;
-      border-radius: 8px;
-      font-size: 12px;
-      backdrop-filter: blur(5px);
-      z-index: 999
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      margin-bottom: 8px
-    }
-
-    .legend-color {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      margin-right: 8px
-    }
-
-    /* 普通路段：蓝色带箭头的实线示例 */
-    .legend-route-normal {
-      position: relative;
-      width: 30px;
-      height: 0;
-      border-top: 2px solid #3498db;
-      margin-right: 8px;
-    }
-    .legend-route-normal::after {
-      content: '';
-      position: absolute;
-      right: -6px;
-      top: -5px;
-      border-left: 6px solid #3498db;
-      border-top: 4px solid transparent;
-      border-bottom: 4px solid transparent;
-    }
-
-    /* 路段 pass 类型图例样式 */
-    .legend-route-pass-0 {
-      position: relative;
-      width: 30px;
-      height: 0;
-      border-top: 2px solid #3498db;
-      margin-right: 8px;
-    }
-    .legend-route-pass-0::after {
-      content: '';
-      position: absolute;
-      right: -6px;
-      top: -5px;
-      border-left: 6px solid #3498db;
-      border-top: 4px solid transparent;
-      border-bottom: 4px solid transparent;
-    }
-    .legend-route-pass-1 {
-      position: relative;
-      width: 30px;
-      height: 0;
-      border-top: 2px solid #f1c40f;
-      margin-right: 8px;
-    }
-    .legend-route-pass-1::after {
-      content: '';
-      position: absolute;
-      right: -6px;
-      top: -5px;
-      border-left: 6px solid #f1c40f;
-      border-top: 4px solid transparent;
-      border-bottom: 4px solid transparent;
-    }
-    .legend-route-pass-2 {
-      position: relative;
-      width: 30px;
-      height: 0;
-      border-top: 2px solid #e67e22;
-      margin-right: 8px;
-    }
-    .legend-route-pass-2::after {
-      content: '';
-      position: absolute;
-      right: -6px;
-      top: -5px;
-      border-left: 6px solid #e67e22;
-      border-top: 4px solid transparent;
-      border-bottom: 4px solid transparent;
-    }
-    .legend-route-pass-10 {
-      position: relative;
-      width: 30px;
-      height: 0;
-      border-top: 2px dashed #e74c3c;
-      margin-right: 8px;
-    }
-    .legend-route-pass-10::after {
-      content: '';
-      position: absolute;
-      right: -6px;
-      top: -5px;
-      border-left: 6px solid #e74c3c;
-      border-top: 4px solid transparent;
-      border-bottom: 4px solid transparent;
-    }
-
     .loading {
       position: absolute;
       top: 50%;
@@ -481,6 +370,13 @@
       color: #fff;
       font-size: 16px
     }
+    /* Bin task detail cards */
+    .bin-cards { margin-top: 6px; }
+    .bin-card { border: 1px solid #3b4a5a; background: #2b3b4b; border-radius: 4px; padding: 8px; margin-bottom: 6px; }
+    .bin-card-title { font-weight: bold; color: #ecf0f1; margin-bottom: 6px; font-size: 12px; }
+    .bin-kv { display: flex; gap: 8px; font-size: 12px; color: #bdc3c7; }
+    .bin-kv .key { width: 50%; color: #95a5a6; }
+    .bin-kv .val { width: 50%; color: #ecf0f1; word-break: break-all; }
   </style>
 </head>
 
@@ -546,12 +442,23 @@
     <canvas id="mapCanvas"></canvas>
     <div class="loading" id="loading" style="display:none;">正在加载地图数据...</div>
     <div class="info-panel">
-      <div><strong>地图信息</strong></div>
-      <div>站点数量: <span id="pointCount">0</span></div>
-      <div>路段数量: <span id="routeCount">0</span></div>
-      <div>缩放: <span id="zoomLevel">100%</span></div>
-      <div>坐标: <span id="mousePos">0, 0</span></div>
-      <div style="margin-top:8px;"><strong>站点详情</strong></div>
+      <div id="mapInfoSection">
+        <div id="mapInfoHeader"><strong>地图信息</strong></div>
+        <div id="mapInfoPanel">
+          <div>站点数量: <span id="pointCount">0</span></div>
+          <div>路段数量: <span id="routeCount">0</span></div>
+          <div>缩放: <span id="zoomLevel">100%</span></div>
+          <div>坐标: <span id="mousePos">0, 0</span></div>
+        </div>
+      </div>
+      <div id="routeHeader" style="margin-top:8px; display:none;"><strong>路段详情</strong></div>
+      <div id="routeDetails" style="font-size:12px;color:#bdc3c7;line-height:1.6; display:none;">
+        <div>路段ID: <span id="rtId">-</span></div>
+        <div>名称: <span id="rtDesc">-</span></div>
+        <div>曲线类型: <span id="rtType">-</span></div>
+        <div>路段类型: <span id="rtPass">-</span></div>
+      </div>
+      <div id="stationHeader" style="margin-top:8px; display:none;"><strong>站点详情</strong></div>
       <div id="stationDetails" style="font-size:12px;color:#bdc3c7;line-height:1.6; display:none;">
         <div>类型: <span id="stType">-</span></div>
         <div>ID: <span id="stId">-</span></div>
@@ -559,30 +466,9 @@
         <div>坐标: <span id="stPos">-</span></div>
         <div>朝向: <span id="stDir">-</span></div>
         <div>随动点: <span id="stSpin">-</span></div>
-        <div>库位: <span id="stStorage">-</span></div>
-      </div>
-      <div style="margin-top:8px;"><strong>路段详情</strong></div>
-      <div id="routeDetails" style="font-size:12px;color:#bdc3c7;line-height:1.6; display:none;">
-        <div>路段ID: <span id="rtId">-</span></div>
-        <div>名称: <span id="rtDesc">-</span></div>
-        <div>曲线类型: <span id="rtType">-</span></div>
-        <div>路段类型: <span id="rtPass">-</span></div>
-      </div>
-    </div>
-    <div class="legend">
-      <div style="margin-bottom:6px;"><strong>图例</strong></div>
-      <div id="stationLegendItems"></div>
-      <div class="legend-item">
-        <div class="legend-route-normal"></div><span>普通路段</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-route-pass-1"></div><span>仅空载可通行</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-route-pass-2"></div><span>仅载货可通行</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-route-pass-10"></div><span>禁行路段</span>
+        <div id="stStorageRow">库位: <span id="stStorage">-</span></div>
+        <div id="stStorageDetailsRow">库位详情:</div>
+        <div id="stStorageDetails" class="bin-cards">-</div>
       </div>
     </div>
     <!-- 机器人右键菜单 -->
@@ -660,7 +546,7 @@
         }
       } catch (_) { /* ignore */ }
     }
-    const CURRENT_MAP_ID = 'ViewerMap/testmap.scene';
+  const CURRENT_MAP_ID = 'VehicleMap/test1.scene';
     const POINT_TYPE_INFO = {
       1: { label: '普通点', color: '#f39c12' },
       2: { label: '等待点', color: '#2980b9' },
@@ -684,31 +570,6 @@
       10: { label: '禁行路段', color: '#e74c3c' }
     };
 
-    // 动态填充站点类型图例
-    function populateStationLegend() {
-      const container = document.getElementById('stationLegendItems');
-      if (!container) return;
-      container.innerHTML = '';
-      const codes = Object.keys(POINT_TYPE_INFO).map(Number).sort((a, b) => a - b);
-      codes.forEach(code => {
-        const info = POINT_TYPE_INFO[code];
-        if (!info) return;
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-
-        const colorEl = document.createElement('div');
-        colorEl.className = 'legend-color';
-        colorEl.style.background = info.color;
-
-        const labelEl = document.createElement('span');
-        labelEl.textContent = `${info.label}`;
-
-        item.appendChild(colorEl);
-        item.appendChild(labelEl);
-        container.appendChild(item);
-      });
-    }
-
     // 画布与视图态
     let canvas, ctx, mapData = null;
     let viewTransform = { x: 0, y: 0, scale: 1 };
@@ -727,7 +588,7 @@
     let floorNames = [];
     let currentFloorIndex = 0;
 
-  window.onload = function () { initCanvas(); loadMapData(); setupEventListeners(); updateRegisterMapOptions(); Promise.all([loadFrontendConfig(), loadRobotList()]).catch(() => {}); initWebSocket(); startRenderLoop(); setupKeyboardControl(); startCommStatusGuard(); populateStationLegend(); };
+  window.onload = function () { initCanvas(); loadMapData(); setupEventListeners(); updateRegisterMapOptions(); Promise.all([loadFrontendConfig(), loadRobotList()]).catch(() => {}); initWebSocket(); startRenderLoop(); setupKeyboardControl(); startCommStatusGuard(); };
 
     function initCanvas() { canvas = document.getElementById('mapCanvas'); ctx = canvas.getContext('2d'); resizeCanvas(); window.addEventListener('resize', resizeCanvas); }
     function resizeCanvas() { const c = document.querySelector('.canvas-container'); canvas.width = c.clientWidth; canvas.height = c.clientHeight; if (mapData) { drawMap(); } }
@@ -737,7 +598,17 @@
       canvas.addEventListener('mouseup', onMouseUp);
       canvas.addEventListener('wheel', onWheel);
       canvas.addEventListener('contextmenu', e => e.preventDefault());
-      document.addEventListener('click', () => { hideRobotContextMenu(); hideStationContextMenu(); });
+      document.addEventListener('click', (ev) => {
+        const robotMenu = document.getElementById('robotContextMenu');
+        const stationMenu = document.getElementById('stationContextMenu');
+        const tgt = ev.target;
+        if (robotMenu && robotMenu.style.display === 'block' && !robotMenu.contains(tgt)) {
+          hideRobotContextMenu();
+        }
+        if (stationMenu && stationMenu.style.display === 'block' && !stationMenu.contains(tgt)) {
+          hideStationContextMenu();
+        }
+      });
       const regMapSel = document.getElementById('registerMapSelect');
       if (regMapSel) {
         regMapSel.addEventListener('change', () => {
@@ -805,6 +676,12 @@
       isDragging = true;
       lastMousePos = p;
       canvas.style.cursor = 'grabbing';
+      // 点击空白区域：显示地图信息、隐藏路段与站点详情
+      const mi = document.getElementById('mapInfoSection'); if (mi) mi.style.display = 'block';
+      const rh = document.getElementById('routeHeader'); if (rh) rh.style.display = 'none';
+      const sh = document.getElementById('stationHeader'); if (sh) sh.style.display = 'none';
+      const rd = document.getElementById('routeDetails'); if (rd) rd.style.display = 'none';
+      const sd = document.getElementById('stationDetails'); if (sd) sd.style.display = 'none';
       hideRobotContextMenu();
       hideStationContextMenu();
     }
@@ -890,8 +767,12 @@
         document.getElementById('stDir').textContent = '-';
         document.getElementById('stSpin').textContent = '-';
         document.getElementById('stStorage').textContent = '-';
+        const sr = document.getElementById('stStorageRow'); if (sr) sr.style.display = 'none';
+        const sdr = document.getElementById('stStorageDetailsRow'); if (sdr) sdr.style.display = 'none';
+        const sdt = document.getElementById('stStorageDetails'); if (sdt) sdt.textContent = '-';
         const sd = document.getElementById('stationDetails');
         if (sd) sd.style.display = 'none';
+        const sh = document.getElementById('stationHeader'); if (sh) sh.style.display = 'none';
         return;
       }
       document.getElementById('stId').textContent = info.id || '-';
@@ -904,12 +785,25 @@
         : (typeof info.dir === 'number' ? `${Number(info.dir * 180 / Math.PI).toFixed(2)}°` : '-');
       document.getElementById('stDir').textContent = orientationText;
       document.getElementById('stSpin').textContent = (info.spin === true) ? 'true' : 'false';
-      const stor = Array.isArray(info.associatedStorageLocations) ? info.associatedStorageLocations : [];
-      document.getElementById('stStorage').textContent = stor.length > 0 ? stor.join(', ') : '-';
+      // 通过 binLocationsList 解析库位及库位详情，按可读格式展示
+      const bin = lookupBinLocationInfo(info.instanceName || info.id);
+      const storNames = Array.isArray(bin?.locationNames) ? bin.locationNames : [];
+      const hasDetails = renderBinTaskDetails(bin);
+      const sr = document.getElementById('stStorageRow');
+      const sdr = document.getElementById('stStorageDetailsRow');
+      if (sr) sr.style.display = (storNames.length > 0) ? 'block' : 'none';
+      if (sdr) sdr.style.display = hasDetails ? 'block' : 'none';
+      const storEl = document.getElementById('stStorage');
+      if (storEl) storEl.textContent = (storNames.length > 0) ? storNames.join(', ') : '-';
+      const sdt = document.getElementById('stStorageDetails');
+      if (sdt) sdt.style.display = hasDetails ? 'block' : 'none';
+      // 显示站点详情，仅显示该面板
       const sd = document.getElementById('stationDetails');
       if (sd) sd.style.display = 'block';
-      const rd = document.getElementById('routeDetails');
-      if (rd) rd.style.display = 'none';
+      const sh = document.getElementById('stationHeader'); if (sh) sh.style.display = 'block';
+      const rh = document.getElementById('routeHeader'); if (rh) rh.style.display = 'none';
+      const rd = document.getElementById('routeDetails'); if (rd) rd.style.display = 'none';
+      const mi = document.getElementById('mapInfoSection'); if (mi) mi.style.display = 'none';
     }
 
     function getRoutePassLabel(passCode) {
@@ -942,6 +836,7 @@
         document.getElementById('rtType').textContent = '-';
         document.getElementById('rtPass').textContent = '-';
         panel.style.display = 'none';
+        const rh = document.getElementById('routeHeader'); if (rh) rh.style.display = 'none';
         return;
       }
       document.getElementById('rtId').textContent = info.id || '-';
@@ -949,8 +844,10 @@
       document.getElementById('rtType').textContent = info.type || '-';
       document.getElementById('rtPass').textContent = info.passLabel || '-';
       panel.style.display = 'block';
-      const sd = document.getElementById('stationDetails');
-      if (sd) sd.style.display = 'none';
+      const rh = document.getElementById('routeHeader'); if (rh) rh.style.display = 'block';
+      const sd = document.getElementById('stationDetails'); if (sd) sd.style.display = 'none';
+      const sh = document.getElementById('stationHeader'); if (sh) sh.style.display = 'none';
+      const mi = document.getElementById('mapInfoSection'); if (mi) mi.style.display = 'none';
     }
 
     function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
@@ -1054,6 +951,17 @@
     }
 
     // 站点右键菜单
+    function isWorkStationPoint(point) {
+      const nm = String(point?.name || point?.id || '').trim();
+      return /^AP/i.test(nm);
+    }
+    function isChargingStationPoint(point) {
+      const nm = String(point?.name || point?.id || '').trim();
+      const typeCode = (point && typeof point.type !== 'undefined') ? Number(point.type) : NaN;
+      // 同时支持名称前缀与类型码识别：type=13 为充电点
+      if (typeCode === 13) return true;
+      return /^CP/i.test(nm);
+    }
     function showStationContextMenu(sx, sy, point) {
       const menu = document.getElementById('stationContextMenu');
       if (!menu) return;
@@ -1061,8 +969,9 @@
       const itemNav = document.createElement('div');
       itemNav.style.padding = '8px 12px';
       itemNav.style.cursor = 'pointer';
-      itemNav.textContent = '导航到该站点';
-      itemNav.onclick = async function () {
+      itemNav.textContent = '导航至该站点';
+      itemNav.onclick = async function (ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
         try {
           await navigateRobotToStation(point);
         } catch (err) {
@@ -1085,6 +994,74 @@
         menu.appendChild(tip);
       }
       menu.appendChild(itemNav);
+
+      // CP 充电站：提供“执行充电任务”
+      const isCharge = isChargingStationPoint(point);
+      if (isCharge) {
+        const itemCharge = document.createElement('div');
+        itemCharge.style.padding = '8px 12px';
+        itemCharge.style.cursor = 'pointer';
+        itemCharge.textContent = '执行充电任务';
+        itemCharge.onclick = async function (ev) {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          try {
+            await navigateRobotToStationWithAction(point, 'StartCharging', { source: 'CPMenu' });
+          } catch (err) {
+            console.error('充电任务发布失败:', err);
+            try { window.printErrorToStatus(err, '充电任务发布失败'); } catch (_) {}
+          } finally {
+            hideStationContextMenu();
+          }
+        };
+        if (!selectedRobotId) {
+          itemCharge.style.opacity = '0.6';
+          itemCharge.style.pointerEvents = 'none';
+        }
+        menu.appendChild(itemCharge);
+      }
+
+      // 新增：至站点执行动作（子菜单）仅在 AP 且存在 binTask 时显示
+      const options = extractBinTaskOptionsForPoint(point);
+      const isWork = isWorkStationPoint(point);
+      if (isWork && options.length > 0) {
+        const actionItem = document.createElement('div');
+        actionItem.style.padding = '8px 12px';
+        actionItem.style.cursor = 'pointer';
+        actionItem.textContent = '至站点执行动作';
+        const sub = document.createElement('div');
+        sub.style.display = 'none';
+        sub.style.borderTop = '1px solid #34495e';
+        sub.style.marginTop = '6px';
+        sub.style.paddingTop = '6px';
+        for (const opt of options) {
+          const btn = document.createElement('div');
+          btn.style.padding = '6px 12px';
+          btn.style.cursor = 'pointer';
+          btn.textContent = opt.title;
+          btn.onclick = async function (ev) {
+            if (ev && ev.stopPropagation) ev.stopPropagation();
+            try {
+              await navigateRobotToStationWithAction(point, opt.title, opt.params);
+            } catch (err) {
+              console.error('执行动作失败:', err);
+              try { window.printErrorToStatus(err, '执行动作失败'); } catch (_) {}
+            } finally {
+              hideStationContextMenu();
+            }
+          };
+          if (!selectedRobotId) {
+            btn.style.opacity = '0.6';
+            btn.style.pointerEvents = 'none';
+          }
+          sub.appendChild(btn);
+        }
+        actionItem.onclick = function (ev) {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          sub.style.display = (sub.style.display === 'none') ? 'block' : 'none';
+        };
+        menu.appendChild(actionItem);
+        menu.appendChild(sub);
+      }
       const container = document.getElementById('canvasContainer');
       const rect = container.getBoundingClientRect();
       menu.style.left = (sx + rect.left - rect.left) + 'px';
@@ -1094,6 +1071,38 @@
     function hideStationContextMenu() {
       const menu = document.getElementById('stationContextMenu');
       if (menu) menu.style.display = 'none';
+    }
+
+    // 从库位索引中提取可执行的 binTask 选项（对象型），返回 { title, params }
+    function extractBinTaskOptionsForPoint(point) {
+      try {
+        const key = String(point?.name || point?.id || '').trim();
+        if (!key) return [];
+        const entry = lookupBinLocationInfo(key);
+        const objs = Array.isArray(entry?.binTaskObjects) ? entry.binTaskObjects : [];
+        const options = [];
+        for (const obj of objs) {
+          const list = Array.isArray(obj) ? obj : [obj];
+          for (const item of list) {
+            if (item && typeof item === 'object' && Object.keys(item).length > 0) {
+              const actionName = Object.keys(item)[0];
+              const params = item[actionName];
+              options.push({ title: String(actionName), params: (params && typeof params === 'object') ? params : {} });
+            }
+          }
+        }
+        // 兜底：仅当未解析出结构化动作时，才加入原始字符串选项
+        if (options.length === 0) {
+          const raws = Array.isArray(entry?.binTaskStrings) ? entry.binTaskStrings : [];
+          for (const s of raws) {
+            let title = String(s).trim();
+            // 若是多行 JSON（第一行为 "[" 或 "{"），取前 50 个非空字符用于标题
+            title = title.replace(/\s+/g, ' ').slice(0, 50) || 'RawAction';
+            options.push({ title, params: { content: s } });
+          }
+        }
+        return options;
+      } catch (e) { return []; }
     }
 
     // 导航逻辑：基于 VehicleMap .scene，规划路径并发布 VDA 订单到后端
@@ -1113,8 +1122,8 @@
       if (!resp.ok) { try { window.printErrorToStatus(`读取地图失败: HTTP ${resp.status}`, '导航'); } catch (_) {} return; }
       const sceneData = await resp.json();
       const topo = parseSceneTopology(sceneData);
-      if (!Array.isArray(topo.anchors) || topo.anchors.length === 0 || !Array.isArray(topo.paths) || topo.paths.length === 0) {
-        try { window.printErrorToStatus('地图缺少锚点或路段（routes），无法规划', '导航'); } catch (_) {}
+      if (!Array.isArray(topo.stations) || topo.stations.length === 0 || !Array.isArray(topo.paths) || topo.paths.length === 0) {
+        try { window.printErrorToStatus('地图缺少站点或路段（routes），无法规划', '导航'); } catch (_) {}
         return;
       }
 
@@ -1125,13 +1134,13 @@
       const targetStation = (stations || []).find(s => String(s.instanceName || s.id || s.pointName) === String(targetId));
       if (!targetStation || !targetStation.pos) { try { window.printErrorToStatus('无法获取目标站点坐标', '导航'); } catch (_) {} return; }
 
-      // 选取起止锚点（最近点）
-      const startAnchorId = findNearestAnchor({ x: Number(pos.x), y: Number(pos.y) }, topo.anchors);
-      const endAnchorId = findNearestAnchor({ x: Number(targetStation.pos.x), y: Number(targetStation.pos.y) }, topo.anchors);
-      if (!startAnchorId || !endAnchorId) { try { window.printErrorToStatus('无法选取起止锚点', '导航'); } catch (_) {} return; }
+      // 选取起止站点（最近点）
+      const startStationId = findNearestStation({ x: Number(pos.x), y: Number(pos.y) }, topo.stations);
+      const endStationId = findNearestStation({ x: Number(targetStation.pos.x), y: Number(targetStation.pos.y) }, topo.stations);
+      if (!startStationId || !endStationId) { try { window.printErrorToStatus('无法选取起止站点', '导航'); } catch (_) {} return; }
 
-      // A* 规划
-      const nodePath = aStar(String(startAnchorId), String(endAnchorId), topo.anchors, topo.paths);
+      // A* 规划（站点）
+      const nodePath = aStar(String(startStationId), String(endStationId), topo.stations, topo.paths);
       if (!nodePath || nodePath.length < 2) { try { window.printErrorToStatus('未找到可达路径，请检查地图 routes', '导航'); } catch (_) {} return; }
 
       // 构造并发布 VDA 订单
@@ -1143,10 +1152,81 @@
         });
         if (!pubResp.ok) throw new Error(`HTTP ${pubResp.status}: ${pubResp.statusText}`);
         const resJson = await pubResp.json();
-        // 使用站点名称（anchors.name）替换锚点ID进行路径提示展示
-        const anchorNameById = new Map((topo.anchors || []).map(a => [String(a.id), a.name || String(a.id)]));
-        const displayPath = nodePath.map(id => anchorNameById.get(String(id)) || String(id));
+        // 使用站点名称（stations.name）替换站点ID进行路径提示展示
+        const stationNameById = new Map((topo.stations || []).map(s => [String(s.id), s.name || String(s.id)]));
+        const displayPath = nodePath.map(id => stationNameById.get(String(id)) || String(id));
         document.getElementById('status').textContent = `订单已发布，路径: ${displayPath.join(' -> ')}`;
+      } catch (e) {
+        console.error('订单发布失败:', e);
+        try { window.printErrorToStatus(e, '订单发布失败'); } catch (_) {}
+      }
+    }
+
+    // 导航并在目标站点执行选中动作：在订单最后一个节点追加 actions
+    async function navigateRobotToStationWithAction(point, actionTitle, actionParams) {
+      if (!selectedRobotId) { try { window.printErrorToStatus('请先在机器人列表中选中机器人', '执行动作'); } catch (_) {} return; }
+      const robot = registeredRobots.find(r => r.robot_name === selectedRobotId);
+      if (!robot) { try { window.printErrorToStatus('未找到选中机器人', '执行动作'); } catch (_) {} return; }
+      const pos = robot.currentPosition || robot.initialPosition;
+      if (!pos) { try { window.printErrorToStatus('机器人没有当前位置或初始位置', '执行动作'); } catch (_) {} return; }
+
+      const mapName = resolveMapNameForNav(robot, point);
+      if (!mapName) { try { window.printErrorToStatus('无法解析地图文件名', '执行动作'); } catch (_) {} return; }
+
+      document.getElementById('status').textContent = '正在读取地图并规划路径...';
+      const resp = await fetch('/maps/' + mapName);
+      if (!resp.ok) { try { window.printErrorToStatus(`读取地图失败: HTTP ${resp.status}`, '执行动作'); } catch (_) {} return; }
+      const sceneData = await resp.json();
+      const topo = parseSceneTopology(sceneData);
+      if (!Array.isArray(topo.stations) || topo.stations.length === 0 || !Array.isArray(topo.paths) || topo.paths.length === 0) {
+        try { window.printErrorToStatus('地图缺少站点或路段（routes），无法规划', '执行动作'); } catch (_) {}
+        return;
+      }
+
+      const stations = await getSceneStationsForMap(mapName);
+      const targetId = findStationIdForPoint(stations, point);
+      if (!targetId) { try { window.printErrorToStatus('无法匹配到对应的站点', '执行动作'); } catch (_) {} return; }
+      const targetStation = (stations || []).find(s => String(s.instanceName || s.id || s.pointName) === String(targetId));
+      if (!targetStation || !targetStation.pos) { try { window.printErrorToStatus('无法获取目标站点坐标', '执行动作'); } catch (_) {} return; }
+
+      const startStationId = findNearestStation({ x: Number(pos.x), y: Number(pos.y) }, topo.stations);
+      const endStationId = findNearestStation({ x: Number(targetStation.pos.x), y: Number(targetStation.pos.y) }, topo.stations);
+      if (!startStationId || !endStationId) { try { window.printErrorToStatus('无法选取起止站点', '执行动作'); } catch (_) {} return; }
+
+      const nodePath = aStar(String(startStationId), String(endStationId), topo.stations, topo.paths);
+      if (!nodePath || nodePath.length < 2) { try { window.printErrorToStatus('未找到可达路径，请检查地图 routes', '执行动作'); } catch (_) {} return; }
+
+      const agvInfo = { serial_number: selectedRobotId, manufacturer: robot.manufacturer || 'SEER', version: (robot.version || '2.0.0') };
+      const order = generateVdaOrder(nodePath, agvInfo, topo);
+      try {
+        // 组装动作对象，追加到最后一个节点
+        const lastIdx = (order.nodes || []).length - 1;
+        if (lastIdx >= 0) {
+          const paramsList = [];
+          if (actionParams && typeof actionParams === 'object') {
+            for (const k of Object.keys(actionParams)) {
+              paramsList.push({ key: String(k), value: actionParams[k] });
+            }
+          }
+          const actionObj = {
+            action_type: String(actionTitle || ''),
+            action_id: 'act-' + String(Date.now()),
+            blocking_type: 'HARD',
+            action_description: String(actionTitle || ''),
+            action_parameters: paramsList,
+          };
+          if (!Array.isArray(order.nodes[lastIdx].actions)) order.nodes[lastIdx].actions = [];
+          order.nodes[lastIdx].actions.push(actionObj);
+        }
+
+        const pubResp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(selectedRobotId)}/order`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(order)
+        });
+        if (!pubResp.ok) throw new Error(`HTTP ${pubResp.status}: ${pubResp.statusText}`);
+        const resJson = await pubResp.json();
+        const stationNameById = new Map((topo.stations || []).map(s => [String(s.id), s.name || String(s.id)]));
+        const displayPath = nodePath.map(id => stationNameById.get(String(id)) || String(id));
+        document.getElementById('status').textContent = `订单已发布，路径: ${displayPath.join(' -> ')}，动作: ${String(actionTitle)}`;
       } catch (e) {
         console.error('订单发布失败:', e);
         try { window.printErrorToStatus(e, '订单发布失败'); } catch (_) {}
@@ -1279,10 +1359,11 @@
     function unloadPallet(id) {
       const robot = registeredRobots.find(r => r.robot_name === id);
       if (!robot) return;
-      robot.hasPallet = false;
       robot._palletAnimLoading = false;
+      robot._palletAnimUnloading = true;
+      robot._palletAnimStart = performance.now();
       robot._palletAnimProgress = 0;
-      drawMap();
+      startPalletAnimationLoop();
     }
 
     // 动画循环（16ms）
@@ -1300,6 +1381,17 @@
             if (p >= 1) {
               r._palletAnimLoading = false;
               r.hasPallet = true;
+            } else {
+              any = true;
+            }
+          } else if (r._palletAnimUnloading) {
+            const dur = 3000;
+            const p = Math.max(0, Math.min(1, (now - (r._palletAnimStart || now)) / dur));
+            r._palletAnimProgress = p;
+            if (p >= 1) {
+              r._palletAnimUnloading = false;
+              r.hasPallet = false;
+              r.shelfModel = null;
             } else {
               any = true;
             }
@@ -1372,6 +1464,164 @@
       };
     }
 
+    // 解析 binLocationsList，按 pointName 建立索引：{ pointName -> { locationNames:[], binTaskStrings:[], binTaskObjects:[] } }
+    function buildBinLocationIndex(layers) {
+      const byPointName = new Map();
+
+      function recordEntry(pointName, instanceName, binTaskString) {
+        if (!pointName) return;
+        const key = String(pointName).trim().toUpperCase();
+        let entry = byPointName.get(key);
+        if (!entry) { entry = { locationNames: [], binTaskStrings: [], binTaskObjects: [] }; byPointName.set(key, entry); }
+        if (instanceName) entry.locationNames.push(String(instanceName).trim());
+        if (typeof binTaskString === 'string' && binTaskString.trim() !== '') {
+          entry.binTaskStrings.push(binTaskString);
+          try {
+            const parsed = JSON.parse(binTaskString);
+            entry.binTaskObjects.push(parsed);
+          } catch (_) {
+            // 非 JSON 内容时忽略解析错误，仅保留字符串
+          }
+        }
+      }
+
+      function traverse(obj) {
+        if (!obj) return;
+        if (Array.isArray(obj)) { obj.forEach(traverse); return; }
+        if (typeof obj === 'object') {
+          if (Array.isArray(obj.binLocationList)) {
+            for (const loc of obj.binLocationList) {
+              const pName = String(loc?.pointName || '').trim();
+              const iName = String(loc?.instanceName || '').trim();
+              const props = Array.isArray(loc?.property) ? loc.property : (Array.isArray(loc?.properties) ? loc.properties : []);
+              let taskStrs = [];
+              for (const prop of (props || [])) {
+                if (prop && String(prop.key || '').trim() === 'binTask' && typeof prop.stringValue === 'string') {
+                  taskStrs.push(prop.stringValue);
+                }
+              }
+              if (taskStrs.length === 0) {
+                // 某些地图可能将 JSON 存在 "value" 中（Base64 或其它），此处仅兜底尝试字符串字段
+                // 若无可用字符串，则仍记录库位名称，库位详情为空
+                recordEntry(pName, iName, undefined);
+              } else {
+                for (const s of taskStrs) recordEntry(pName, iName, s);
+              }
+            }
+          }
+          // 继续递归对象子键
+          for (const k in obj) {
+            if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+            const v = obj[k];
+            if (v && (typeof v === 'object' || Array.isArray(v))) traverse(v);
+          }
+        }
+      }
+
+      try { (layers || []).forEach(traverse); } catch (_) {}
+      window.binLocationIndex = { byPointName };
+    }
+
+    function lookupBinLocationInfo(pointName) {
+      const key = String(pointName || '').trim().toUpperCase();
+      const byPointName = window.binLocationIndex?.byPointName;
+      return (byPointName && byPointName.get(key)) || null;
+    }
+
+    // 将 binTaskObjects 中的操作列表格式化为可读文本
+    function formatBinTaskDetails(entry) {
+      try {
+        const objs = Array.isArray(entry?.binTaskObjects) ? entry.binTaskObjects : [];
+        const sections = [];
+        for (const obj of objs) {
+          const arr = Array.isArray(obj) ? obj : [obj];
+          for (const item of arr) {
+            if (item && typeof item === 'object') {
+              for (const actionName of Object.keys(item)) {
+                const params = item[actionName];
+                const lines = [];
+                lines.push(`${actionName}：`);
+                if (params && typeof params === 'object') {
+                  for (const k of Object.keys(params)) {
+                    const v = params[k];
+                    const vs = (typeof v === 'string') ? `"${v}"` : String(v);
+                    lines.push(` "${k}": ${vs}`);
+                  }
+                } else {
+                  lines.push(` ${String(params)}`);
+                }
+                sections.push(lines.join('\n'));
+              }
+            } else if (typeof item === 'string') {
+              sections.push(item);
+            } else {
+              sections.push(String(item));
+            }
+          }
+        }
+        if (sections.length > 0) return sections.join('\n\n');
+        const raw = Array.isArray(entry?.binTaskStrings) ? entry.binTaskStrings : [];
+        return raw.join('\n');
+      } catch (_) {
+        const raw = Array.isArray(entry?.binTaskStrings) ? entry.binTaskStrings : [];
+        return raw.join('\n');
+      }
+    }
+
+    // 将 binTaskObjects 渲染为卡片布局：每个对象一个卡片，标题为字段名，内部两列显示 key/value
+    function renderBinTaskDetails(entry) {
+      const container = document.getElementById('stStorageDetails');
+      if (!container) return false;
+      container.innerHTML = '';
+      const objs = Array.isArray(entry?.binTaskObjects) ? entry.binTaskObjects : [];
+      let made = false;
+      function makeCard(title, kv) {
+        const card = document.createElement('div');
+        card.className = 'bin-card';
+        const t = document.createElement('div');
+        t.className = 'bin-card-title';
+        t.textContent = title || 'Detail';
+        card.appendChild(t);
+        for (const [k, v] of kv) {
+          const row = document.createElement('div');
+          row.className = 'bin-kv';
+          const kEl = document.createElement('div');
+          kEl.className = 'key';
+          kEl.textContent = String(k);
+          const vEl = document.createElement('div');
+          vEl.className = 'val';
+          vEl.textContent = (typeof v === 'string') ? v : String(v);
+          row.appendChild(kEl);
+          row.appendChild(vEl);
+          card.appendChild(row);
+        }
+        container.appendChild(card);
+      }
+      for (const obj of objs) {
+        const list = Array.isArray(obj) ? obj : [obj];
+        for (const item of list) {
+          if (item && typeof item === 'object' && Object.keys(item).length > 0) {
+            const actionName = Object.keys(item)[0];
+            const params = item[actionName];
+            const kv = [];
+            if (params && typeof params === 'object') {
+              for (const k of Object.keys(params)) kv.push([k, params[k]]);
+            }
+            makeCard(actionName, kv);
+            made = true;
+          } else if (typeof item === 'string') {
+            makeCard('Raw', [['string', item]]);
+            made = true;
+          }
+        }
+      }
+      if (!made) {
+        const raws = Array.isArray(entry?.binTaskStrings) ? entry.binTaskStrings : [];
+        for (const r of raws) { makeCard('Raw', [['string', r]]); made = true; }
+      }
+      return made;
+    }
+
     async function loadMapData() {
       try {
         document.getElementById('loading').style.display = 'block';
@@ -1380,6 +1630,8 @@
         if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         const raw = await resp.json();
         mapLayers = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+        // 构建库位索引
+        buildBinLocationIndex(mapLayers);
         // 预取每个楼层（layer）的名称：从 scene 的 list 或对象 name 提取
         floorNames = mapLayers.map(extractFloorNameFromLayer);
         // Fallback：若顶层无法提取楼层名，则从 points 的 layer 字段聚合唯一楼层名
@@ -1756,11 +2008,21 @@
       ctx.fill();
       ctx.stroke();
 
-      // 托盘绘制：宽比正方形身体大10%，长比正方形身体大15%，与正方体身体重合居中
+      // 托盘绘制：若有模型 footprint（米），按米转换；否则按默认比例
       const bodySize = 24;
-      const palletW = bodySize * 1.20; 
-      const palletL = bodySize * 1.10; 
-      const shouldDrawPallet = !!robot.hasPallet || !!robot._palletAnimLoading;
+      let palletW = bodySize * 1.20;
+      let palletL = bodySize * 1.10;
+      try {
+        const fp = robot.shelfModel && robot.shelfModel.footprint;
+        const wm = Number(fp && (fp.width_m ?? fp.width));
+        const lm = Number(fp && (fp.length_m ?? fp.length));
+        if (isFinite(wm) && isFinite(lm) && wm > 0 && lm > 0) {
+          const meterScale = 20; // 与 worldToScreen 保持一致
+          palletW = wm * meterScale;
+          palletL = lm * meterScale;
+        }
+      } catch (_) {}
+      const shouldDrawPallet = !!robot.hasPallet || !!robot._palletAnimLoading || !!robot._palletAnimUnloading;
       if (shouldDrawPallet) {
         // 动画：加载时 3 秒淡入，并略微上滑（+6px 到 0），最终与身体居中重合
         let alpha = 1.0;
@@ -1769,6 +2031,10 @@
           const p = Math.max(0, Math.min(1, robot._palletAnimProgress || 0));
           alpha = p;
           slide = (1 - p) * 6; // 初始更靠后，逐步贴近
+        } else if (robot._palletAnimUnloading) {
+          const p = Math.max(0, Math.min(1, robot._palletAnimProgress || 0));
+          alpha = 1 - p;
+          slide = p * 6; // 卸载：逐步远离
         }
         ctx.save();
         ctx.globalAlpha = alpha;
@@ -2129,6 +2395,11 @@
             const msg = JSON.parse(ev.data);
             if (msg && msg.type === 'mqtt_state' && msg.payload) {
               applyWSState(msg.payload);
+            } else if (msg && msg.type === 'pallet_action') {
+              const serial = String(msg.serial || msg.serial_number || '').trim();
+              const op = String(msg.operation || '').trim();
+              const recfile = String(msg.recfile || '').trim();
+              if (serial && op) handlePalletAction(serial, op, recfile);
             }
           } catch (e) {
             console.error('WS消息解析失败', e);
@@ -2179,9 +2450,69 @@
         robot.instanceStatus = '启动';
         robot.commConnected = true;
         robot.lastUpdateTs = Date.now();
+        // 消费信息字段：托盘动作（JackLoad/JackUnload）
+        try {
+          const infos = Array.isArray(payload.information) ? payload.information : [];
+          for (const info of infos) {
+            const t = String(info.info_type || info.infoType || '').trim();
+            if (t === 'PalletAction') {
+              const refs = Array.isArray(info.info_references || info.infoReferences) ? (info.info_references || info.infoReferences) : [];
+              const kv = {};
+              for (const r of refs) {
+                const k = String(r.reference_key || r.referenceKey || r.key || '').trim();
+                const v = String(r.reference_value || r.referenceValue || r.value || '').trim();
+                if (k) kv[k] = v;
+              }
+              const op = String(kv.operation || '').trim();
+              const recfile = String(kv.recfile || '').trim();
+              if (op) handlePalletAction(sn, op, recfile);
+            }
+          }
+        } catch (e) { /* ignore */ }
         // 列表信息变化较慢，交给独立节流逻辑
       } catch (e) {
         console.warn('应用 WS 状态失败:', e);
+      }
+    }
+
+    async function fetchShelfModel(recfile) {
+      try {
+        let path = String(recfile || '').trim();
+        if (!path) return null;
+        // 规范化分隔符并解析到后端静态路由 /shelf/<name>.shelf
+        path = path.replace(/\\/g, '/');
+        let url = '';
+        if (/^\/shelf\//i.test(path)) {
+          url = path;
+        } else if (/\/shelf\//i.test(path)) {
+          url = path.substring(path.toLowerCase().indexOf('/shelf/'));
+        } else if (/\.shelf$/i.test(path)) {
+          const name = path.split('/').pop();
+          url = '/shelf/' + name;
+        } else {
+          // 非预期路径，直接归一到 /shelf/<basename>.shelf
+          const base = path.split('/').pop();
+          url = '/shelf/' + base;
+        }
+        if (!url.startsWith('/')) url = '/' + url;
+        const resp = await fetch(url);
+        if (!resp.ok) return null;
+        return await resp.json();
+      } catch (_) { return null; }
+    }
+
+    async function handlePalletAction(serial, operation, recfile) {
+      const robot = registeredRobots.find(r => r.robot_name === serial);
+      if (!robot) return;
+      const key = String(operation || '') + '|' + String(recfile || '');
+      if (robot._lastPalletOpKey === key) return; // 简单去重
+      robot._lastPalletOpKey = key;
+      if (String(operation).toLowerCase() === 'jackload') {
+        const model = await fetchShelfModel(recfile);
+        robot.shelfModel = model || null;
+        loadPallet(serial);
+      } else if (String(operation).toLowerCase() === 'jackunload') {
+        unloadPallet(serial);
       }
     }
 

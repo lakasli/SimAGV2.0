@@ -30,16 +30,16 @@ def api_route_polyline(body: PolylineRequest):
     try:
         fp = resolve_scene_path(body.map_name)
         topo = parse_scene_topology(fp)
-        anchors = topo["anchors"]
+        stations = topo["stations"]
         paths = topo["paths"]
-        anchor_ids = {str(a["id"]) for a in anchors}
+        station_ids = {str(s["id"]) for s in stations}
         route: List[str] = []
         for nid in body.route_node_ids:
             sid = str(nid)
-            if sid not in anchor_ids:
-                raise HTTPException(status_code=404, detail=f"Node '{sid}' not found in map anchors")
+            if sid not in station_ids:
+                raise HTTPException(status_code=404, detail=f"Node '{sid}' not found in map stations")
             route.append(sid)
-        pts = route_polyline(route, anchors, paths, steps_per_edge=int(body.steps_per_edge))
+        pts = route_polyline(route, stations, paths, steps_per_edge=int(body.steps_per_edge))
         pts = augment_with_corner_turns(pts, theta_threshold=0.1, step_delta=0.08)
         return {"points": pts, "route": route}
     except HTTPException:
