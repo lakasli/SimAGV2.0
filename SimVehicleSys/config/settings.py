@@ -23,7 +23,6 @@ class VehicleConfig:
 class Settings:
     action_time: float
     speed: float
-    robot_count: int
     state_frequency: int
     visualization_frequency: int
     map_id: str
@@ -63,9 +62,8 @@ def get_config(config_path: Optional[str] = None) -> Config:
         ),
         settings=Settings(
             action_time=1.0,
-            speed=0.05,
-            robot_count=1,
-            state_frequency=1,
+            speed=2.0,
+            state_frequency=10,
             visualization_frequency=1,
             map_id="default",
             sim_time_scale=1.0,
@@ -73,7 +71,7 @@ def get_config(config_path: Optional[str] = None) -> Config:
             battery_idle_drain_per_min=1.0,
             battery_move_empty_multiplier=1.5,
             battery_move_loaded_multiplier=2.5,
-            battery_charge_per_min=8.0,
+            battery_charge_per_min=10.0,
             frontend_poll_interval_ms=1000,
         ),
     )

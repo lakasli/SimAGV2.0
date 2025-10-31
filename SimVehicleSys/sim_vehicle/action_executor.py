@@ -43,6 +43,15 @@ async def execute_rotation_movement(
 def _normalize_angle(a: float) -> float:
     return ((a + math.pi) % (2 * math.pi)) - math.pi
 
+def _step_towards(current: float, target: float, max_delta: float) -> float:
+    try:
+        diff = _normalize_angle(target - current)
+        if abs(diff) <= max_delta:
+            return current + diff
+        return current + math.copysign(max_delta, diff)
+    except Exception:
+        return target
+
 
 async def execute_points_movement(
     serial: str,
@@ -122,10 +131,12 @@ async def execute_points_movement(
                 t = i / steps
                 bx, by = _bezier_point(P0, P1, P2, P3, t)
                 btheta = _bezier_tangent_theta(P0, P1, P2, P3, t)
+                _, _, cur_theta = _get_current_pose()
+                smooth_theta = _step_towards(cur_theta, btheta, max_delta=0.15)
                 try:
                     agv_mgr.update_dynamic(
                         serial,
-                        DynamicConfigUpdate(position=Position(x=bx, y=by, theta=btheta)),
+                        DynamicConfigUpdate(position=Position(x=bx, y=by, theta=smooth_theta)),
                     )
                 except Exception:
                     pass

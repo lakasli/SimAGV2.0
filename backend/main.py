@@ -9,8 +9,10 @@ from fastapi.staticfiles import StaticFiles
 
 from typing import Union
 from .schemas import AGVRegistration, RegisterRequest, RegisterResponse, UnregisterResponse, AGVInfo, StaticConfigPatch, DynamicConfigUpdate, StatusResponse
+from .schemas import SimSettingsPatch
 from .schemas import TranslateRequest, RotateRequest
 from .agv_manager import AGVManager
+from .sim_process_manager import SimulatorProcessManager
 from fastapi import WebSocket
 import asyncio
 from .websocket_manager import WebSocketManager
@@ -42,6 +44,7 @@ app.add_middleware(
 agv_storage = project_root / "backend" / "data" / "registered_agvs.json"
 agv_manager = AGVManager(agv_storage)
 ws_manager = WebSocketManager()
+sim_manager = SimulatorProcessManager(project_root)
 
 # Static mounts: frontend and maps
 frontend_dir = project_root / "frontend"
@@ -95,8 +98,13 @@ def index():
 @app.get("/api/config")
 def get_frontend_config():
     try:
-        cfg = get_config()
-        interval = int(getattr(cfg.settings, "frontend_poll_interval_ms", 100))
+        # 优先返回运行态覆盖值，其次回退到默认配置
+        runtime_val = getattr(app.state, "frontend_poll_interval_ms", None)
+        if runtime_val is not None:
+            interval = int(runtime_val)
+        else:
+            cfg = get_config()
+            interval = int(getattr(cfg.settings, "frontend_poll_interval_ms", 100))
         # 安全边界：至少 10ms，至多 5000ms
         interval = max(10, min(5000, interval))
         return {"polling_interval_ms": interval}
@@ -129,6 +137,10 @@ def list_agvs():
 def register_agvs(body: Union[RegisterRequest, List[AGVRegistration]]):
     regs = body.agvs if isinstance(body, RegisterRequest) else body
     registered, skipped = agv_manager.register_many(regs)
+    try:
+        sim_manager.ensure_running_for_serials(registered)
+    except Exception as e:
+        print(f"[SimProc] auto-start failed: {e}")
     return RegisterResponse(registered=registered, skipped=skipped)
 
 @app.delete("/api/agvs/{serial_number}", response_model=UnregisterResponse)
@@ -136,6 +148,10 @@ def unregister_agv(serial_number: str):
     ok = agv_manager.unregister(serial_number)
     if not ok:
         raise HTTPException(status_code=404, detail="AGV not found")
+    try:
+        sim_manager.stop_for(serial_number)
+    except Exception as e:
+        print(f"[SimProc] stop failed: {e}")
     return UnregisterResponse(removed=True)
 
 @app.patch("/api/agv/{serial_number}/config/static", response_model=AGVInfo)
@@ -167,7 +183,27 @@ async def _start_ws_broadcast():
     publisher = MqttPublisher(project_root / "config.toml")
     publisher.start()
     app.state.mqtt_publisher = publisher
+    # 初始化前端轮询间隔覆盖值（用于热更新）
+    try:
+        cfg = get_config()
+        app.state.frontend_poll_interval_ms = int(getattr(cfg.settings, "frontend_poll_interval_ms", 1000))
+    except Exception:
+        app.state.frontend_poll_interval_ms = 1000
+    # 记录每个 AGV 最近一次提交的仿真设置（用于前端预填）
+    try:
+        app.state.sim_settings_by_agv = {}
+    except Exception:
+        pass
     # 仿真车导航由其自身进程负责，后端仅保留 MQTT 桥与发布器
+    # 进程管理器：在服务启动时为所有已注册 AGV 确保仿真实例在运行
+    try:
+        app.state.sim_manager = sim_manager
+        serials = [info.serial_number for info in agv_manager.list_agvs()]
+        started = sim_manager.ensure_running_for_serials(serials)
+        if started:
+            print(f"[SimProc] started on startup: {started}")
+    except Exception as e:
+        print(f"[SimProc] startup ensure failed: {e}")
 
 @app.on_event("shutdown")
 async def _stop_ws_broadcast():
@@ -177,6 +213,12 @@ async def _stop_ws_broadcast():
     bridge = getattr(app.state, "mqtt_bridge", None)
     if bridge:
         bridge.stop()
+    try:
+        stopped = sim_manager.stop_all()
+        if stopped:
+            print(f"[SimProc] stopped on shutdown: {stopped}")
+    except Exception:
+        pass
 
 @app.post("/api/agv/{serial_number}/config/dynamic", response_model=StatusResponse)
 async def post_dynamic_config(serial_number: str, body: DynamicConfigUpdate):
@@ -224,6 +266,122 @@ async def move_translate(serial_number: str, body: TranslateRequest):
         print(f"Publish initPosition failed: {e}")
     status = agv_manager.get_status(serial_number)
     return status
+
+# 热更新仿真设置：发布到 MQTT simConfig，部分更新
+@app.post("/api/agv/{serial_number}/sim/settings")
+def post_sim_settings(serial_number: str, body: SimSettingsPatch):
+    info = agv_manager.get_agv(serial_number)
+    if not info:
+        raise HTTPException(status_code=404, detail="AGV not found")
+    publisher = getattr(app.state, "mqtt_publisher", None)
+    if not publisher:
+        raise HTTPException(status_code=500, detail="MQTT publisher not available")
+    # 参数范围校验
+    errors: list[str] = []
+    def add_err(msg: str):
+        errors.append(msg)
+    if body.speed is not None and not (0.0 <= float(body.speed) <= 2.0):
+        add_err("速度(speed)必须在[0,2]范围内")
+    if body.sim_time_scale is not None:
+        v = float(body.sim_time_scale)
+        if not (v > 0.0 and v < 10.0):
+            add_err("时间缩放(sim_time_scale)必须在(0,10)范围内")
+    if body.state_frequency is not None:
+        v = int(body.state_frequency)
+        if not (v >= 1 and v <= 10):
+            add_err("状态频率(state_frequency)必须为[1,10]的正整数")
+    if body.visualization_frequency is not None:
+        v = int(body.visualization_frequency)
+        if not (v >= 1 and v <= 10):
+            add_err("可视化频率(visualization_frequency)必须为[1,10]的正整数")
+    if body.action_time is not None:
+        v = float(body.action_time)
+        if not (v >= 1.0 and v <= 10.0):
+            add_err("动作时长(action_time)必须在[1,10]范围内")
+    if body.frontend_poll_interval_ms is not None:
+        v = int(body.frontend_poll_interval_ms)
+        if not (v >= 10 and v <= 1000):
+            add_err("前端轮询(frontend_poll_interval_ms)必须为[10,1000]的正整数")
+    if body.battery_default is not None:
+        v = float(body.battery_default)
+        if not (v > 0.0 and v <= 100.0):
+            add_err("默认电量(battery_default)必须在(0,100]范围内")
+    if body.battery_idle_drain_per_min is not None:
+        v = float(body.battery_idle_drain_per_min)
+        if not (v >= 1.0 and v <= 100.0):
+            add_err("空闲耗电(battery_idle_drain_per_min)必须在[1,100]范围内")
+    if body.battery_move_empty_multiplier is not None:
+        v = float(body.battery_move_empty_multiplier)
+        if not (v >= 1.0 and v <= 100.0):
+            add_err("空载耗电系数(battery_move_empty_multiplier)必须在[1,100]范围内")
+    if body.battery_move_loaded_multiplier is not None:
+        v = float(body.battery_move_loaded_multiplier)
+        if not (v >= 1.0 and v <= 100.0):
+            add_err("载重耗电系数(battery_move_loaded_multiplier)必须在[1,100]范围内")
+    if body.battery_charge_per_min is not None:
+        v = float(body.battery_charge_per_min)
+        if not (v >= 1.0 and v <= 100.0):
+            add_err("充电速度(battery_charge_per_min)必须在[1,100]范围内")
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    try:
+        # 先更新后端运行态的前端轮询覆盖值（若提交了该项）
+        if body.frontend_poll_interval_ms is not None:
+            try:
+                app.state.frontend_poll_interval_ms = int(body.frontend_poll_interval_ms)
+            except Exception:
+                pass
+        # 记录最近一次设置（用于前端预填）
+        try:
+            current = getattr(app.state, "sim_settings_by_agv", None)
+            if current is None:
+                app.state.sim_settings_by_agv = {}
+                current = app.state.sim_settings_by_agv
+            update = {k: v for k, v in body.model_dump().items() if v is not None}
+            prev = current.get(serial_number, {})
+            prev.update(update)
+            current[serial_number] = prev
+        except Exception:
+            pass
+        publisher.publish_sim_settings(info, body)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Publish sim settings failed: {e}")
+    return {"updated": True, "serial_number": serial_number}
+
+# 获取当前仿真设置：合并默认配置与最近一次提交的覆盖值
+@app.get("/api/agv/{serial_number}/sim/settings")
+def get_sim_settings(serial_number: str):
+    info = agv_manager.get_agv(serial_number)
+    if not info:
+        raise HTTPException(status_code=404, detail="AGV not found")
+    try:
+        cfg = get_config()
+    except Exception:
+        cfg = None  # type: ignore
+    base = getattr(cfg, "settings", None)
+    # 运行态覆盖
+    overrides = getattr(app.state, "sim_settings_by_agv", {})
+    ov = overrides.get(serial_number, {}) if isinstance(overrides, dict) else {}
+    def pick(name: str, default):
+        return ov.get(name, default)
+    # 前端轮询间隔从运行态覆盖值读取
+    fp_default = getattr(base, "frontend_poll_interval_ms", 1000) if base else 1000
+    fp_runtime = getattr(app.state, "frontend_poll_interval_ms", fp_default)
+    result = {
+        "action_time": pick("action_time", getattr(base, "action_time", 1.0) if base else 1.0),
+        "speed": pick("speed", getattr(base, "speed", 1.0) if base else 1.0),
+        "state_frequency": pick("state_frequency", getattr(base, "state_frequency", 10) if base else 10),
+        "visualization_frequency": pick("visualization_frequency", getattr(base, "visualization_frequency", 1) if base else 1),
+        "map_id": pick("map_id", getattr(base, "map_id", "default") if base else "default"),
+        "sim_time_scale": pick("sim_time_scale", getattr(base, "sim_time_scale", 1.0) if base else 1.0),
+        "battery_default": pick("battery_default", getattr(base, "battery_default", 100.0) if base else 100.0),
+        "battery_idle_drain_per_min": pick("battery_idle_drain_per_min", getattr(base, "battery_idle_drain_per_min", 1.0) if base else 1.0),
+        "battery_move_empty_multiplier": pick("battery_move_empty_multiplier", getattr(base, "battery_move_empty_multiplier", 1.5) if base else 1.5),
+        "battery_move_loaded_multiplier": pick("battery_move_loaded_multiplier", getattr(base, "battery_move_loaded_multiplier", 2.5) if base else 2.5),
+        "battery_charge_per_min": pick("battery_charge_per_min", getattr(base, "battery_charge_per_min", 10.0) if base else 10.0),
+        "frontend_poll_interval_ms": int(fp_runtime),
+    }
+    return result
 
 @app.post("/api/agv/{serial_number}/move/rotate", response_model=StatusResponse)
 async def move_rotate(serial_number: str, body: RotateRequest):

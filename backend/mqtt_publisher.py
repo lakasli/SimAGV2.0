@@ -9,6 +9,7 @@ import paho.mqtt.client as mqtt
 from SimVehicleSys.config.settings import get_config
 
 from .schemas import AGVInfo, AGVRuntime
+from .schemas import SimSettingsPatch
 
 
 def _timestamp() -> str:
@@ -146,5 +147,23 @@ class MqttPublisher:
             rc = getattr(info_obj, "rc", mqtt.MQTT_ERR_SUCCESS)
             if rc != mqtt.MQTT_ERR_SUCCESS:
                 raise RuntimeError(f"MQTT publish order failed rc={rc}")
+        except Exception as e:
+            raise
+
+    def publish_sim_settings(self, info: AGVInfo, patch: SimSettingsPatch | dict) -> None:
+        """发布仿真设置热更新到 MQTT `.../simConfig` 主题。
+
+        载荷为局部更新（仅包含需更新的键）。支持 snake_case（推荐）。
+        """
+        if not self.client:
+            raise RuntimeError("MQTT publisher not connected")
+        base = f"{self.vda_interface}/{info.vda_version}/{info.manufacturer}/{info.serial_number}"
+        topic = f"{base}/simConfig"
+        payload = patch if isinstance(patch, dict) else patch.dict(exclude_none=True)
+        try:
+            info_obj = self.client.publish(topic, json.dumps(payload), qos=1, retain=False)
+            rc = getattr(info_obj, "rc", mqtt.MQTT_ERR_SUCCESS)
+            if rc != mqtt.MQTT_ERR_SUCCESS:
+                raise RuntimeError(f"MQTT publish simConfig failed rc={rc}")
         except Exception as e:
             raise

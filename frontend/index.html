@@ -14,6 +14,25 @@
       overflow: hidden
     }
 
+    /* Settings Modal: 固定初始尺寸，内部滚动且隐藏滚动条 */
+    #settingsModal .modal-content {
+      display: flex;
+      flex-direction: column;
+      /* 宽度仍由原有 inline 样式控制，这里保证布局 */
+      max-height: 72vh; /* 作为回退，JS 将在首次打开时锁定实际高度 */
+    }
+    #settingsModal .modal-header { flex: 0 0 auto; }
+    #settingsModal .modal-body {
+      flex: 1 1 auto;
+      overflow: auto;
+      overscroll-behavior: contain;
+      box-sizing: border-box;
+      /* 隐藏滚动条（仍可滚动） */
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none; /* IE/Edge */
+    }
+    #settingsModal .modal-body::-webkit-scrollbar { width: 0; height: 0; }
+
     .header {
       background: #2c3e50;
       color: #fff;
@@ -476,6 +495,7 @@
       <button class="btn" onclick="cycleFloor()">切换楼层</button>
       <button class="btn" onclick="resetView()">重置视图</button>
       <button class="btn" onclick="toggleGrid()">网格</button>
+      <button class="btn" onclick="openSettingsModal()">设置</button>
     </div>
   </div>
 
@@ -822,7 +842,7 @@
       for (const p of mapData.points) {
         // 楼层过滤
         const pfloor = extractFloorNameFromLayer(p.layer || '');
-        if (currentFloorName && pfloor && pfloor !== currentFloorName) continue;
+        if (currentFloorName && pfloor && String(pfloor).trim().toLowerCase() !== String(currentFloorName).trim().toLowerCase()) continue;
         const sp = worldToScreen(p.x, p.y);
         const dx = sx - sp.x, dy = sy - sp.y;
         if (dx * dx + dy * dy <= radius * radius) {
@@ -1360,8 +1380,21 @@
         if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         const raw = await resp.json();
         mapLayers = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-        // 预取每个楼层（layer）的名称：从 scene 的 list 组中递归查找 name 为纯数字的字段
+        // 预取每个楼层（layer）的名称：从 scene 的 list 或对象 name 提取
         floorNames = mapLayers.map(extractFloorNameFromLayer);
+        // Fallback：若顶层无法提取楼层名，则从 points 的 layer 字段聚合唯一楼层名
+        if (!Array.isArray(floorNames) || floorNames.filter(v => !!v).length === 0) {
+          const root = mapLayers.length > 0 ? mapLayers[0] : null;
+          const unique = new Set();
+          const pts = (root && Array.isArray(root.points)) ? root.points : [];
+          pts.forEach(p => {
+            const nm = extractFloorNameFromLayer(p.layer || '');
+            if (nm) unique.add(nm);
+          });
+          if (unique.size > 0) {
+            floorNames = Array.from(unique);
+          }
+        }
         currentFloorIndex = 0;
       mapData = mapLayers.length > 0 ? normalizeScene(mapLayers[currentFloorIndex]) : null;
       await loadSceneStations();
@@ -1388,7 +1421,8 @@
       const sel = document.getElementById('floorSelect');
       if (!sel) return;
       sel.innerHTML = '';
-      if (!Array.isArray(mapLayers) || mapLayers.length === 0) {
+      const availableFloorCount = (Array.isArray(floorNames) && floorNames.length > 0) ? floorNames.length : mapLayers.length;
+      if (!Array.isArray(mapLayers) || mapLayers.length === 0 || availableFloorCount === 0) {
         const opt = document.createElement('option');
         opt.value = '';
         opt.textContent = '无楼层';
@@ -1397,32 +1431,37 @@
         return;
       }
       sel.disabled = false;
-      mapLayers.forEach((_, i) => {
+      for (let i = 0; i < availableFloorCount; i++) {
         const opt = document.createElement('option');
         opt.value = String(i);
         const fname = floorNames[i];
         opt.textContent = fname ? `${fname}` : `${i + 1}层`;
         sel.appendChild(opt);
-      });
+      }
       sel.value = String(currentFloorIndex);
     }
 
     function switchFloor(idx) {
       const i = parseInt(idx, 10);
-      if (isNaN(i) || i < 0 || i >= mapLayers.length) return;
+      const availableFloorCount = (Array.isArray(floorNames) && floorNames.length > 0) ? floorNames.length : mapLayers.length;
+      if (isNaN(i) || i < 0 || i >= availableFloorCount) return;
       currentFloorIndex = i;
-      mapData = normalizeScene(mapLayers[currentFloorIndex]);
+      // 若 mapLayers 仅有一个根对象（楼层来源于 points.layer），仍保持同一 scene；否则切换到对应层
+      const layerIndex = Math.min(currentFloorIndex, Math.max(0, mapLayers.length - 1));
+      mapData = normalizeScene(mapLayers[layerIndex]);
       // 切换楼层后预取该层站点详情（scene）
       loadSceneStations();
       updateMapInfo();
       fitMapToView();
       drawMap();
-      document.getElementById('status').textContent = `已切换到${i + 1}层`;
+      const fname = floorNames[currentFloorIndex];
+      document.getElementById('status').textContent = fname ? `已切换到楼层: ${fname}` : `已切换到${i + 1}层`;
     }
 
     function cycleFloor() {
-      if (!Array.isArray(mapLayers) || mapLayers.length === 0) return;
-      const next = (currentFloorIndex + 1) % mapLayers.length;
+      const availableFloorCount = (Array.isArray(floorNames) && floorNames.length > 0) ? floorNames.length : mapLayers.length;
+      if (availableFloorCount === 0) return;
+      const next = (currentFloorIndex + 1) % availableFloorCount;
       switchFloor(next);
       const sel = document.getElementById('floorSelect');
       if (sel) sel.value = String(next);
@@ -1444,6 +1483,12 @@
     function drawGrid() { ctx.save(); ctx.strokeStyle = '#34495e'; ctx.lineWidth = 1; const g = 50 * viewTransform.scale; const ox = viewTransform.x % g, oy = viewTransform.y % g; for (let x = ox; x < canvas.width; x += g) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); } for (let y = oy; y < canvas.height; y += g) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); } ctx.restore(); }
     function drawPoints() {
       (mapData.points || []).forEach(point => {
+        // 楼层过滤：仅绘制当前楼层的点
+        const currentFloorName = floorNames[currentFloorIndex] || null;
+        const pfloor = extractFloorNameFromLayer(point.layer || '');
+        if (currentFloorName && pfloor && String(pfloor).trim().toLowerCase() !== String(currentFloorName).trim().toLowerCase()) {
+          return;
+        }
         const sp = worldToScreen(point.x, point.y);
         if (sp.x < -20 || sp.x > canvas.width + 20 || sp.y < -20 || sp.y > canvas.height + 20) return;
         ctx.save();
@@ -1510,6 +1555,17 @@
         if (!fp || !tp) return;
     
         const dir = getRouteDirection(route);
+        // 楼层过滤：路段两端点需在当前楼层
+        const currentFloorName = floorNames[currentFloorIndex] || null;
+        if (currentFloorName) {
+          const nf = String(currentFloorName).trim().toLowerCase();
+          const ff = extractFloorNameFromLayer(fp.layer || '');
+          const tf = extractFloorNameFromLayer(tp.layer || '');
+          const ffn = ff ? String(ff).trim().toLowerCase() : '';
+          const tfn = tf ? String(tf).trim().toLowerCase() : '';
+          if (ffn && ffn !== nf) return;
+          if (tfn && tfn !== nf) return;
+        }
 
         ctx.save();
         const passCode = (route.pass !== undefined) ? Number(route.pass) : 0;
@@ -1618,7 +1674,10 @@
         if (robot.currentMap) {
           const robotFloor = extractFloorFromMapId(robot.currentMap);
           const currentFloorName = floorNames[currentFloorIndex] || null;
-          if (robotFloor && currentFloorName && robotFloor !== currentFloorName) {
+          if (
+            robotFloor && currentFloorName &&
+            String(robotFloor).trim().toLowerCase() !== String(currentFloorName).trim().toLowerCase()
+          ) {
             return; // 不在当前楼层，不渲染
           }
         }
@@ -1632,6 +1691,11 @@
 
     function extractFloorNameFromLayer(layer) {
       try {
+        // 新增：字符串楼层名（常见于点/路段的 layer 字段）
+        if (typeof layer === 'string') {
+          const v = layer.trim();
+          if (v) return v;
+        }
         // 按照 scene 的 list，依次提取对象下的一级 key: name（字符串）
         if (layer && Array.isArray(layer.list)) {
           for (const item of layer.list) {
@@ -1649,11 +1713,14 @@
       return null;
     }
     function extractFloorFromMapId(mapId) {
-      const mScene = /^VehicleMap\/(.+)\.scene$/.exec(mapId || '');
+      const raw = String(mapId || '').trim();
+      if (!raw) return null;
+      const mScene = /^VehicleMap\/(.+)\.scene$/i.exec(raw);
       if (mScene) return mScene[1];
-      const mViewer = /^ViewerMap\/(.+)\.scene$/.exec(mapId || '');
+      const mViewer = /^ViewerMap\/(.+)\.scene$/i.exec(raw);
       if (mViewer) return mViewer[1];
-      return null;
+      const fname = raw.replace(/\\/g, '/').split('/').pop();
+      return (fname || '').replace(/\.scene$/i, '') || null;
     }
 
     function drawRobotIcon(x, y, rotationDeg, robot) {
@@ -2261,6 +2328,164 @@
           drawMap();
         }
       }, 1000);
+    }
+  </script>
+  <!-- 仿真设置弹窗 -->
+  <div id="settingsModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:2100;">
+    <div class="modal-content" style="width:460px; background:#2c3e50; color:#ecf0f1; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,.3);">
+      <div class="modal-header" style="padding:12px 16px; border-bottom:1px solid #34495e; display:flex; align-items:center; justify-content:space-between;">
+        <div class="modal-title" style="font-weight:bold;">仿真设置（热加载）</div>
+        <button class="modal-close" onclick="closeSettingsModal()" style="background:transparent; border:none; color:#ecf0f1; font-size:20px; cursor:pointer;">&times;</button>
+      </div>
+      <div class="modal-body" style="padding:16px;">
+        <div class="form-group"><label class="form-label">速度 (m/s)</label><input type="number" class="form-input" id="settingsSpeed" placeholder="如: 2.0" step="0.01"></div>
+        <div class="form-group"><label class="form-label">时间缩放</label><input type="number" class="form-input" id="settingsTimeScale" placeholder="如: 1.0" step="0.01"></div>
+        <div class="form-group"><label class="form-label">状态频率 (Hz)</label><input type="number" class="form-input" id="settingsStateFreq" placeholder="如: 10" step="1"></div>
+        <div class="form-group"><label class="form-label">可视化频率 (Hz)</label><input type="number" class="form-input" id="settingsVisFreq" placeholder="如: 1" step="1"></div>
+        <div class="form-group"><label class="form-label">动作时长 (s)</label><input type="number" class="form-input" id="settingsActionTime" placeholder="如: 1.0" step="0.1"></div>
+        <div class="form-group"><label class="form-label">前端轮询间隔 (ms)</label><input type="number" class="form-input" id="settingsFrontendPoll" placeholder="如: 1000" step="10"></div>
+        <details style="margin-top:8px;">
+          <summary style="cursor:pointer;">电池参数（可选）</summary>
+          <div class="form-group" style="margin-top:8px;"><label class="form-label">默认电量 (%)</label><input type="number" class="form-input" id="settingsBatteryDefault" placeholder="如: 100" step="0.1"></div>
+          <div class="form-group"><label class="form-label">空闲耗电 (百分点/分钟)</label><input type="number" class="form-input" id="settingsBatteryIdle" placeholder="如: 1.0" step="0.1"></div>
+          <div class="form-group"><label class="form-label">空载耗电系数</label><input type="number" class="form-input" id="settingsBatteryEmptyMult" placeholder="如: 1.5" step="0.1"></div>
+          <div class="form-group"><label class="form-label">载货耗电系数</label><input type="number" class="form-input" id="settingsBatteryLoadedMult" placeholder="如: 2.5" step="0.1"></div>
+          <div class="form-group"><label class="form-label">充电速度 (百分点/分钟)</label><input type="number" class="form-input" id="settingsBatteryCharge" placeholder="如: 10.0" step="0.1"></div>
+        </details>
+        <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn-saveconfig" onclick="saveSimSettings()">保存</button>
+          <button class="btn-cancel-small" onclick="closeSettingsModal()">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    async function openSettingsModal() {
+      const modal = document.getElementById('settingsModal');
+      modal.style.display = 'flex';
+      // 在首次打开后锁定弹窗高度为当前计算值（保持初始大小）
+      requestAnimationFrame(() => {
+        const content = modal.querySelector('.modal-content');
+        if (content && !content.dataset.fixedHeight) {
+          const rect = content.getBoundingClientRect();
+          content.style.height = rect.height + 'px';
+          content.style.maxHeight = rect.height + 'px';
+          content.dataset.fixedHeight = '1';
+        }
+      });
+      // 预填当前仿真设置
+      // 仿真设置全局生效：此处使用当前选中机器人作为请求路径（仅用于读取/提交接口），
+      // 若未选中，则回退为第一个注册的机器人名称。
+      const id = selectedRobotId || (((registeredRobots || [])[0] && (registeredRobots || [])[0].robot_name) || '');
+      if (id) {
+        try {
+          const resp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(id)}/sim/settings`);
+          if (resp && resp.ok) {
+            const data = await resp.json();
+            prefillSimSettings(data);
+          }
+        } catch (e) {
+          try { window.printErrorToStatus('读取当前仿真设置失败: ' + (e && e.message ? e.message : String(e)), '设置'); } catch (_) {}
+        }
+      }
+    }
+    function closeSettingsModal() { document.getElementById('settingsModal').style.display = 'none'; }
+    function prefillSimSettings(s) {
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el && typeof v !== 'undefined' && v !== null) el.value = String(v); };
+      setVal('settingsSpeed', s.speed);
+      setVal('settingsTimeScale', s.sim_time_scale);
+      setVal('settingsStateFreq', s.state_frequency);
+      setVal('settingsVisFreq', s.visualization_frequency);
+      setVal('settingsActionTime', s.action_time);
+      setVal('settingsFrontendPoll', s.frontend_poll_interval_ms);
+      setVal('settingsBatteryDefault', s.battery_default);
+      setVal('settingsBatteryIdle', s.battery_idle_drain_per_min);
+      setVal('settingsBatteryEmptyMult', s.battery_move_empty_multiplier);
+      setVal('settingsBatteryLoadedMult', s.battery_move_loaded_multiplier);
+      setVal('settingsBatteryCharge', s.battery_charge_per_min);
+    }
+    async function saveSimSettings() {
+      try {
+        // 仿真设置全局生效：提交时使用当前选中或第一个注册机器人名称作为路径参数
+        const id = selectedRobotId || (((registeredRobots || [])[0] && (registeredRobots || [])[0].robot_name) || '');
+        if (!id) { closeSettingsModal(); return; }
+        const patch = {};
+        const n = (v) => { const x = Number(v); return isFinite(x) ? x : undefined; };
+        const s = (v) => { const x = String(v||'').trim(); return x ? x : undefined; };
+        const speed = n(document.getElementById('settingsSpeed').value);
+        const ts = n(document.getElementById('settingsTimeScale').value);
+        const sf = n(document.getElementById('settingsStateFreq').value);
+        const vf = n(document.getElementById('settingsVisFreq').value);
+        const at = n(document.getElementById('settingsActionTime').value);
+        const fp = n(document.getElementById('settingsFrontendPoll').value);
+        const bd = n(document.getElementById('settingsBatteryDefault').value);
+        const bi = n(document.getElementById('settingsBatteryIdle').value);
+        const be = n(document.getElementById('settingsBatteryEmptyMult').value);
+        const bl = n(document.getElementById('settingsBatteryLoadedMult').value);
+        const bc = n(document.getElementById('settingsBatteryCharge').value);
+        // 参数校验
+        const errs = [];
+        const intIn = (x, a, b) => Number.isInteger(x) && x >= a && x <= b;
+        const numIn = (x, a, b, openLeft=false, openRight=false) => {
+          if (typeof x !== 'number' || !isFinite(x)) return false;
+          const leftOk = openLeft ? (x > a) : (x >= a);
+          const rightOk = openRight ? (x < b) : (x <= b);
+          return leftOk && rightOk;
+        };
+        if (typeof speed !== 'undefined') {
+          if (!numIn(speed, 0, 2)) errs.push('速度需在[0,2]内'); else patch.speed = speed;
+        }
+        if (typeof ts !== 'undefined') {
+          if (!numIn(ts, 0, 10, true, true)) errs.push('时间缩放需在(0,10)内'); else patch.sim_time_scale = ts;
+        }
+        if (typeof sf !== 'undefined') {
+          if (!intIn(sf, 1, 10)) errs.push('状态频率需为[1,10]的正整数'); else patch.state_frequency = parseInt(sf, 10);
+        }
+        if (typeof vf !== 'undefined') {
+          if (!intIn(vf, 1, 10)) errs.push('可视化频率需为[1,10]的正整数'); else patch.visualization_frequency = parseInt(vf, 10);
+        }
+        if (typeof at !== 'undefined') {
+          if (!numIn(at, 1, 10)) errs.push('动作时长需在[1,10]内'); else patch.action_time = at;
+        }
+        if (typeof fp !== 'undefined') {
+          if (!intIn(fp, 10, 1000)) errs.push('前端轮询间隔需为[10,1000]的正整数'); else patch.frontend_poll_interval_ms = parseInt(fp, 10);
+        }
+        if (typeof bd !== 'undefined') {
+          if (!numIn(bd, 0, 100, true, false)) errs.push('默认电量需在(0,100]内'); else patch.battery_default = bd;
+        }
+        if (typeof bi !== 'undefined') {
+          if (!numIn(bi, 1, 100)) errs.push('空闲耗电需在[1,100]内'); else patch.battery_idle_drain_per_min = bi;
+        }
+        if (typeof be !== 'undefined') {
+          if (!numIn(be, 1, 100)) errs.push('空载耗电系数需在[1,100]内'); else patch.battery_move_empty_multiplier = be;
+        }
+        if (typeof bl !== 'undefined') {
+          if (!numIn(bl, 1, 100)) errs.push('载重耗电系数需在[1,100]内'); else patch.battery_move_loaded_multiplier = bl;
+        }
+        if (typeof bc !== 'undefined') {
+          if (!numIn(bc, 1, 100)) errs.push('充电速度需在[1,100]内'); else patch.battery_charge_per_min = bc;
+        }
+        if (errs.length) {
+          try { window.printErrorToStatus('参数无效: ' + errs.join('; '), '设置'); } catch (_) {}
+          return; // 不提交，保持弹窗打开
+        }
+        const resp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(id)}/sim/settings`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch)
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        // 同步前端轮询间隔（若更新）
+        if (patch.frontend_poll_interval_ms) {
+          window.FRONTEND_POLL_INTERVAL_MS = patch.frontend_poll_interval_ms;
+        }
+        document.getElementById('status').textContent = '仿真设置已更新';
+        setTimeout(() => document.getElementById('status').textContent = '准备就绪', 2000);
+      } catch (err) {
+        console.error('更新仿真设置失败:', err);
+        try { window.printErrorToStatus('更新仿真设置失败: ' + (err && err.message ? err.message : String(err)),'设置'); } catch (_) {}
+        return;
+      }
+      // 成功后关闭弹窗
+      closeSettingsModal();
     }
   </script>
   <!-- 配置弹窗（参考 SimulatorViewer 设计，简化样式） -->

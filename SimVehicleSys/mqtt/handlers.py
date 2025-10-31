@@ -35,7 +35,7 @@ class MqttHandler:
             self.config.vehicle.manufacturer,
             self.config.vehicle.serial_number,
         )
-        topics = [f"{base}/order", f"{base}/instantActions"]
+        topics = [f"{base}/order", f"{base}/instantActions", f"{base}/simConfig"]
         for t in topics:
             self.client.subscribe(t, qos=1)
         self.sim.publish_connection(self.client)
@@ -86,6 +86,62 @@ class MqttHandler:
             actions=actions,
         )
 
+    def _apply_settings_update(self, data: dict) -> None:
+        # 支持 snake_case 与 camelCase 键名
+        def g(d, snake, camel, default=None):
+            return d.get(snake, d.get(camel, default))
+        s = self.config.settings
+        try:
+            v = g(data, "speed", "speed")
+            if v is not None:
+                s.speed = float(v)
+            v = g(data, "sim_time_scale", "simTimeScale")
+            if v is not None:
+                s.sim_time_scale = float(v)
+            v = g(data, "state_frequency", "stateFrequency")
+            if v is not None:
+                s.state_frequency = int(v)
+            v = g(data, "visualization_frequency", "visualizationFrequency")
+            if v is not None:
+                s.visualization_frequency = int(v)
+            v = g(data, "action_time", "actionTime")
+            if v is not None:
+                s.action_time = float(v)
+            v = g(data, "map_id", "mapId")
+            if v is not None:
+                s.map_id = str(v)
+            v = g(data, "battery_default", "batteryDefault")
+            if v is not None:
+                s.battery_default = float(v)
+            v = g(data, "battery_idle_drain_per_min", "batteryIdleDrainPerMin")
+            if v is not None:
+                s.battery_idle_drain_per_min = float(v)
+            v = g(data, "battery_move_empty_multiplier", "batteryMoveEmptyMultiplier")
+            if v is not None:
+                s.battery_move_empty_multiplier = float(v)
+            v = g(data, "battery_move_loaded_multiplier", "batteryMoveLoadedMultiplier")
+            if v is not None:
+                s.battery_move_loaded_multiplier = float(v)
+            v = g(data, "battery_charge_per_min", "batteryChargePerMin")
+            if v is not None:
+                s.battery_charge_per_min = float(v)
+            v = g(data, "frontend_poll_interval_ms", "frontendPollIntervalMs")
+            if v is not None:
+                s.frontend_poll_interval_ms = int(v)
+            print(
+                "[SimVehicleSys] Settings hot-updated:",
+                {
+                    "speed": s.speed,
+                    "sim_time_scale": s.sim_time_scale,
+                    "state_frequency": s.state_frequency,
+                    "visualization_frequency": s.visualization_frequency,
+                    "action_time": s.action_time,
+                    "map_id": s.map_id,
+                },
+            )
+        except Exception as e:
+            print(f"Apply settings update failed: {e}")
+
     def _on_message(self, client: mqtt.Client, userdata, msg: mqtt.MQTTMessage):
         topic = msg.topic
         payload = msg.payload.decode("utf-8", errors="ignore")
@@ -109,5 +165,10 @@ class MqttHandler:
                 self.sim.accept_instant_actions(ia)
             except Exception as e:
                 print(f"Error parsing instantActions: {e}")
+        elif topic_type == "simConfig":
+            try:
+                self._apply_settings_update(data)
+            except Exception as e:
+                print(f"Error applying simConfig: {e}")
         else:
             print(f"Unknown topic type: {topic_type}")

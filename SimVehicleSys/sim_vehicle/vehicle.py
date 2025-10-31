@@ -206,7 +206,8 @@ class VehicleSimulator:
                 cm = getattr(rt, "current_map", None)
             except Exception:
                 cm = None
-            raw_map = cm or self.nav_map_name or (self.state.agv_position.map_id if self.state.agv_position else None) or self.config.settings.map_id
+            nav_map = self.nav_map_name if self.nav_running else None
+            raw_map = cm or nav_map or (self.state.agv_position.map_id if self.state.agv_position else None) or self.config.settings.map_id
             canonical = canonicalize_map_id(raw_map)
             if self.state.agv_position:
                 self.state.agv_position.map_id = str(canonical)
@@ -375,6 +376,12 @@ class VehicleSimulator:
         print(f"Rejecting order: {reason}")
 
     def update_state(self) -> None:
+        # 记录更新间隔，用于将速度按秒换算为每次更新的位移
+        now_ts = time.time()
+        prev_ts = getattr(self, "_last_update_time", None)
+        dt = max(1e-3, now_ts - prev_ts) if prev_ts is not None else 0.05
+        self._last_update_time = now_ts
+        self._last_delta_seconds = dt
         if self._is_action_in_progress():
             return
         self._process_instant_actions()
@@ -492,7 +499,8 @@ class VehicleSimulator:
         updated_x, updated_y, updated_theta = self._calculate_new_position(vp, np, next_node)
         distance = get_distance(vp.x, vp.y, np.x, np.y)
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
-        should_arrive = distance < (float(self.config.settings.speed) * scale) + 0.1
+        dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
+        should_arrive = distance < (float(self.config.settings.speed) * scale * dt) + 0.1
         next_node_id = next_node.node_id
         next_node_seq = next_node.sequence_id
         self.state.agv_position.x = updated_x
@@ -555,6 +563,10 @@ class VehicleSimulator:
             self.nav_running = False
             self.state.driving = False
             try:
+                self.nav_map_name = None
+            except Exception:
+                pass
+            try:
                 target_id = self.nav_target_station
                 if target_id:
                     # 导航结束时优先将 lastNodeId 设为站点名称（如可解析）；并用解析后的名称更新序列号
@@ -587,7 +599,8 @@ class VehicleSimulator:
         if not vp:
             return
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
-        step = max(1e-9, float(self.config.settings.speed) * scale)
+        dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
+        step = max(1e-9, float(self.config.settings.speed) * scale * dt)
         remain = step
         guard = 200
         while remain > 1e-9 and self.nav_idx < len(self.nav_points) and guard > 0:
@@ -626,6 +639,10 @@ class VehicleSimulator:
         if self.nav_idx >= len(self.nav_points):
             self.nav_running = False
             self.state.driving = False
+            try:
+                self.nav_map_name = None
+            except Exception:
+                pass
             try:
                 target_id = self.nav_target_station
                 if target_id:
@@ -790,7 +807,8 @@ class VehicleSimulator:
     def _calculate_new_position(self, vehicle_position: AgvPosition, next_node_position: NodePosition, next_node: NodeState):
         next_edge = next((e for e in self.state.edge_states if e.sequence_id == next_node.sequence_id - 1), None)
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
-        speed = float(self.config.settings.speed) * scale
+        dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
+        speed = float(self.config.settings.speed) * scale * dt
         if next_edge and next_edge.trajectory is not None:
             return iterate_position_with_trajectory(
                 vehicle_position.x,

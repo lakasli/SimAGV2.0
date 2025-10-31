@@ -85,3 +85,19 @@ class TranslateRequest(BaseModel):
 
 class RotateRequest(BaseModel):
     dtheta: float
+
+
+class SimSettingsPatch(BaseModel):
+    # 对应 SimVehicleSys.config.settings.Settings 中的字段，均为可选以便局部更新
+    action_time: Optional[float] = None
+    speed: Optional[float] = None
+    state_frequency: Optional[int] = None
+    visualization_frequency: Optional[int] = None
+    map_id: Optional[str] = None
+    sim_time_scale: Optional[float] = None
+    battery_default: Optional[float] = None
+    battery_idle_drain_per_min: Optional[float] = None
+    battery_move_empty_multiplier: Optional[float] = None
+    battery_move_loaded_multiplier: Optional[float] = None
+    battery_charge_per_min: Optional[float] = None
+    frontend_poll_interval_ms: Optional[int] = None
