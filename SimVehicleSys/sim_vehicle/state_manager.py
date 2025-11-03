@@ -77,6 +77,26 @@ class AGVStateStore:
     def move_translate(self, serial: str, dx: float, dy: float, movement_state: Optional[str] = None) -> Optional[AGVRuntime]:
         with self._lock:
             rt = self._ensure_runtime(serial)
+            # 当电量为 0 时禁止运动
+            try:
+                if rt.battery_level is not None and float(rt.battery_level) <= 0:
+                    # 记录错误并返回不修改位置
+                    try:
+                        if not hasattr(rt, "errors") or rt.errors is None:
+                            rt.errors = []  # type: ignore[attr-defined]
+                        rt.errors.append({
+                            "type": "MovementDenied",
+                            "reason": "BatteryZero",
+                            "message": "Battery is zero; movement blocked"
+                        })  # type: ignore[attr-defined]
+                        if len(rt.errors) > 20:  # type: ignore[attr-defined]
+                            rt.errors = rt.errors[-20:]  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                    rt.last_update = datetime.utcnow()
+                    return rt
+            except Exception:
+                pass
             if movement_state is not None:
                 mv = str(movement_state).lower()
                 if mv in ("forward", "backward"):
@@ -99,6 +119,25 @@ class AGVStateStore:
     def move_rotate(self, serial: str, dtheta: float) -> Optional[AGVRuntime]:
         with self._lock:
             rt = self._ensure_runtime(serial)
+            # 当电量为 0 时禁止旋转
+            try:
+                if rt.battery_level is not None and float(rt.battery_level) <= 0:
+                    try:
+                        if not hasattr(rt, "errors") or rt.errors is None:
+                            rt.errors = []  # type: ignore[attr-defined]
+                        rt.errors.append({
+                            "type": "MovementDenied",
+                            "reason": "BatteryZero",
+                            "message": "Battery is zero; rotation blocked"
+                        })  # type: ignore[attr-defined]
+                        if len(rt.errors) > 20:  # type: ignore[attr-defined]
+                            rt.errors = rt.errors[-20:]  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                    rt.last_update = datetime.utcnow()
+                    return rt
+            except Exception:
+                pass
             rt.position.theta += dtheta
             rt.last_update = datetime.utcnow()
             return rt

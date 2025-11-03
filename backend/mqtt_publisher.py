@@ -136,7 +136,7 @@ class MqttPublisher:
     def publish_order(self, info: AGVInfo, order_payload: dict) -> None:
         """发布 VDA5050 订单到 MQTT `.../order` 主题。
 
-        `order_payload` 应为蛇形命名的 VDA 2.0 订单结构，本方法不转换字段命名。
+        `order_payload` 应为 camelCase 的 VDA 2.0 订单结构；本方法不转换字段命名。
         """
         if not self.client:
             raise RuntimeError("MQTT publisher not connected")

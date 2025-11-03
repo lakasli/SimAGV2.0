@@ -61,6 +61,25 @@ class BatteryManager:
     def _is_moving(self) -> bool:
         st = self.sim.state
         try:
+            # 优先依据驾驶状态/导航状态判定
+            try:
+                if getattr(st, "driving", False):
+                    return True
+            except Exception:
+                pass
+            try:
+                if getattr(self.sim, "nav_running", False):
+                    return True
+            except Exception:
+                pass
+            # 依据速度增量判定（publish_state 填充）
+            try:
+                vel = getattr(st, "velocity", None)
+                if vel and (abs(float(getattr(vel, "vx", 0.0))) + abs(float(getattr(vel, "vy", 0.0))) > 1e-3):
+                    return True
+            except Exception:
+                pass
+            # 回退到基于订单节点的判定
             if not st.agv_position or not st.node_states:
                 return False
             last_idx = 0
@@ -90,10 +109,16 @@ class BatteryManager:
                 st = self.sim.state
                 bs = st.battery_state
                 charge = float(bs.battery_charge)
+                # 应用仿真时间缩放：加速充电/放电速率
+                try:
+                    scale = max(0.0001, float(self.config.settings.sim_time_scale))
+                except Exception:
+                    scale = 1.0
+                dt_eff = dt * scale
 
                 if self._is_at_charging_point() and self._has_charging_command():
                     rate_per_min = float(self.config.settings.battery_charge_per_min)
-                    delta = rate_per_min * (dt / 60.0)
+                    delta = rate_per_min * (dt_eff / 60.0)
                     charge = min(100.0, charge + delta)
                     bs.charging = True
                     # 充满则自动清除充电请求
@@ -109,7 +134,7 @@ class BatteryManager:
                         rate_per_min = base * mult
                     else:
                         rate_per_min = base
-                    delta = rate_per_min * (dt / 60.0)
+                    delta = rate_per_min * (dt_eff / 60.0)
                     charge = max(0.0, charge - delta)
                     bs.charging = False
                     # 离开 CP 则清除充电请求（避免下次自动充电）

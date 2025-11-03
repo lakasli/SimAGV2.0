@@ -212,6 +212,14 @@ class VehicleSimulator:
             canonical = canonicalize_map_id(raw_map)
             if self.state.agv_position:
                 self.state.agv_position.map_id = str(canonical)
+            # 同步电量到集中式运行时，以便统一门控逻辑与状态上报
+            try:
+                charge = float(getattr(self.state.battery_state, "battery_charge", 0.0))
+                # 取整到 0-100 区间
+                lvl = int(max(0, min(100, round(charge))))
+                setattr(rt, "battery_level", lvl)
+            except Exception:
+                pass
         except Exception:
             self.state.errors = []
         # 计算速度（vx, vy, omega），基于位置增量与时间间隔
@@ -540,6 +548,22 @@ class VehicleSimulator:
         return None
 
     def _update_vehicle_position(self) -> None:
+        # 电量为 0 时禁止通过订单驱动的位姿更新
+        try:
+            charge = float(getattr(self.state.battery_state, "battery_charge", 0.0))
+            if charge <= 0.0:
+                self.state.driving = False
+                try:
+                    global_store.set_error(self.config.vehicle.serial_number, {
+                        "type": "MovementDenied",
+                        "reason": "BatteryZero",
+                        "message": "Battery is zero; movement blocked"
+                    })
+                except Exception:
+                    pass
+                return
+        except Exception:
+            pass
         if not self.state.agv_position or not self.state.node_states:
             return
         if len(self.state.node_states) == 1:
@@ -613,6 +637,23 @@ class VehicleSimulator:
         self.nav_target_station = station_id
 
     def _update_navigation(self) -> None:
+        # 电量为 0 时暂停导航步进，保持在原地
+        try:
+            charge = float(getattr(self.state.battery_state, "battery_charge", 0.0))
+            if charge <= 0.0:
+                self.state.driving = False
+                # 保持导航状态以便恢复后继续，但不移动
+                try:
+                    global_store.set_error(self.config.vehicle.serial_number, {
+                        "type": "MovementDenied",
+                        "reason": "BatteryZero",
+                        "message": "Battery is zero; navigation paused"
+                    })
+                except Exception:
+                    pass
+                return
+        except Exception:
+            pass
         if not self.nav_running or self.nav_paused:
             return
         if not self.nav_points or self.nav_idx >= len(self.nav_points):
@@ -668,8 +709,21 @@ class VehicleSimulator:
             dy = ty - vp.y
             dist = math.hypot(dx, dy)
             if dist <= 1e-9:
-                vp.theta = ttheta
-                self.nav_idx += 1
+                # 纯转向点：按步进更新朝向，避免一次性跳变
+                def _norm(a: float) -> float:
+                    pi = math.pi
+                    return (a + pi) % (2 * pi) - pi
+                cur_theta = float(vp.theta or 0.0)
+                angle_diff = _norm(ttheta - cur_theta)
+                max_step_theta = 0.15
+                if abs(angle_diff) <= max_step_theta:
+                    vp.theta = cur_theta + angle_diff
+                    self.nav_idx += 1
+                else:
+                    vp.theta = cur_theta + math.copysign(max_step_theta, angle_diff)
+                self.visualization.agv_position = vp
+                # 消耗本周期的步进额度，确保转向逐帧可见
+                remain = 0.0
                 guard -= 1
                 continue
             if dist <= remain:

@@ -70,7 +70,15 @@
 
     .status {
       font-size: 14px;
-      color: #ecf0f1
+      color: #ecf0f1;
+      max-width: 900px;
+      overflow-x: auto;
+      white-space: nowrap;
+      scrollbar-width: none;
+      -ms-overflow-style: none
+    }
+    .status::-webkit-scrollbar {
+      display: none
     }
 
     .canvas-container {
@@ -485,8 +493,41 @@
   <script>
     // 全局错误拦截：将所有请求错误打印到状态框（#status）
     (function () {
+      // 隐藏滚动条后，使用自动滚动展示完整信息
+      let _statusRafId = null;
+      function _stopStatusAutoScroll() {
+        try { if (_statusRafId) cancelAnimationFrame(_statusRafId); } catch (_) {}
+        _statusRafId = null;
+      }
+      function startStatusAutoScroll() {
+        const el = document.getElementById('status');
+        if (!el) return;
+        _stopStatusAutoScroll();
+        const max = el.scrollWidth - el.clientWidth;
+        if (max <= 0) return; // 不溢出则不滚动
+        let pos = el.scrollLeft || 0;
+        let dir = 1; // 1 右移，-1 左移（来回滚动）
+        const step = 1; // 每帧滚动像素
+        function tick() {
+          const node = document.getElementById('status');
+          if (!node) return;
+          pos += dir * step;
+          if (pos >= max) { pos = max; dir = -1; }
+          else if (pos <= 0) { pos = 0; dir = 1; }
+          node.scrollLeft = pos;
+          _statusRafId = requestAnimationFrame(tick);
+        }
+        _statusRafId = requestAnimationFrame(tick);
+      }
       function setStatusMessage(msg) {
-        try { const el = document.getElementById('status'); if (el) el.textContent = String(msg); } catch (e) {}
+        try {
+          const el = document.getElementById('status');
+          if (el) {
+            el.textContent = String(msg);
+            // 文本渲染后启动滚动
+            setTimeout(startStatusAutoScroll, 0);
+          }
+        } catch (e) {}
       }
       // 暴露辅助函数，供业务代码在 catch 中打印详细错误
       window.printErrorToStatus = function (err, context) {
@@ -529,6 +570,8 @@
       window.addEventListener('error', function (ev) {
         setStatusMessage(`脚本错误: ${ev.message} @ ${ev.filename}:${ev.lineno}`);
       });
+      // 页面初次加载也尝试启动滚动（如果初始文案超出）
+      try { setTimeout(startStatusAutoScroll, 0); } catch (_) {}
     })();
     // 配置
     const API_BASE_URL = window.location.origin + '/api';
@@ -1209,11 +1252,11 @@
             }
           }
           const actionObj = {
-            action_type: String(actionTitle || ''),
-            action_id: 'act-' + String(Date.now()),
-            blocking_type: 'HARD',
-            action_description: String(actionTitle || ''),
-            action_parameters: paramsList,
+            actionType: String(actionTitle || ''),
+            actionId: 'act-' + String(Date.now()),
+            blockingType: 'HARD',
+            actionDescription: String(actionTitle || ''),
+            actionParameters: paramsList,
           };
           if (!Array.isArray(order.nodes[lastIdx].actions)) order.nodes[lastIdx].actions = [];
           order.nodes[lastIdx].actions.push(actionObj);
@@ -2767,7 +2810,7 @@
           if (!numIn(speed, 0, 2)) errs.push('速度需在[0,2]内'); else patch.speed = speed;
         }
         if (typeof ts !== 'undefined') {
-          if (!numIn(ts, 0, 10, true, true)) errs.push('时间缩放需在(0,10)内'); else patch.sim_time_scale = ts;
+          if (!numIn(ts, 0, 10)) errs.push('时间缩放需在(0,10)内'); else patch.sim_time_scale = ts;
         }
         if (typeof sf !== 'undefined') {
           if (!intIn(sf, 1, 10)) errs.push('状态频率需为[1,10]的正整数'); else patch.state_frequency = parseInt(sf, 10);

@@ -395,25 +395,296 @@ async def move_rotate(serial_number: str, body: RotateRequest):
     status = agv_manager.get_status(serial_number)
     return status
 
+def _convert_order_camel_to_snake(d: dict) -> dict:
+    """Convert a VDA5050 order payload from camelCase to snake_case for dataclass validation.
+
+    Keeps unknown keys as-is; recursively converts nodes, edges, actions, trajectory, and nodePosition.
+    """
+    def map_keys(obj):
+        if isinstance(obj, list):
+            return [map_keys(x) for x in obj]
+        if not isinstance(obj, dict):
+            return obj
+        m = {}
+        # top-level/order-level mappings
+        key_map = {
+            "headerId": "header_id",
+            "serialNumber": "serial_number",
+            "orderId": "order_id",
+            "orderUpdateId": "order_update_id",
+            "zoneSetId": "zone_set_id",
+        }
+        # node-level
+        node_map = {
+            "nodeId": "node_id",
+            "sequenceId": "sequence_id",
+            "nodeDescription": "node_description",
+            "nodePosition": "node_position",
+        }
+        # nodePosition-level
+        np_map = {
+            "mapId": "map_id",
+            "mapDescription": "map_description",
+            "allowedDeviationXY": "allowed_deviation_xy",
+            "allowedDeviationTheta": "allowed_deviation_theta",
+        }
+        # edge-level
+        edge_map = {
+            "edgeId": "edge_id",
+            "sequenceId": "sequence_id",
+            "startNodeId": "start_node_id",
+            "endNodeId": "end_node_id",
+            "edgeDescription": "edge_description",
+            "maxSpeed": "max_speed",
+            "maxHeight": "max_height",
+            "minHeight": "min_height",
+            "orientationType": "orientation_type",
+            "rotationAllowed": "rotation_allowed",
+            "maxRotationSpeed": "max_rotation_speed",
+            "length": "length",
+            "direction": "direction",
+            "orientation": "orientation",
+            "trajectory": "trajectory",
+        }
+        # trajectory-level
+        traj_map = {
+            "knotVector": "knot_vector",
+            "controlPoints": "control_points",
+        }
+        # action-level
+        act_map = {
+            "actionType": "action_type",
+            "actionId": "action_id",
+            "blockingType": "blocking_type",
+            "actionDescription": "action_description",
+            "actionParameters": "action_parameters",
+        }
+        # decide which map to use per object
+        # heuristics: look for sentinel keys
+        if "nodes" in obj or "edges" in obj:
+            # order-level
+            for k, v in obj.items():
+                nk = key_map.get(k, k)
+                if nk in ("nodes", "edges"):
+                    m[nk] = map_keys(v)
+                else:
+                    m[nk] = map_keys(v)
+            return m
+        # detect node
+        if any(k in obj for k in ("nodeId", "node_id")):
+            for k, v in obj.items():
+                nk = node_map.get(k, k)
+                if nk == "node_position":
+                    m[nk] = map_keys(v)
+                elif nk == "actions":
+                    m[nk] = map_keys(v)
+                else:
+                    m[nk] = map_keys(v)
+            return m
+        # detect nodePosition
+        if any(k in obj for k in ("mapId", "map_id")):
+            for k, v in obj.items():
+                nk = np_map.get(k, k)
+                m[nk] = map_keys(v)
+            return m
+        # detect edge
+        if any(k in obj for k in ("edgeId", "edge_id", "startNodeId", "start_node_id")):
+            for k, v in obj.items():
+                nk = edge_map.get(k, k)
+                if nk == "trajectory":
+                    m[nk] = map_keys(v)
+                elif nk == "actions":
+                    m[nk] = map_keys(v)
+                else:
+                    m[nk] = map_keys(v)
+            return m
+        # detect trajectory
+        if any(k in obj for k in ("knotVector", "knot_vector", "controlPoints", "control_points")):
+            for k, v in obj.items():
+                nk = traj_map.get(k, k)
+                m[nk] = map_keys(v)
+            return m
+        # detect action
+        if any(k in obj for k in ("actionType", "action_type", "actionId", "action_id")):
+            for k, v in obj.items():
+                nk = act_map.get(k, k)
+                if nk == "action_parameters":
+                    m[nk] = map_keys(v)
+                else:
+                    m[nk] = map_keys(v)
+            return m
+        # default: passthrough keys
+        for k, v in obj.items():
+            m[k] = map_keys(v)
+        return m
+
+    return map_keys(d)
+
+def _convert_order_snake_to_camel(d: dict) -> dict:
+    """Convert a VDA5050 order payload from snake_case to camelCase for publishing.
+
+    Recursively converts known keys across order, nodes, edges, actions, trajectory, and nodePosition.
+    Unknown keys are preserved as-is.
+    """
+    def map_keys(obj):
+        if isinstance(obj, list):
+            return [map_keys(x) for x in obj]
+        if not isinstance(obj, dict):
+            return obj
+        m = {}
+        # top-level/order-level mappings
+        key_map = {
+            "header_id": "headerId",
+            "serial_number": "serialNumber",
+            "order_id": "orderId",
+            "order_update_id": "orderUpdateId",
+            "zone_set_id": "zoneSetId",
+        }
+        # node-level
+        node_map = {
+            "node_id": "nodeId",
+            "sequence_id": "sequenceId",
+            "node_description": "nodeDescription",
+            "node_position": "nodePosition",
+        }
+        # nodePosition-level
+        np_map = {
+            "map_id": "mapId",
+            "map_description": "mapDescription",
+            "allowed_deviation_xy": "allowedDeviationXY",
+            "allowed_deviation_theta": "allowedDeviationTheta",
+        }
+        # edge-level
+        edge_map = {
+            "edge_id": "edgeId",
+            "sequence_id": "sequenceId",
+            "start_node_id": "startNodeId",
+            "end_node_id": "endNodeId",
+            "edge_description": "edgeDescription",
+            "max_speed": "maxSpeed",
+            "max_height": "maxHeight",
+            "min_height": "minHeight",
+            "orientation_type": "orientationType",
+            "rotation_allowed": "rotationAllowed",
+            "max_rotation_speed": "maxRotationSpeed",
+            "length": "length",
+            "direction": "direction",
+            "orientation": "orientation",
+            "trajectory": "trajectory",
+        }
+        # trajectory-level
+        traj_map = {
+            "knot_vector": "knotVector",
+            "control_points": "controlPoints",
+        }
+        # action-level
+        act_map = {
+            "action_type": "actionType",
+            "action_id": "actionId",
+            "blocking_type": "blockingType",
+            "action_description": "actionDescription",
+            "action_parameters": "actionParameters",
+        }
+        # decide which map to use per object
+        if "nodes" in obj or "edges" in obj:
+            for k, v in obj.items():
+                nk = key_map.get(k, k)
+                if nk in ("nodes", "edges"):
+                    m[nk] = map_keys(v)
+                else:
+                    m[nk] = map_keys(v)
+            return m
+        if any(k in obj for k in ("node_id", "nodeId")):
+            for k, v in obj.items():
+                nk = node_map.get(k, k)
+                if nk == "nodePosition":
+                    m[nk] = map_keys(v)
+                elif nk == "actions":
+                    m[nk] = map_keys(v)
+                else:
+                    m[nk] = map_keys(v)
+            return m
+        if any(k in obj for k in ("map_id", "mapId")):
+            for k, v in obj.items():
+                nk = np_map.get(k, k)
+                m[nk] = map_keys(v)
+            return m
+        if any(k in obj for k in ("edge_id", "edgeId", "start_node_id", "startNodeId")):
+            for k, v in obj.items():
+                nk = edge_map.get(k, k)
+                if nk == "trajectory":
+                    m[nk] = map_keys(v)
+                elif nk == "actions":
+                    m[nk] = map_keys(v)
+                else:
+                    m[nk] = map_keys(v)
+            return m
+        if any(k in obj for k in ("knot_vector", "knotVector", "control_points", "controlPoints")):
+            for k, v in obj.items():
+                nk = traj_map.get(k, k)
+                m[nk] = map_keys(v)
+            return m
+        if any(k in obj for k in ("action_type", "actionType", "action_id", "actionId")):
+            for k, v in obj.items():
+                nk = act_map.get(k, k)
+                if nk == "actionParameters":
+                    m[nk] = map_keys(v)
+                else:
+                    m[nk] = map_keys(v)
+            return m
+        for k, v in obj.items():
+            m[k] = map_keys(v)
+        return m
+
+    return map_keys(d)
+
 # 发布 VDA5050 订单到 MQTT
 @app.post("/api/agv/{serial_number}/order")
 def publish_order(serial_number: str, body: dict = Body(...)):
     info = agv_manager.get_agv(serial_number)
     if not info:
         raise HTTPException(status_code=404, detail="AGV not found")
-    # 简单结构校验（使用 dataclass 尝试构造）
+    # 简单结构校验（兼容 camelCase：转换为 snake_case 进行 dataclass 构造）
     try:
-        VDAOrder(**body)
+        snake_body = _convert_order_camel_to_snake(body)
+        # 确保节点/边包含 actions 字段；若缺失则补空数组，避免设备端解析后缺失
+        try:
+            if isinstance(snake_body.get("nodes"), list):
+                for n in snake_body["nodes"]:
+                    if isinstance(n, dict) and "actions" not in n:
+                        n["actions"] = []
+            if isinstance(snake_body.get("edges"), list):
+                for e in snake_body["edges"]:
+                    if isinstance(e, dict) and "actions" not in e:
+                        e["actions"] = []
+        except Exception:
+            pass
+        # dataclass 构造需要 zone_set_id 键，但不希望在发布到 MQTT 时出现 null
+        original_has_zone_set = ("zoneSetId" in body) or ("zone_set_id" in body)
+        if "zone_set_id" not in snake_body:
+            snake_body["zone_set_id"] = None
+        VDAOrder(**snake_body)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid order payload: {e}")
-    sn_in_body = str(body.get("serial_number", "")).strip()
+    sn_in_body = str(body.get("serialNumber", body.get("serial_number", "")).strip())
     if sn_in_body and sn_in_body != info.serial_number:
         raise HTTPException(status_code=400, detail="serial_number mismatch")
     publisher = getattr(app.state, "mqtt_publisher", None)
     if not publisher:
         raise HTTPException(status_code=500, detail="MQTT publisher not available")
     try:
-        publisher.publish_order(info, body)
+        # 统一使用 camelCase 进行发布，保证设备端解析一致
+        # 使用经过补全的 snake_body 进行转换，以确保 actions 存在
+        camel_body = _convert_order_snake_to_camel(snake_body)
+        # 若原始请求未提供 zoneSetId，且其值为 null，则移除该键，避免发布 "zoneSetId": null
+        if not original_has_zone_set and camel_body.get("zoneSetId") is None:
+            try:
+                del camel_body["zoneSetId"]
+            except Exception:
+                pass
+        publisher.publish_order(info, camel_body)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Publish order failed: {e}")
-    return {"published": True, "serial_number": serial_number, "order_id": body.get("order_id")}
+    # 返回兼容的 orderId（同时提供两种命名以兼容旧前端）
+    _oid = body.get("orderId") or body.get("order_id")
+    return {"published": True, "serial_number": serial_number, "orderId": _oid, "order_id": _oid}

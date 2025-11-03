@@ -154,9 +154,27 @@ class MqttHandler:
             return
         if topic_type == "order":
             try:
+                # 将 snake_case 键统一转换为 camelCase，以适配仅支持 camelCase 的解析器
+                def _snake_to_camel_key(k: str) -> str:
+                    if "_" not in k:
+                        return k
+                    parts = k.split("_")
+                    return parts[0] + "".join(p[:1].upper() + p[1:] for p in parts[1:])
+
+                def _snake_to_camel(obj):
+                    if isinstance(obj, list):
+                        return [_snake_to_camel(x) for x in obj]
+                    if not isinstance(obj, dict):
+                        return obj
+                    out = {}
+                    for kk, vv in obj.items():
+                        nk = _snake_to_camel_key(str(kk))
+                        out[nk] = _snake_to_camel(vv)
+                    return out
+
                 # 委托给订单管理模块进行解析、校验和分发
                 from SimVehicleSys.sim_vehicle.order_manager import process_order as _process_order
-                _process_order(self.sim, data)
+                _process_order(self.sim, _snake_to_camel(data))
             except Exception as e:
                 print(f"Error processing order: {e}")
         elif topic_type == "instantActions":

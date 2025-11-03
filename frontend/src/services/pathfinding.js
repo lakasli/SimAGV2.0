@@ -161,12 +161,15 @@ function generateVdaOrder(path, agvInfo, topo) {
     return s && s.name ? String(s.name) : String(id);
   });
 
+  // camelCase 节点
   const nodes = nodeNames.map((name, i) => ({
-    node_id: name,
-    sequence_id: i + 1,
+    nodeId: name,
+    sequenceId: i + 1,
     released: true,
+    actions: [],
   }));
 
+  // camelCase 边
   const edges = [];
   for (let i = 0; i < path.length - 1; i++) {
     // 查找路段描述（desc）
@@ -175,24 +178,24 @@ function generateVdaOrder(path, agvInfo, topo) {
     const match = (topo?.paths || []).find(p => String(p.from) === fromId && String(p.to) === toId);
     const edgeDesc = match && typeof match.desc === 'string' ? match.desc : `${nodeNames[i]}-${nodeNames[i + 1]}`;
     edges.push({
-      edge_id: edgeDesc,
-      sequence_id: i + 1,
+      edgeId: edgeDesc,
+      sequenceId: i + 1,
       released: true,
-      start_node_id: nodeNames[i],
-      end_node_id: nodeNames[i + 1],
+      startNodeId: nodeNames[i],
+      endNodeId: nodeNames[i + 1],
+      actions: [],
     });
   }
 
+  // camelCase 订单头与字段
   return {
-    header_id: Date.now() % 100000,
+    headerId: Date.now() % 100000,
     timestamp,
     version: agvInfo.version || '2.0.0',
     manufacturer: agvInfo.manufacturer,
-    serial_number: agvInfo.serial_number,
-    order_id: orderId,
-    order_update_id: 0,
-    // 按 VDA 2.0 Order 要求必须提供该键，允许为 null
-    zone_set_id: null,
+    serialNumber: agvInfo.serial_number,
+    orderId: orderId,
+    orderUpdateId: 0,
     nodes,
     edges,
   };

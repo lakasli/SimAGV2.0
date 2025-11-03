@@ -610,10 +610,10 @@
     }
 
     function readAction(root) {
-      const action_type = valOrNull(root.querySelector('[data-action-type]')?.value);
-      const action_id = valOrNull(root.querySelector('[data-action-id]')?.value);
-      const blocking_type = root.querySelector('[data-blocking-type]')?.value || 'NONE';
-      const action_description = valOrNull(root.querySelector('[data-action-desc]')?.value);
+      const actionType = valOrNull(root.querySelector('[data-action-type]')?.value);
+      const actionId = valOrNull(root.querySelector('[data-action-id]')?.value);
+      const blockingType = root.querySelector('[data-blocking-type]')?.value || 'NONE';
+      const actionDescription = valOrNull(root.querySelector('[data-action-desc]')?.value);
       const paramsRoot = root.querySelector('[data-action-params]');
       const params = $$('[data-param-key]', paramsRoot).map((_, idx) => {
         const row = paramsRoot.children[idx];
@@ -627,57 +627,58 @@
         if (value === '' || value === null || Number.isNaN(value)) return null;
         return { key, value };
       }).filter(Boolean);
-      const act = { action_type, action_id, blocking_type };
-      if (action_description !== null) act.action_description = action_description;
-      if (params.length > 0) act.action_parameters = params;
+      const act = { actionType, actionId, blockingType };
+      if (actionDescription !== null) act.actionDescription = actionDescription;
+      if (params.length > 0) act.actionParameters = params;
       return act;
     }
 
     function readNode(root) {
-      const node_id = valOrNull(root.querySelector('[data-node-id]')?.value);
-      const sequence_id = parseNum(root.querySelector('[data-node-seq]')?.value);
+      const nodeId = valOrNull(root.querySelector('[data-node-id]')?.value);
+      const sequenceId = parseNum(root.querySelector('[data-node-seq]')?.value);
       const releasedStr = valOrNull(root.querySelector('[data-node-released]')?.value);
       const released = (releasedStr || '').toLowerCase() === 'true';
-      const node_description = valOrNull(root.querySelector('[data-node-desc]')?.value);
+      const nodeDescription = valOrNull(root.querySelector('[data-node-desc]')?.value);
 
       const np = {
         x: parseNum(root.querySelector('[data-np-x]')?.value),
         y: parseNum(root.querySelector('[data-np-y]')?.value),
         theta: parseNum(root.querySelector('[data-np-theta]')?.value),
-        allowed_deviation_xy: parseNum(root.querySelector('[data-np-devxy]')?.value),
-        allowed_deviation_theta: parseNum(root.querySelector('[data-np-devtheta]')?.value),
-        map_id: valOrNull(root.querySelector('[data-np-map]')?.value),
-        map_description: valOrNull(root.querySelector('[data-np-mapdesc]')?.value)
+        allowedDeviationXY: parseNum(root.querySelector('[data-np-devxy]')?.value),
+        allowedDeviationTheta: parseNum(root.querySelector('[data-np-devtheta]')?.value),
+        mapId: valOrNull(root.querySelector('[data-np-map]')?.value),
+        mapDescription: valOrNull(root.querySelector('[data-np-mapdesc]')?.value)
       };
-      const hasNP = np.x !== null || np.y !== null || np.map_id !== null || np.theta !== null || np.allowed_deviation_xy !== null || np.allowed_deviation_theta !== null || np.map_description !== null;
+      const hasNP = np.x !== null || np.y !== null || np.mapId !== null || np.theta !== null || np.allowedDeviationXY !== null || np.allowedDeviationTheta !== null || np.mapDescription !== null;
       const actions = $$('[data-action]', root.querySelector('[data-node-actions]')).map(a => readAction(a));
 
-      const node = { node_id, sequence_id, released };
-      if (node_description !== null) node.node_description = node_description;
-      if (hasNP) node.node_position = np;
-      if (actions.length > 0) node.actions = actions;
+      const node = { nodeId, sequenceId, released };
+      if (nodeDescription !== null) node.nodeDescription = nodeDescription;
+      if (hasNP) node.nodePosition = np;
+      // 总是包含 actions 字段；无动作时为空数组
+      node.actions = actions;
       return node;
     }
 
     function readEdge(root) {
-      const edge_id = valOrNull(root.querySelector('[data-edge-id]')?.value);
-      const sequence_id = parseNum(root.querySelector('[data-edge-seq]')?.value);
+      const edgeId = valOrNull(root.querySelector('[data-edge-id]')?.value);
+      const sequenceId = parseNum(root.querySelector('[data-edge-seq]')?.value);
       const releasedStr = valOrNull(root.querySelector('[data-edge-released]')?.value);
       const released = (releasedStr || '').toLowerCase() === 'true';
-      const start_node_id = valOrNull(root.querySelector('[data-edge-start]')?.value);
-      const end_node_id = valOrNull(root.querySelector('[data-edge-end]')?.value);
+      const startNodeId = valOrNull(root.querySelector('[data-edge-start]')?.value);
+      const endNodeId = valOrNull(root.querySelector('[data-edge-end]')?.value);
 
-      const edge = { edge_id, sequence_id, released, start_node_id, end_node_id };
+      const edge = { edgeId, sequenceId, released, startNodeId, endNodeId };
       const addOpt = (key, v) => { if (v !== null && v !== undefined && v !== '') edge[key] = v; };
 
-      addOpt('max_speed', parseNum(root.querySelector('[data-edge-maxspeed]')?.value));
-      addOpt('max_height', parseNum(root.querySelector('[data-edge-maxh]')?.value));
-      addOpt('min_height', parseNum(root.querySelector('[data-edge-minh]')?.value));
+      addOpt('maxSpeed', parseNum(root.querySelector('[data-edge-maxspeed]')?.value));
+      addOpt('maxHeight', parseNum(root.querySelector('[data-edge-maxh]')?.value));
+      addOpt('minHeight', parseNum(root.querySelector('[data-edge-minh]')?.value));
       addOpt('orientation', parseNum(root.querySelector('[data-edge-orient]')?.value));
-      addOpt('orientation_type', valOrNull(root.querySelector('[data-edge-orient-type]')?.value));
+      addOpt('orientationType', valOrNull(root.querySelector('[data-edge-orient-type]')?.value));
       addOpt('direction', valOrNull(root.querySelector('[data-edge-direction]')?.value));
-      if (root.querySelector('[data-edge-rotallow]')?.checked) edge.rotation_allowed = true; // 初稿：仅提供 true
-      addOpt('max_rotation_speed', parseNum(root.querySelector('[data-edge-maxrotspeed]')?.value));
+      if (root.querySelector('[data-edge-rotallow]')?.checked) edge.rotationAllowed = true; // 初稿：仅提供 true
+      addOpt('maxRotationSpeed', parseNum(root.querySelector('[data-edge-maxrotspeed]')?.value));
       addOpt('length', parseNum(root.querySelector('[data-edge-length]')?.value));
 
       // Trajectory（可选）
@@ -685,7 +686,7 @@
       const knotStr = valOrNull(root.querySelector('[data-traj-knots]')?.value);
       let traj = null;
       if (degree !== null || knotStr !== null || root.querySelector('[data-traj-cps]')?.children.length > 0) {
-        const knot_vector = (knotStr ? knotStr.split(',') : []).map(s => parseNum(s)).filter(v => v !== null);
+        const knotVector = (knotStr ? knotStr.split(',') : []).map(s => parseNum(s)).filter(v => v !== null);
         const cps = $$('[data-control-point]', root.querySelector('[data-traj-cps]')).map(cp => {
           const x = parseNum(cp.querySelector('[data-cp-x]')?.value);
           const y = parseNum(cp.querySelector('[data-cp-y]')?.value);
@@ -698,35 +699,35 @@
         });
         traj = {};
         if (degree !== null) traj.degree = degree;
-        if (knot_vector.length > 0) traj.knot_vector = knot_vector;
-        if (cps.length > 0) traj.control_points = cps;
+        if (knotVector.length > 0) traj.knotVector = knotVector;
+        if (cps.length > 0) traj.controlPoints = cps;
       }
-      if (traj && (traj.degree !== undefined || traj.knot_vector || traj.control_points)) edge.trajectory = traj;
+      if (traj && (traj.degree !== undefined || traj.knotVector || traj.controlPoints)) edge.trajectory = traj;
 
       const actions = $$('[data-action]', root.querySelector('[data-edge-actions]')).map(a => readAction(a));
-      if (actions.length > 0) edge.actions = actions;
+      // 总是包含 actions 字段；无动作时为空数组
+      edge.actions = actions;
       return edge;
     }
 
     function generateOrderJson() {
       renumberNodes();
       ensureEdgesMatchNodes();
-      const header_id = parseNum($('#header_id')?.value);
+      const headerId = parseNum($('#header_id')?.value);
       const timestamp = valOrNull($('#timestamp')?.value);
       const version = valOrNull($('#version')?.value);
       const manufacturer = valOrNull($('#manufacturer')?.value);
-      const serial_number = valOrNull($('#serial_number')?.value);
-      const order_id = valOrNull($('#order_id')?.value);
-      const order_update_id = parseNum($('#order_update_id')?.value);
-      const zone_set_id = valOrNull($('#zone_set_id')?.value);
+      const serialNumber = valOrNull($('#serial_number')?.value);
+      const orderId = valOrNull($('#order_id')?.value);
+      const orderUpdateId = parseNum($('#order_update_id')?.value);
 
       const nodes = $$('#nodes_container > [data-node]').map(n => readNode(n));
       const edges = $$('#edges_container > [data-edge]').map(e => readEdge(e));
 
-      const order = { header_id, timestamp, version, manufacturer, serial_number, order_id, order_update_id, zone_set_id, nodes, edges };
+      const order = { headerId, timestamp, version, manufacturer, serialNumber, orderId, orderUpdateId, nodes, edges };
 
       // 简单必填校验（初稿）
-      const required = ['header_id','timestamp','version','manufacturer','serial_number','order_id','order_update_id'];
+      const required = ['headerId','timestamp','version','manufacturer','serialNumber','orderId','orderUpdateId'];
       const missing = required.filter(k => order[k] === null || order[k] === undefined || order[k] === '');
       if (missing.length) {
         alert('缺少必填字段：' + missing.join(', '));
@@ -769,7 +770,7 @@
       if (!txt) { alert('请先生成订单 JSON'); return; }
       let payload;
       try { payload = JSON.parse(txt); } catch (e) { alert('JSON 解析失败，请检查内容'); return; }
-      const serial = (payload.serial_number || ($('#serial_number')?.value || '').trim());
+      const serial = (payload.serialNumber || ($('#serial_number')?.value || '').trim());
       if (!serial) { alert('请填写 serial_number'); return; }
       const url = `/api/agv/${encodeURIComponent(serial)}/order`;
       try {
@@ -783,7 +784,7 @@
           throw new Error(err.detail || `HTTP ${res.status}`);
         }
         const data = await res.json();
-        alert(`发布成功：订单 ${data.order_id || '(无ID)'} 已发送`);
+        alert(`发布成功：订单 ${data.orderId || data.order_id || '(无ID)'} 已发送`);
       } catch (e) {
         alert('发布失败：' + (e?.message || String(e)));
       }

@@ -46,11 +46,11 @@ def _parse_actions(arr: Optional[Iterable[JsonDict]]) -> List[Action]:
         return actions
     for a in arr:
         actions.append(Action(
-            action_type=str(_get(a, "actionType", "action_type", default="")),
-            action_id=str(_get(a, "actionId", "action_id", default="")),
-            blocking_type=_to_blocking_type(_get(a, "blockingType", "blocking_type", default=None)),
-            action_description=_get(a, "actionDescription", "action_description", default=None),
-            action_parameters=_parse_action_params(_get(a, "actionParameters", "action_parameters", default=None)),
+            action_type=str(_get(a, "actionType", default="")),
+            action_id=str(_get(a, "actionId", default="")),
+            blocking_type=_to_blocking_type(_get(a, "blockingType", default=None)),
+            action_description=_get(a, "actionDescription", default=None),
+            action_parameters=_parse_action_params(_get(a, "actionParameters", default=None)),
         ))
     return actions
 
@@ -58,17 +58,17 @@ def _parse_actions(arr: Optional[Iterable[JsonDict]]) -> List[Action]:
 def _parse_node_position(d: Optional[JsonDict], fallback_map_id: Optional[str]) -> Optional[NodePosition]:
     if not d:
         return None
-    # map_id may be camelCase or snake_case
-    map_id = _get(d, "mapId", "map_id", default=None) or fallback_map_id or ""
+    # camelCase only
+    map_id = _get(d, "mapId", default=None) or fallback_map_id or ""
     try:
         return NodePosition(
             x=float(_get(d, "x", default=0.0)),
             y=float(_get(d, "y", default=0.0)),
             theta=_get(d, "theta", default=None),
-            allowed_deviation_xy=_get(d, "allowedDeviationXY", "allowed_deviation_xy", default=None),
-            allowed_deviation_theta=_get(d, "allowedDeviationTheta", "allowed_deviation_theta", default=None),
+            allowed_deviation_xy=_get(d, "allowedDeviationXY", default=None),
+            allowed_deviation_theta=_get(d, "allowedDeviationTheta", default=None),
             map_id=str(map_id),
-            map_description=_get(d, "mapDescription", "map_description", default=None),
+            map_description=_get(d, "mapDescription", default=None),
         )
     except Exception:
         return None
@@ -79,8 +79,8 @@ def _parse_trajectory(d: Optional[JsonDict]) -> Optional[Trajectory]:
         return None
     try:
         degree = int(_get(d, "degree", default=0))
-        knots = list(_get(d, "knotVector", "knot_vector", default=[]))
-        cps_raw = list(_get(d, "controlPoints", "control_points", default=[]))
+        knots = list(_get(d, "knotVector", default=[]))
+        cps_raw = list(_get(d, "controlPoints", default=[]))
         cps: List[ControlPoint] = []
         for cp in cps_raw:
             cps.append(ControlPoint(
@@ -100,13 +100,13 @@ def _parse_nodes(arr: Optional[Iterable[JsonDict]], fallback_map_id: Optional[st
     if not arr:
         return nodes
     for n in arr:
-        np = _parse_node_position(_get(n, "nodePosition", "node_position", default=None), fallback_map_id)
+        np = _parse_node_position(_get(n, "nodePosition", default=None), fallback_map_id)
         actions = _parse_actions(_get(n, "actions", default=None))
         nodes.append(Node(
-            node_id=str(_get(n, "nodeId", "node_id", default="")),
-            sequence_id=int(_get(n, "sequenceId", "sequence_id", default=0)),
+            node_id=str(_get(n, "nodeId", default="")),
+            sequence_id=int(_get(n, "sequenceId", default=0)),
             released=bool(_get(n, "released", default=True)),
-            node_description=_get(n, "nodeDescription", "node_description", default=None),
+            node_description=_get(n, "nodeDescription", default=None),
             node_position=np,
             actions=actions,
         ))
@@ -121,20 +121,20 @@ def _parse_edges(arr: Optional[Iterable[JsonDict]]) -> List[Edge]:
         traj = _parse_trajectory(_get(e, "trajectory", default=None))
         actions = _parse_actions(_get(e, "actions", default=None))
         edges.append(Edge(
-            edge_id=str(_get(e, "edgeId", "edge_id", default="")),
-            sequence_id=int(_get(e, "sequenceId", "sequence_id", default=0)),
+            edge_id=str(_get(e, "edgeId", default="")),
+            sequence_id=int(_get(e, "sequenceId", default=0)),
             released=bool(_get(e, "released", default=True)),
-            start_node_id=str(_get(e, "startNodeId", "start_node_id", default="")),
-            end_node_id=str(_get(e, "endNodeId", "end_node_id", default="")),
-            edge_description=_get(e, "edgeDescription", "edge_description", default=None),
-            max_speed=_get(e, "maxSpeed", "max_speed", default=None),
-            max_height=_get(e, "maxHeight", "max_height", default=None),
-            min_height=_get(e, "minHeight", "min_height", default=None),
+            start_node_id=str(_get(e, "startNodeId", default="")),
+            end_node_id=str(_get(e, "endNodeId", default="")),
+            edge_description=_get(e, "edgeDescription", default=None),
+            max_speed=_get(e, "maxSpeed", default=None),
+            max_height=_get(e, "maxHeight", default=None),
+            min_height=_get(e, "minHeight", default=None),
             orientation=_get(e, "orientation", default=None),
-            orientation_type=_get(e, "orientationType", "orientation_type", default=None),
+            orientation_type=_get(e, "orientationType", default=None),
             direction=_get(e, "direction", default=None),
-            rotation_allowed=_get(e, "rotationAllowed", "rotation_allowed", default=None),
-            max_rotation_speed=_get(e, "maxRotationSpeed", "max_rotation_speed", default=None),
+            rotation_allowed=_get(e, "rotationAllowed", default=None),
+            max_rotation_speed=_get(e, "maxRotationSpeed", default=None),
             length=_get(e, "length", default=None),
             trajectory=traj,
             actions=actions,
@@ -149,16 +149,16 @@ def _parse_order(raw: Union[Order, JsonDict], fallback_map_id: Optional[str], co
     nodes = _parse_nodes(_get(d, "nodes", default=[]), fallback_map_id)
     edges = _parse_edges(_get(d, "edges", default=[]))
     order = Order(
-        header_id=int(_get(d, "headerId", "header_id", default=0)),
+        header_id=int(_get(d, "headerId", default=0)),
         timestamp=str(_get(d, "timestamp", default="")),
         version=str(_get(d, "version", default=str(getattr(config_vehicle, "vda_full_version", "2.0.0")))),
         manufacturer=str(_get(d, "manufacturer", default=str(getattr(config_vehicle, "manufacturer", ""))))
                      or str(getattr(config_vehicle, "manufacturer", "")),
-        serial_number=str(_get(d, "serialNumber", "serial_number", default=str(getattr(config_vehicle, "serial_number", ""))))
+        serial_number=str(_get(d, "serialNumber", default=str(getattr(config_vehicle, "serial_number", ""))))
                       or str(getattr(config_vehicle, "serial_number", "")),
-        order_id=str(_get(d, "orderId", "order_id", default="")),
-        order_update_id=int(_get(d, "orderUpdateId", "order_update_id", default=0)),
-        zone_set_id=_get(d, "zoneSetId", "zone_set_id", default=None),
+        order_id=str(_get(d, "orderId", default="")),
+        order_update_id=int(_get(d, "orderUpdateId", default=0)),
+        zone_set_id=_get(d, "zoneSetId", default=None),
         nodes=nodes,
         edges=edges,
     )
@@ -173,9 +173,9 @@ def _validate_order(sim_vehicle: Any, order: Order) -> None:
     expected_serial = str(getattr(veh, "serial_number", ""))
 
     if not order.order_id:
-        raise ValueError("order_id is required")
+        raise ValueError("orderId is required")
     if order.order_update_id < 0:
-        raise ValueError("order_update_id must be non-negative")
+        raise ValueError("orderUpdateId must be non-negative")
     if order.version and order.version != expected_ver:
         # 允许版本不同，但提示
         try:
@@ -215,7 +215,7 @@ def _validate_order(sim_vehicle: Any, order: Order) -> None:
 def process_order(sim_vehicle: Any, order_raw: Union[Order, JsonDict]) -> None:
     """
     接收、解析、校验并分发 Order。
-    - 解析：支持 camelCase / snake_case 键；构造 VDA 2.0 dataclass。
+    - 解析：仅支持 camelCase 键名；构造 VDA 2.0 dataclass。
     - 校验：制造商/序列号/版本一致性、节点序列递增、边引用合法性、必要字段存在。
     - 分发：交给仿真器 VehicleSimulator.process_order 进行状态更新与路径导航。
     """
