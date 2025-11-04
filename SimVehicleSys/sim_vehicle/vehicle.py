@@ -585,7 +585,17 @@ class VehicleSimulator:
         next_node_seq = next_node.sequence_id
         self.state.agv_position.x = updated_x
         self.state.agv_position.y = updated_y
-        self.state.agv_position.theta = updated_theta
+        # 订单驱动位姿更新：朝 updated_theta 逐步旋转，避免起始跳变
+        def _norm(a: float) -> float:
+            pi = math.pi
+            return (a + pi) % (2 * pi) - pi
+        cur_theta = float(self.state.agv_position.theta or 0.0)
+        angle_diff = _norm(float(updated_theta) - cur_theta)
+        max_step_theta = 0.15
+        if abs(angle_diff) <= max_step_theta:
+            self.state.agv_position.theta = cur_theta + angle_diff
+        else:
+            self.state.agv_position.theta = cur_theta + math.copysign(max_step_theta, angle_diff)
         self.visualization.agv_position = self.state.agv_position
         if should_arrive:
             if self.state.node_states:
@@ -708,6 +718,25 @@ class VehicleSimulator:
             dx = tx - vp.x
             dy = ty - vp.y
             dist = math.hypot(dx, dy)
+            # 起步门控：在导航起始（第一个点位）时，先完成纯转向，再允许平移
+            # 这样可避免“边运动边转向”，符合“站点完成转向后再前进/后退”的需求
+            if self.nav_idx == 0:
+                def _norm(a: float) -> float:
+                    pi = math.pi
+                    return (a + pi) % (2 * pi) - pi
+                cur_theta = float(vp.theta or 0.0)
+                angle_diff = _norm(ttheta - cur_theta)
+                start_align_eps = 0.02  # 对齐容忍度（约 1.1°）
+                if abs(angle_diff) > start_align_eps and dist > 1e-9:
+                    max_step_theta = 0.15
+                    if abs(angle_diff) <= max_step_theta:
+                        vp.theta = cur_theta + angle_diff
+                    else:
+                        vp.theta = cur_theta + math.copysign(max_step_theta, angle_diff)
+                    self.visualization.agv_position = vp
+                    remain = 0.0
+                    guard -= 1
+                    continue
             if dist <= 1e-9:
                 # 纯转向点：按步进更新朝向，避免一次性跳变
                 def _norm(a: float) -> float:
@@ -729,7 +758,18 @@ class VehicleSimulator:
             if dist <= remain:
                 vp.x = tx
                 vp.y = ty
-                vp.theta = ttheta
+                # 移动到点位后，车头朝向也按步进调整，避免瞬时跳变
+                def _norm(a: float) -> float:
+                    pi = math.pi
+                    return (a + pi) % (2 * pi) - pi
+                cur_theta = float(vp.theta or 0.0)
+                target_theta = float(ttheta)
+                angle_diff = _norm(target_theta - cur_theta)
+                max_step_theta = 0.15
+                if abs(angle_diff) <= max_step_theta:
+                    vp.theta = cur_theta + angle_diff
+                else:
+                    vp.theta = cur_theta + math.copysign(max_step_theta, angle_diff)
                 self.visualization.agv_position = vp
                 remain -= dist
                 self.nav_idx += 1
@@ -738,7 +778,18 @@ class VehicleSimulator:
                 ratio = remain / max(dist, 1e-9)
                 vp.x = vp.x + dx * ratio
                 vp.y = vp.y + dy * ratio
-                vp.theta = math.atan2(dx, dy)
+                # 在移动过程中也采用步进式角度调整，避免起始阶段跳变
+                def _norm(a: float) -> float:
+                    pi = math.pi
+                    return (a + pi) % (2 * pi) - pi
+                cur_theta = float(vp.theta or 0.0)
+                target_theta = float(ttheta)
+                angle_diff = _norm(target_theta - cur_theta)
+                max_step_theta = 0.15
+                if abs(angle_diff) <= max_step_theta:
+                    vp.theta = cur_theta + angle_diff
+                else:
+                    vp.theta = cur_theta + math.copysign(max_step_theta, angle_diff)
                 self.visualization.agv_position = vp
                 remain = 0.0
         # 导航过程中：到站检测与状态裁剪

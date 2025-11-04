@@ -489,7 +489,7 @@
     </div>
   </div>
   
-  <script src="/static/src/services/pathfinding.js?v=20251030"></script>
+    <script src="/static/src/services/pathfinding.js?v=20251104"></script>
   <script>
     // 全局错误拦截：将所有请求错误打印到状态框（#status）
     (function () {
@@ -1188,7 +1188,8 @@
 
       // 构造并发布 VDA 订单
       const agvInfo = { serial_number: selectedRobotId, manufacturer: robot.manufacturer || 'SEER', version: (robot.version || '2.0.0') };
-      const order = generateVdaOrder(nodePath, agvInfo, topo);
+      const mapIdShort = extractFloorFromMapId(mapName);
+      const order = generateVdaOrder(nodePath, agvInfo, topo, mapIdShort, { allowedDeviationXY: 0.5, allowedDeviationTheta: 0.5 });
       try {
         const pubResp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(selectedRobotId)}/order`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(order)
@@ -1240,7 +1241,8 @@
       if (!nodePath || nodePath.length < 2) { try { window.printErrorToStatus('未找到可达路径，请检查地图 routes', '执行动作'); } catch (_) {} return; }
 
       const agvInfo = { serial_number: selectedRobotId, manufacturer: robot.manufacturer || 'SEER', version: (robot.version || '2.0.0') };
-      const order = generateVdaOrder(nodePath, agvInfo, topo);
+      const mapIdShort = extractFloorFromMapId(mapName);
+      const order = generateVdaOrder(nodePath, agvInfo, topo, mapIdShort, { allowedDeviationXY: 0.5, allowedDeviationTheta: 0.5 });
       try {
         // 组装动作对象，追加到最后一个节点
         const lastIdx = (order.nodes || []).length - 1;

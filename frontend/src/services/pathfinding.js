@@ -20,7 +20,14 @@ function parseSceneTopology(sceneData) {
   for (const p of points) {
     const pid = p.id != null ? String(p.id) : null;
     if (!pid) continue;
-    stationsMap.set(pid, { id: pid, name: String(p.name || pid), x: Number(p.x || 0), y: Number(p.y || 0) });
+    stationsMap.set(pid, {
+      id: pid,
+      name: String(p.name || pid),
+      x: Number(p.x || 0),
+      y: Number(p.y || 0),
+      // 兼容地图点位可能包含的朝向字段（theta/orientation），缺省为 0
+      theta: (typeof p.theta === 'number') ? Number(p.theta) : (typeof p.orientation === 'number' ? Number(p.orientation) : 0),
+    });
   }
 
   const paths = [];
@@ -151,7 +158,7 @@ function findNearestStation(pos, stations) {
  * @param {{stations: object[], paths: object[]}} topo - 地图拓扑（需含 stations.name 与 paths.desc）。
  * @returns {object} - VDA 5050 Order.
  */
-function generateVdaOrder(path, agvInfo, topo) {
+function generateVdaOrder(path, agvInfo, topo, mapId, npOptions = {}) {
   const timestamp = new Date().toISOString();
   const orderId = 'order-' + timestamp.replace(/\D/g, '');
 
@@ -162,12 +169,28 @@ function generateVdaOrder(path, agvInfo, topo) {
   });
 
   // camelCase 节点
-  const nodes = nodeNames.map((name, i) => ({
-    nodeId: name,
-    sequenceId: i + 1,
-    released: true,
-    actions: [],
-  }));
+  const nodes = nodeNames.map((name, i) => {
+    const origId = String(path[i]);
+    const s = stationById.get(origId) || { x: 0, y: 0, theta: 0 };
+    const allowedDeviationXY = (typeof npOptions.allowedDeviationXY === 'number') ? Number(npOptions.allowedDeviationXY) : 0.5;
+    const allowedDeviationTheta = (typeof npOptions.allowedDeviationTheta === 'number') ? Number(npOptions.allowedDeviationTheta) : 0.5;
+    const nodePosition = {
+      x: Number(s.x || 0),
+      y: Number(s.y || 0),
+      theta: (typeof s.theta === 'number') ? Number(s.theta) : 0,
+      allowedDeviationXY,
+      allowedDeviationTheta,
+      mapId: String(mapId || ''),
+      // mapDescription 暂无来源，保持为空以兼容
+    };
+    return {
+      nodeId: name,
+      sequenceId: i + 1,
+      released: true,
+      actions: [],
+      nodePosition,
+    };
+  });
 
   // camelCase 边
   const edges = [];

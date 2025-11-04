@@ -35,9 +35,12 @@ def canonicalize_map_id(map_id: Optional[str]) -> str:
 
 
 def iterate_position(current_x: float, current_y: float, target_x: float, target_y: float, speed: float) -> tuple[float, float, float]:
-    angle = math.atan2(target_y - current_y, target_x - current_x)
-    next_x = current_x + speed * math.cos(angle)
-    next_y = current_y + speed * math.sin(angle)
+    # 以 Y 轴为 0 度参考：使用 atan2(dx, dy)
+    dx = target_x - current_x
+    dy = target_y - current_y
+    angle = math.atan2(dx, dy)
+    next_x = current_x + speed * math.sin(angle)
+    next_y = current_y + speed * math.cos(angle)
     return (next_x, next_y, angle)
 
 
@@ -115,7 +118,8 @@ def evaluate_nurbs_with_tangent(trajectory: Any, u: float) -> tuple[float, float
         y_next /= total_weight_next
     tangent_x = x_next - x
     tangent_y = y_next - y
-    tangent_theta = math.atan2(tangent_y, tangent_x)
+    # 与全局约定一致：0 度朝向 +Y 轴（使用 atan2(dx, dy)）
+    tangent_theta = math.atan2(tangent_x, tangent_y)
     return (x, y, theta, tangent_x, tangent_theta, has_explicit_theta)
 
 
@@ -148,7 +152,8 @@ def iterate_position_with_straight_line(current_x: float, current_y: float, targ
     new_t = min(1.0, t + distance_to_move / (line_length if line_length > 0 else speed))
     new_x = start_x + new_t * (end_x - start_x)
     new_y = start_y + new_t * (end_y - start_y)
-    theta = math.atan2(end_y - start_y, end_x - start_x)
+    # 直线段朝向使用以 Y 轴为参考的角度定义
+    theta = math.atan2(end_x - start_x, end_y - start_y)
     if get_distance(new_x, new_y, target_x, target_y) <= speed:
         return (target_x, target_y, theta)
     return (new_x, new_y, theta)
@@ -181,9 +186,10 @@ def iterate_position_with_trajectory(current_x: float, current_y: float, target_
     if distance_to_target <= speed:
         return (target_x, target_y, final_theta)
     if next_u >= 0.99 and distance_to_target > speed:
-        angle = math.atan2(target_y - next_y, target_x - next_x)
-        final_x = next_x + speed * math.cos(angle)
-        final_y = next_y + speed * math.sin(angle)
+        # 末段指向目标的朝向也采用以 Y 轴为参考的角度定义
+        angle = math.atan2(target_x - next_x, target_y - next_y)
+        final_x = next_x + speed * math.sin(angle)
+        final_y = next_y + speed * math.cos(angle)
         return (final_x, final_y, angle)
     return (next_x, next_y, final_theta)
 
