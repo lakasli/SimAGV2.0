@@ -4,10 +4,12 @@ import math
 from typing import Optional, Any, List, Dict, Tuple
 
 from backend.schemas import AGVRuntime, DynamicConfigUpdate, Position
+from SimVehicleSys.config.settings import get_config
 from SimVehicleSys.protocol.vda_2_0_0.state import Information, InfoReference, Load
 from SimVehicleSys.protocol.vda5050_common import LoadDimensions, BoundingBoxReference
 from pathlib import Path
 import time
+from SimVehicleSys.sim_vehicle.state_manager import global_store
 
 
 async def execute_translation_movement(
@@ -18,6 +20,19 @@ async def execute_translation_movement(
     ws_mgr: Any,
     movement_state: Optional[str] = None,
 ) -> Optional[AGVRuntime]:
+    """执行平移运动并尝试获取最新状态。
+
+    参数:
+    - serial: 车辆序列号。
+    - dx: X 方向位移，单位米。
+    - dy: Y 方向位移，单位米。
+    - agv_mgr: AGV 管理器，需支持 `move_translate` 与 `get_status`。
+    - ws_mgr: WebSocket 管理器（当前未用，预留）。
+    - movement_state: 可选的移动状态标签，传递给管理器。
+
+    返回:
+    - `AGVRuntime` 或 `None`，由管理器返回的运行态对象。
+    """
     rt = agv_mgr.move_translate(serial, dx, dy, movement_state)
     try:
         status = agv_mgr.get_status(serial)
@@ -34,6 +49,17 @@ async def execute_rotation_movement(
     agv_mgr: Any,
     ws_mgr: Any,
 ) -> Optional[AGVRuntime]:
+    """执行旋转运动并尝试获取最新状态。
+
+    参数:
+    - serial: 车辆序列号。
+    - dtheta: 旋转角增量，单位弧度。
+    - agv_mgr: AGV 管理器，需支持 `move_rotate` 与 `get_status`。
+    - ws_mgr: WebSocket 管理器（当前未用，预留）。
+
+    返回:
+    - `AGVRuntime` 或 `None`。
+    """
     rt = agv_mgr.move_rotate(serial, dtheta)
     try:
         status = agv_mgr.get_status(serial)
@@ -45,9 +71,27 @@ async def execute_rotation_movement(
 
 
 def _normalize_angle(a: float) -> float:
+    """将角度归一化到 (-π, π] 区间。
+
+    参数:
+    - a: 输入角度（弧度）。
+
+    返回:
+    - 归一化后的角度（弧度）。
+    """
     return ((a + math.pi) % (2 * math.pi)) - math.pi
 
 def _step_towards(current: float, target: float, max_delta: float) -> float:
+    """在最大步长约束下朝目标角度前进。
+
+    参数:
+    - current: 当前角度（弧度）。
+    - target: 目标角度（弧度）。
+    - max_delta: 最大步进（弧度）。
+
+    返回:
+    - 下一步角度（弧度）。若异常则返回 `target`。
+    """
     try:
         diff = _normalize_angle(target - current)
         if abs(diff) <= max_delta:
@@ -64,6 +108,29 @@ async def execute_points_movement(
     ws_mgr: Any,
     delay_sec: float = 0.05,
 ) -> None:
+    """沿点序列执行平滑运动（含旋转/平移）。
+
+    行为:
+    - 读取 `sim_time_scale` 做时间/步长缩放。
+    - 若当前朝向与目标朝向差异较大，先按步进旋转至目标。
+    - 否则使用三次贝塞尔曲线在起止姿态间平滑插值位置与朝向。
+    - 通过 `agv_mgr.update_dynamic` 同步位置与姿态；每步 `await asyncio.sleep(delay_sec)`。
+
+    参数:
+    - serial: 车辆序列号。
+    - points: 点列表，每个点包含 `x`, `y`，可选 `theta`（弧度）。
+    - agv_mgr: AGV 管理器，需支持 `get_status` 与 `update_dynamic`。
+    - ws_mgr: WebSocket 管理器（当前未用，预留）。
+    - delay_sec: 每步延迟秒数。
+
+    返回:
+    - 无。
+    """
+    cfg = get_config()
+    try:
+        scale = max(0.0001, float(cfg.settings.sim_time_scale))
+    except Exception:
+        scale = 1.0
     def _get_current_pose() -> Tuple[float, float, float]:
         try:
             st = agv_mgr.get_status(serial)
@@ -112,7 +179,7 @@ async def execute_points_movement(
         angle_diff = _normalize_angle(target_theta - current_theta)
 
         if abs(angle_diff) > 0.1:
-            max_step = 0.08
+            max_step = 0.08 * scale
             while abs(angle_diff) > 0.1:
                 rot_step = math.copysign(min(abs(angle_diff), max_step), angle_diff)
                 try:
@@ -136,7 +203,7 @@ async def execute_points_movement(
                 bx, by = _bezier_point(P0, P1, P2, P3, t)
                 btheta = _bezier_tangent_theta(P0, P1, P2, P3, t)
                 _, _, cur_theta = _get_current_pose()
-                smooth_theta = _step_towards(cur_theta, btheta, max_delta=0.15)
+                smooth_theta = _step_towards(cur_theta, btheta, max_delta=0.15 * scale)
                 try:
                     agv_mgr.update_dynamic(
                         serial,
@@ -282,5 +349,76 @@ def execute_charging_action_in_sim(sim_vehicle: Any, action_parameters: Optional
         pass
     try:
         sim_vehicle.action_start_time = time.time()
+    except Exception:
+        pass
+
+
+def simulate_load_angle_jitter(sim_vehicle: Any, max_delta: float = 0.5, duration_ms: int = 1000) -> None:
+    """主动错误注入接口占位：载荷角度抖动。
+
+    保留接口但不执行任何逻辑，后期再实现具体行为。
+    """
+    pass
+
+
+# === Synchronous helpers for simulation-driven motion control ===
+def applyRotationStepInSim(sim_vehicle: Any, target_theta: float, base_step: float = 0.15) -> bool:
+    """按步进将仿真车体朝 `target_theta` 旋转，返回是否已对齐。
+
+    - 使用 `sim_time_scale` 做线性缩放；避免极小值导致停滞，取下限 1e-4。
+    - 更新 `state.agv_position` 与 `visualization.agv_position`，并同步到后端 `global_store`。
+    """
+    try:
+        def _norm(a: float) -> float:
+            pi = math.pi
+            return (a + pi) % (2 * pi) - pi
+        vp = getattr(getattr(sim_vehicle, "state", None), "agv_position", None)
+        if not vp:
+            return True
+        cur_theta = float(vp.theta or 0.0)
+        angle_diff = _norm(float(target_theta) - cur_theta)
+        scale = max(0.0001, float(getattr(getattr(sim_vehicle, "config", None).settings, "sim_time_scale", 1.0)))
+        step = float(base_step) * scale
+        aligned = abs(angle_diff) <= step
+        new_theta = cur_theta + (angle_diff if aligned else math.copysign(step, angle_diff))
+        # 统一归一化，避免角度在连续旋转中累计超界
+        new_theta = _norm(new_theta)
+        # 更新仿真状态与可视化
+        vp.theta = new_theta
+        try:
+            sim_vehicle.visualization.agv_position = vp
+        except Exception:
+            pass
+        # 同步到后端全局状态（若存在）
+        try:
+            serial = str(getattr(getattr(sim_vehicle, "config", None).vehicle, "serial_number", ""))
+            x = float(vp.x)
+            y = float(vp.y)
+            global_store.update_dynamic(serial, DynamicConfigUpdate(position=Position(x=x, y=y, theta=new_theta)))
+        except Exception:
+            pass
+        return aligned
+    except Exception:
+        return False
+
+
+def applyTranslateStepInSim(sim_vehicle: Any, new_x: float, new_y: float) -> None:
+    """更新仿真车体的平移位置，并同步到后端 `global_store`。"""
+    try:
+        vp = getattr(getattr(sim_vehicle, "state", None), "agv_position", None)
+        if not vp:
+            return
+        vp.x = float(new_x)
+        vp.y = float(new_y)
+        try:
+            sim_vehicle.visualization.agv_position = vp
+        except Exception:
+            pass
+        try:
+            serial = str(getattr(getattr(sim_vehicle, "config", None).vehicle, "serial_number", ""))
+            theta = float(vp.theta or 0.0)
+            global_store.update_dynamic(serial, DynamicConfigUpdate(position=Position(x=float(new_x), y=float(new_y), theta=theta)))
+        except Exception:
+            pass
     except Exception:
         pass

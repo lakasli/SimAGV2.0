@@ -211,6 +211,42 @@ def _validate_order(sim_vehicle: Any, order: Order) -> None:
         if not n.node_position.map_id:
             n.node_position.map_id = current_map
 
+    # 补充协议约束的骨架校验与规范化
+    _enforce_node_actions_blocking_hard(order)
+    _validate_and_trim_edge_actions(order)
+
+
+def _enforce_node_actions_blocking_hard(order: Order) -> None:
+    """
+    节点上的动作 blockingType 只能为 HARD。
+    当前骨架选择将非 HARD 的值统一改写为 HARD，避免拒单；后续可改为严格抛错。
+    """
+    try:
+        for n in order.nodes or []:
+            for a in (n.actions or []):
+                try:
+                    if a.blocking_type is None or str(a.blocking_type.value).upper() != "HARD":
+                        a.blocking_type = BlockingType.Hard
+                except Exception:
+                    a.blocking_type = BlockingType.Hard
+    except Exception:
+        pass
+
+
+def _validate_and_trim_edge_actions(order: Order) -> None:
+    """
+    边只支持一个动作（否则裁剪到一个）；且仅允许“机构脚本动作”和“货叉升降动作”。
+    骨架阶段仅做数量裁剪与 TODO 注释，不做具体类型过滤。
+    """
+    try:
+        for e in order.edges or []:
+            actions = list(e.actions or [])
+            if len(actions) > 1:
+                e.actions = [actions[0]]
+            # TODO: 限制动作类型到机构脚本/货叉升降（如 JackLoad/JackUnload/ForkLoad/ForkUnload/Script）
+    except Exception:
+        pass
+
 
 def process_order(sim_vehicle: Any, order_raw: Union[Order, JsonDict]) -> None:
     """

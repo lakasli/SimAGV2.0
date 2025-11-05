@@ -1,5 +1,5 @@
 /**
- * 路径规划与 VDA 5050 Order 生成（基于站点，不使用锚点）。
+ * 路径规划与 VDA 5050 Order 生成（基于站点，不使用站点）。
  * 移植并对齐至 Python 侧的站点化实现。
  */
 
@@ -15,7 +15,7 @@ function parseSceneTopology(sceneData) {
   const points = root.points || [];
   const routes = root.routes || [];
 
-  // 使用“站点”统一指代所有图节点（不再区分锚点）。
+  // 使用“站点”统一指代所有图节点（不再区分站点）。
   const stationsMap = new Map();
   for (const p of points) {
     const pid = p.id != null ? String(p.id) : null;

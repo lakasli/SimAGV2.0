@@ -160,3 +160,11 @@ class BatteryManager:
                 print(f"BatteryManager error: {e}")
 
             time.sleep(0.5)
+
+    # === Active error injection skeleton ===
+    def inject_charging_failure(self) -> None:
+        """主动错误注入接口占位：充电失败。
+
+        保留接口但不执行任何逻辑，后期再实现具体行为。
+        """
+        pass

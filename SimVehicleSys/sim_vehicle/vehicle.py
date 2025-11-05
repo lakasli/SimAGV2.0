@@ -9,7 +9,15 @@ import paho.mqtt.client as mqtt
 from SimVehicleSys.config.settings import Config
 from SimVehicleSys.config.mqtt_config import generate_vda_mqtt_base_topic
 from SimVehicleSys.mqtt.client import publish_json
-from SimVehicleSys.utils.helpers import get_timestamp, get_distance, iterate_position, iterate_position_with_trajectory, canonicalize_map_id
+from SimVehicleSys.utils.helpers import (
+    get_timestamp,
+    get_distance,
+    iterate_position,
+    iterate_position_with_trajectory,
+    canonicalize_map_id,
+    normalize_trajectory,
+)
+from SimVehicleSys.utils.logger import setup_logger
 from SimVehicleSys.protocol.vda5050_common import AgvPosition, NodePosition, Velocity
 from SimVehicleSys.protocol.vda_2_0_0.connection import Connection, ConnectionState
 from SimVehicleSys.protocol.vda_2_0_0.state import (
@@ -28,6 +36,7 @@ from SimVehicleSys.protocol.vda_2_0_0.instant_actions import InstantActions
 from SimVehicleSys.protocol.vda_2_0_0.action import Action
 from .error_manager import emit_error
 from .state_manager import global_store
+from SimVehicleSys.sim_vehicle.action_executor import applyRotationStepInSim, applyTranslateStepInSim
 
 from .navigation import (
     resolve_scene_path,
@@ -63,6 +72,9 @@ class VehicleSimulator:
     # 订单路由的站点名序列（用于到站检测与状态裁剪）
     nav_route_node_ids: Optional[List[str]]
     charging_requested: bool = False
+
+    # 统一日志器：用于在状态发布时打印关键字段到终端
+    logger = setup_logger()
 
     @staticmethod
     def create(config: Config) -> "VehicleSimulator":
@@ -241,7 +253,6 @@ class VehicleSimulator:
                 self._last_publish_state = {"ts": now_ts, "x": float(pos.x), "y": float(pos.y), "theta": float(pos.theta)}
             self.state.velocity = Velocity(vx=vx, vy=vy, omega=omega)
         except Exception:
-            # 保守容错，保持原值
             pass
         publish_json(mqtt_cli, self.state_topic, self.state, qos=1, retain=False)
 
@@ -334,6 +345,9 @@ class VehicleSimulator:
         self.state.order_update_id = self.order.order_update_id
         if self.state.order_update_id == 0:
             self.state.last_node_sequence_id = 0
+        # 提前标记导航运行，避免在订单刚接收、路径尚未生成的时间窗内触发订单位姿推进导致起步漂移
+        self.nav_running = True
+        self.state.driving = True
         self.state.action_states.clear()
         self.state.node_states.clear()
         self.state.edge_states.clear()
@@ -347,6 +361,8 @@ class VehicleSimulator:
                 self.start_path_navigation_by_nodes(route_node_ids, map_name)
         except Exception as e:
             print(f"order path navigation failed: {e}")
+            # 路径生成失败时回退导航标记，避免长时间处于运行态
+            self.nav_running = False
 
     def _process_order_nodes(self) -> None:
         for node in list(self.order.nodes):
@@ -421,10 +437,44 @@ class VehicleSimulator:
         if idx is None:
             return
         self.state.action_states[idx].action_status = ActionStatus.Running
-        if action.action_type == "initPosition":
+        atype = str(action.action_type or "")
+        if atype == "initPosition":
             self._handle_init_position_action(action)
-        elif action.action_type in ("startStationNavigation", "navigateToStation"):
+        elif atype in ("startStationNavigation", "navigateToStation"):
             self._handle_start_station_navigation_action(action)
+        elif atype in ("stopPause", "StopPause"):
+            self._handle_stop_pause_action(action)
+        elif atype in ("startPause", "StartPause"):
+            self._handle_start_pause_action(action)
+        elif atype in ("cancelOrder", "CancelOrder"):
+            self._handle_cancel_order_action(action)
+        elif atype in ("factsheetRequest", "FactsheetRequest"):
+            self._handle_factsheet_request_action(action)
+        elif atype in ("stateRequest", "StateRequest"):
+            self._handle_state_request_action(action)
+        elif atype in ("startCharging", "StartCharging", "ChargingStart"):
+            # 已在 _process_node_actions 使用 execute_charging_action_in_sim，这里也提供即时触发入口
+            from SimVehicleSys.sim_vehicle.action_executor import execute_charging_action_in_sim
+            try:
+                execute_charging_action_in_sim(self, action.action_parameters)
+            except Exception:
+                pass
+        elif atype in ("stopCharging", "StopCharging"):
+            self._handle_stop_charging_action(action)
+        elif atype in ("motion", "Motion"):
+            self._handle_motion_action(action)
+        elif atype in ("translate", "Translate"):
+            self._handle_translate_action(action)
+        elif atype in ("turn", "Turn"):
+            self._handle_turn_action(action)
+        elif atype in ("switchMap", "SwitchMap"):
+            self._handle_switch_map_action(action)
+        elif atype in ("rotateAgv", "RotateAgv"):
+            self._handle_rotate_agv_action(action)
+        elif atype in ("rotateLoad", "RotateLoad"):
+            self._handle_rotate_load_action(action)
+        elif atype in ("clearErrors", "ClearErrors"):
+            self._handle_clear_errors_action(action)
         else:
             print(f"Unknown action type: {action.action_type}")
         self.state.action_states[idx].action_status = ActionStatus.Finished
@@ -471,6 +521,134 @@ class VehicleSimulator:
             self.start_station_navigation(station_id, map_id)
         except Exception as e:
             print(f"startStationNavigation failed: {e}")
+
+    # === InstantActions skeleton handlers ===
+    def _handle_stop_pause_action(self, action: Action) -> None:
+        self.nav_paused = True
+        self.state.paused = True
+
+    def _handle_start_pause_action(self, action: Action) -> None:
+        self.nav_paused = False
+        self.state.paused = False
+
+    def _handle_cancel_order_action(self, action: Action) -> None:
+        # 取消当前订单与导航状态
+        try:
+            self.order = None
+        except Exception:
+            pass
+        try:
+            self.state.node_states.clear()
+            self.state.edge_states.clear()
+            self.state.action_states.clear()
+        except Exception:
+            pass
+        self.nav_running = False
+        self.state.driving = False
+
+    def _handle_factsheet_request_action(self, action: Action) -> None:
+        # 立即发布一次 factsheet（需在调用点传入 mqtt 客户端时触发）
+        try:
+            # 仅设置标志，由外部周期/控制器实际调用 publish_factsheet
+            setattr(self, "_factsheet_request", True)
+        except Exception:
+            pass
+
+    def _handle_state_request_action(self, action: Action) -> None:
+        # 设置标志，外部周期将立即触发一次 publish_state
+        try:
+            setattr(self, "_state_request", True)
+        except Exception:
+            pass
+
+    def _handle_stop_charging_action(self, action: Action) -> None:
+        try:
+            from SimVehicleSys.sim_vehicle.action_executor import execute_charging_action_in_sim
+            # 关闭充电：设置 charging=False（用负逻辑表示停止）
+            bs = getattr(self.state, "battery_state", None)
+            if bs:
+                bs.charging = False
+            # 清除请求标志
+            setattr(self, "charging_requested", False)
+        except Exception:
+            pass
+
+    def _handle_motion_action(self, action: Action) -> None:
+        # 开环速度 vx/vy/w/duration 的骨架，不做具体位移更新（留给后续 AGVManager/global_store 落地）
+        pass
+
+    def _handle_translate_action(self, action: Action) -> None:
+        # 平动骨架
+        pass
+
+    def _handle_turn_action(self, action: Action) -> None:
+        # 旋转骨架
+        pass
+
+    def _handle_switch_map_action(self, action: Action) -> None:
+        # 切换地图与重定位骨架
+        pass
+
+    def _handle_rotate_agv_action(self, action: Action) -> None:
+        # 旋转车体骨架：仅更新 theta（后续对接 AGVManager）
+        try:
+            params = action.action_parameters or []
+            angle = 0.0
+            for p in params:
+                if str(getattr(p, "key", "")) == "angle":
+                    try:
+                        angle = float(getattr(p, "value", 0.0))
+                    except Exception:
+                        angle = 0.0
+                    break
+            if self.state.agv_position:
+                target_theta = float(self.state.agv_position.theta or 0.0) + float(angle or 0.0)
+                applyRotationStepInSim(self, target_theta, base_step=0.15)
+        except Exception:
+            pass
+
+    def _handle_rotate_load_action(self, action: Action) -> None:
+        # 旋转载荷骨架：标记信息供前端显示/碰撞包络后续使用
+        try:
+            from SimVehicleSys.protocol.vda_2_0_0.state import Information, InfoReference
+            params = action.action_parameters or []
+            angle = 0.0
+            for p in params:
+                if str(getattr(p, "key", "")) == "angle":
+                    try:
+                        angle = float(getattr(p, "value", 0.0))
+                    except Exception:
+                        angle = 0.0
+                    break
+            info = Information(
+                info_type="RotateLoad",
+                info_references=[InfoReference(reference_key="angle", reference_value=str(angle))],
+                info_description=None,
+                info_level="INFO",
+            )
+            try:
+                self.state.information = [x for x in self.state.information if x.info_type != "RotateLoad"]
+            except Exception:
+                self.state.information = []
+            self.state.information.append(info)
+        except Exception:
+            pass
+
+    def _handle_clear_errors_action(self, action: Action) -> None:
+        try:
+            from .state_manager import global_store
+            serial = self.config.vehicle.serial_number
+            # 清空集中式错误列表
+            try:
+                rt = global_store.get_runtime(serial)
+                if hasattr(rt, "errors"):
+                    rt.errors = []  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            # 同步设备状态
+            self.state.errors = []
+        except Exception:
+            pass
 
     def _process_node_actions(self) -> None:
         idx = self._find_order_last_node_index()
@@ -577,26 +755,32 @@ class VehicleSimulator:
         if not np:
             return
         updated_x, updated_y, updated_theta = self._calculate_new_position(vp, np, next_node)
+        # 起始站订单驱动位姿更新的纯转向门控：先对齐朝向，再进行平移
+        try:
+            def _norm(a: float) -> float:
+                pi = math.pi
+                return (a + pi) % (2 * pi) - pi
+            is_start_of_order = int(getattr(self.state, "last_node_sequence_id", 0) or 0) == 0
+            cur_theta = float(vp.theta or 0.0)
+            angle_diff = _norm(float(updated_theta) - cur_theta)
+            if is_start_of_order and abs(angle_diff) > 1e-3:
+                # 起步阶段仅转向，不更新平移，避免漂移
+                applyRotationStepInSim(self, float(updated_theta), base_step=0.15)
+                return
+        except Exception:
+            pass
         distance = get_distance(vp.x, vp.y, np.x, np.y)
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
         dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
         should_arrive = distance < (float(self.config.settings.speed) * scale * dt) + 0.1
         next_node_id = next_node.node_id
         next_node_seq = next_node.sequence_id
-        self.state.agv_position.x = updated_x
-        self.state.agv_position.y = updated_y
+        applyTranslateStepInSim(self, float(updated_x), float(updated_y))
         # 订单驱动位姿更新：朝 updated_theta 逐步旋转，避免起始跳变
         def _norm(a: float) -> float:
             pi = math.pi
             return (a + pi) % (2 * pi) - pi
-        cur_theta = float(self.state.agv_position.theta or 0.0)
-        angle_diff = _norm(float(updated_theta) - cur_theta)
-        max_step_theta = 0.15
-        if abs(angle_diff) <= max_step_theta:
-            self.state.agv_position.theta = cur_theta + angle_diff
-        else:
-            self.state.agv_position.theta = cur_theta + math.copysign(max_step_theta, angle_diff)
-        self.visualization.agv_position = self.state.agv_position
+        applyRotationStepInSim(self, float(updated_theta), base_step=0.15)
         if should_arrive:
             if self.state.node_states:
                 self.state.node_states.pop(0)
@@ -654,11 +838,9 @@ class VehicleSimulator:
                 self.state.driving = False
                 # 保持导航状态以便恢复后继续，但不移动
                 try:
-                    global_store.set_error(self.config.vehicle.serial_number, {
-                        "type": "MovementDenied",
-                        "reason": "BatteryZero",
-                        "message": "Battery is zero; navigation paused"
-                    })
+                    # 使用统一错误代码上报，并由错误存储做去重
+                    from .error_manager import emit_error
+                    emit_error(54211, {"serial_number": self.config.vehicle.serial_number, "message": "Battery is zero; navigation paused"})
                 except Exception:
                     pass
                 return
@@ -726,14 +908,22 @@ class VehicleSimulator:
                     return (a + pi) % (2 * pi) - pi
                 cur_theta = float(vp.theta or 0.0)
                 angle_diff = _norm(ttheta - cur_theta)
-                start_align_eps = 0.02  # 对齐容忍度（约 1.1°）
-                if abs(angle_diff) > start_align_eps and dist > 1e-9:
-                    max_step_theta = 0.15
-                    if abs(angle_diff) <= max_step_theta:
-                        vp.theta = cur_theta + angle_diff
-                    else:
-                        vp.theta = cur_theta + math.copysign(max_step_theta, angle_diff)
-                    self.visualization.agv_position = vp
+                start_align_eps = 1e-3
+                if abs(angle_diff) > start_align_eps:
+                    # 起步阶段允许在一个周期内根据时间缩放执行多步转向，以加速对齐
+                    try:
+                        rot_steps = max(1, int(round(scale)))
+                    except Exception:
+                        rot_steps = 1
+                    processed = 0
+                    while processed < rot_steps:
+                        applyRotationStepInSim(self, float(ttheta), base_step=0.15)
+                        processed += 1
+                        cur_theta = float(vp.theta or 0.0)
+                        angle_diff = _norm(ttheta - cur_theta)
+                        if abs(angle_diff) <= start_align_eps:
+                            break
+                    # 起步阶段仅进行转向，不进行平移
                     remain = 0.0
                     guard -= 1
                     continue
@@ -742,55 +932,53 @@ class VehicleSimulator:
                 def _norm(a: float) -> float:
                     pi = math.pi
                     return (a + pi) % (2 * pi) - pi
-                cur_theta = float(vp.theta or 0.0)
-                angle_diff = _norm(ttheta - cur_theta)
-                max_step_theta = 0.15
-                if abs(angle_diff) <= max_step_theta:
-                    vp.theta = cur_theta + angle_diff
-                    self.nav_idx += 1
-                else:
-                    vp.theta = cur_theta + math.copysign(max_step_theta, angle_diff)
-                self.visualization.agv_position = vp
-                # 消耗本周期的步进额度，确保转向逐帧可见
+                # 在高时间缩放下，允许一个周期内推进多个纯转向点
+                try:
+                    rot_steps = max(1, int(round(scale)))
+                except Exception:
+                    rot_steps = 1
+                steps_done = 0
+                while steps_done < rot_steps and self.nav_idx < len(self.nav_points):
+                    pt_cur = self.nav_points[self.nav_idx]
+                    ttheta_cur = float(pt_cur.get("theta", vp.theta or 0.0))
+                    aligned = applyRotationStepInSim(self, float(ttheta_cur), base_step=0.15)
+                    guard -= 1
+                    steps_done += 1
+                    if aligned:
+                        self.nav_idx += 1
+                        # 若下一个点是平移点，则停止在本周期继续推进，交由后续逻辑处理
+                        if self.nav_idx < len(self.nav_points):
+                            nxt = self.nav_points[self.nav_idx]
+                            nx = float(nxt.get("x", vp.x))
+                            ny = float(nxt.get("y", vp.y))
+                            if abs(nx - vp.x) > 1e-9 or abs(ny - vp.y) > 1e-9:
+                                break
+                    else:
+                        # 未对齐则退出循环，下一周期继续
+                        break
+                # 消耗本周期的步进额度，保持转向阶段的逐帧效果
                 remain = 0.0
-                guard -= 1
                 continue
             if dist <= remain:
-                vp.x = tx
-                vp.y = ty
+                applyTranslateStepInSim(self, float(tx), float(ty))
                 # 移动到点位后，车头朝向也按步进调整，避免瞬时跳变
                 def _norm(a: float) -> float:
                     pi = math.pi
                     return (a + pi) % (2 * pi) - pi
-                cur_theta = float(vp.theta or 0.0)
-                target_theta = float(ttheta)
-                angle_diff = _norm(target_theta - cur_theta)
-                max_step_theta = 0.15
-                if abs(angle_diff) <= max_step_theta:
-                    vp.theta = cur_theta + angle_diff
-                else:
-                    vp.theta = cur_theta + math.copysign(max_step_theta, angle_diff)
-                self.visualization.agv_position = vp
+                applyRotationStepInSim(self, float(ttheta), base_step=0.15)
                 remain -= dist
                 self.nav_idx += 1
                 guard -= 1
             else:
                 ratio = remain / max(dist, 1e-9)
-                vp.x = vp.x + dx * ratio
-                vp.y = vp.y + dy * ratio
+                new_x = vp.x + dx * ratio
+                new_y = vp.y + dy * ratio
+                applyTranslateStepInSim(self, float(new_x), float(new_y))
                 # 在移动过程中也采用步进式角度调整，避免起始阶段跳变
                 def _norm(a: float) -> float:
                     pi = math.pi
                     return (a + pi) % (2 * pi) - pi
-                cur_theta = float(vp.theta or 0.0)
-                target_theta = float(ttheta)
-                angle_diff = _norm(target_theta - cur_theta)
-                max_step_theta = 0.15
-                if abs(angle_diff) <= max_step_theta:
-                    vp.theta = cur_theta + angle_diff
-                else:
-                    vp.theta = cur_theta + math.copysign(max_step_theta, angle_diff)
-                self.visualization.agv_position = vp
+                applyRotationStepInSim(self, float(ttheta), base_step=0.15)
                 remain = 0.0
         # 导航过程中：到站检测与状态裁剪
         try:
@@ -862,7 +1050,7 @@ class VehicleSimulator:
             if sid in station_ids:
                 route.append(sid)
                 continue
-            # 允许使用站点名称（points.name）作为 node_id：映射到最近锚点
+            # 允许使用站点名称（points.name）作为 node_id：映射到最近站点
             try:
                 pos = find_station_position(fp, sid)
             except Exception:
@@ -889,7 +1077,53 @@ class VehicleSimulator:
             except Exception:
                 pass
             raise
-        pts = augment_with_corner_turns(pts, theta_threshold=0.1, step_delta=0.08)
+        # 使拐角处的纯转向点数量与仿真时间缩放因子线性相关：scale 越大，插入的转向步数越少，整体转向速度越快
+        try:
+            scale = max(0.0001, float(self.config.settings.sim_time_scale))
+        except Exception:
+            scale = 1.0
+        dynamic_step_delta = max(0.02, 0.08 * scale)
+        pts = augment_with_corner_turns(pts, theta_threshold=0.1, step_delta=dynamic_step_delta)
+        # 起步修正：将首个导航点的坐标替换为当前 AGV 姿态的坐标，避免导航开始阶段回跳到站点坐标
+        try:
+            vp = self.state.agv_position
+            if vp and pts and len(pts) >= 1:
+                orig_x = float(pts[0].get("x", vp.x))
+                orig_y = float(pts[0].get("y", vp.y))
+                cur_x = float(vp.x)
+                cur_y = float(vp.y)
+                # 更新首点坐标为当前坐标；保持朝向与第二点一致（若存在）
+                pts[0]["x"] = cur_x
+                pts[0]["y"] = cur_y
+                if len(pts) >= 2:
+                    pts[0]["theta"] = float(pts[1].get("theta", pts[0].get("theta", 0.0)))
+                # 规范化首段插入的纯转向点：若其坐标与原始首点坐标一致，则替换为当前坐标
+                for i in range(1, len(pts)):
+                    px = float(pts[i].get("x", cur_x))
+                    py = float(pts[i].get("y", cur_y))
+                    if abs(px - orig_x) <= 1e-9 and abs(py - orig_y) <= 1e-9:
+                        pts[i]["x"] = cur_x
+                        pts[i]["y"] = cur_y
+                    else:
+                        # 一旦遇到不同坐标的点，说明进入了实际平移段，可停止替换
+                        break
+                # 进一步起步清理：剔除紧邻起始坐标的小半径聚簇点，避免起步阶段在原地附近多次来回
+                try:
+                    prune_threshold = 0.35  # 米
+                    k = 1
+                    while k < len(pts):
+                        px = float(pts[k].get("x", cur_x))
+                        py = float(pts[k].get("y", cur_y))
+                        if math.hypot(px - cur_x, py - cur_y) <= prune_threshold:
+                            k += 1
+                            continue
+                        break
+                    if k > 1 and k < len(pts):
+                        pts = [pts[0]] + pts[k:]
+                except Exception:
+                    pass
+        except Exception:
+            pass
         self.nav_points = pts
         self.nav_idx = 0
         self.nav_running = True
@@ -900,7 +1134,7 @@ class VehicleSimulator:
             self.nav_route_node_ids = list(route_node_ids)
         except Exception:
             self.nav_route_node_ids = route_node_ids
-        # 保留原始目标标识（站点名称或锚点 ID），以便后续依据 NodeState 匹配序列号
+        # 保留原始目标标识（站点名称或站点 ID），以便后续依据 NodeState 匹配序列号
         self.nav_target_station = route_node_ids[-1]
         self.nav_map_name = map_name
 
@@ -971,6 +1205,10 @@ class VehicleSimulator:
         dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
         speed = float(self.config.settings.speed) * scale * dt
         if next_edge and next_edge.trajectory is not None:
+            try:
+                normalize_trajectory(next_edge.trajectory)
+            except Exception:
+                pass
             return iterate_position_with_trajectory(
                 vehicle_position.x,
                 vehicle_position.y,
@@ -989,17 +1227,64 @@ class VehicleSimulator:
             )
 
     def publish_factsheet(self, mqtt_cli: mqtt.Client) -> None:
-        payload = {
+        payload = self._build_factsheet_payload()
+        publish_json(mqtt_cli, self.factsheet_topic, payload, qos=1, retain=True)
+
+    def _build_factsheet_payload(self) -> dict:
+        """构建 factsheet 载荷骨架，结构与文档一致，便于后续填充真实参数。"""
+        return {
             "header_id": 0,
             "timestamp": get_timestamp(),
             "version": self.config.vehicle.vda_full_version,
             "manufacturer": self.config.vehicle.manufacturer,
             "serial_number": self.config.vehicle.serial_number,
-            "type": "AGV",
-            "capabilities": ["navigation", "translation", "rotation"],
-            "load_capacity_kg": 1000,
+            "typeSpecification": {
+                "seriesName": self.config.vehicle.serial_number,
+                "seriesDescription": self.config.vehicle.serial_number,
+                "agvKinematic": "STEER",
+                "agvClass": "FORKLIFT",
+                "maxLoadMass": 0.5,
+                "localizationTypes": ["SLAM"],
+                "navigationTypes": ["VIRTUAL_LINE_GUIDED"],
+            },
+            "physicalParameters": {
+                "speedMin": 0.01,
+                "speedMax": float(self.config.settings.speed),
+                "accelerationMax": 0.5,
+                "decelerationMax": 0.5,
+                "heightMin": 2.234,
+                "heightMax": 2.234,
+                "width": 0.951,
+                "length": 1.72169,
+            },
+            "protocolLimits": None,
+            "protocolFeatures": None,
+            "agvGeometry": None,
+            "loadSpecification": None,
+            "localizationParameters": None,
         }
-        publish_json(mqtt_cli, self.factsheet_topic, payload, qos=1, retain=True)
+
+    # === Active error injection skeletons ===
+    def inject_navigation_cancel(self) -> None:
+        """主动错误注入接口占位：导航取消。
+
+        保留接口但不执行任何逻辑，后期再实现具体行为。
+        """
+        pass
+
+    def inject_position_jitter(self, sigma: float = 0.05, duration_ms: int = 1000) -> None:
+        """主动错误注入接口占位：位置抖动。
+
+        保留接口但不执行任何逻辑，后期再实现具体行为。
+        """
+        pass
+
+    def inject_reinitialize_random_pose(self, map_name: Optional[str] = None) -> None:
+        """主动错误注入接口占位：随机重置姿态。
+
+        保留接口但不执行任何逻辑，后期再实现具体行为。
+        """
+        pass
 
 
 def create_vehicle(config: Config) -> VehicleSimulator:

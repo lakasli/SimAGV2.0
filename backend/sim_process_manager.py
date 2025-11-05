@@ -21,10 +21,12 @@ class SimulatorProcessManager:
 
     def _powershell_cmd(self, serial: str) -> List[str]:
         """构造 PowerShell 启动命令参数列表。"""
-        # 确保使用绝对路径并正确引用，避免空格路径问题
+        # 确保使用绝对路径并正确引用，避免空格路径问题；使用当前 Python 解释器
+        py_exe = str(sys.executable)
         py_path = str(self.main_py)
         serial_s = str(serial)
-        ps_script = f'python -u "{py_path}" --serial "{serial_s}"'
+        # PowerShell 中使用 & 调用带空格路径的可执行文件
+        ps_script = f'& "{py_exe}" -u "{py_path}" --serial "{serial_s}"'
         return [
             "powershell",
             "-NoProfile",

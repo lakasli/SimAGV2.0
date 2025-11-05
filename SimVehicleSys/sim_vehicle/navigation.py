@@ -302,3 +302,10 @@ def nearest_station(pos: Tuple[float, float], stations: List[dict]) -> Optional[
             best_d = d
             best_id = s["id"]
     return best_id
+
+
+# === Active error injection (map obstacles) skeleton ===
+def inject_random_obstacle(fp: Path, position: Tuple[float, float], radius: float = 0.5) -> None:
+    """在地图中随机位置添加障碍物（骨架：占位，不改动原地图文件）。"""
+    # TODO: 将障碍物以运行时结构记录，并在路径规划/到站检测中参考该结构进行可达性判断。
+    pass

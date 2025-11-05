@@ -217,3 +217,145 @@ def to_camel_json(obj: Any) -> str:
         data = obj if isinstance(obj, dict) else obj.__dict__
     camel_data = _convert_keys_to_camel(data)
     return json.dumps(camel_data, ensure_ascii=False)
+
+# === Trajectory normalization and type helpers ===
+
+def trajectory_type_of(trajectory: Any) -> str:
+    """
+    获取轨迹类型字符串：返回 "Straight" | "CubicBezier" | "INFPNURBS" | "NURBS" | "Unknown"。
+    - 支持 dataclass Trajectory（degree/knot_vector/control_points），或 dict 含 type 字段。
+    """
+    try:
+        t = None
+        if hasattr(trajectory, "type"):
+            t = getattr(trajectory, "type")
+        elif isinstance(trajectory, dict):
+            t = trajectory.get("type")
+        if isinstance(t, str) and t:
+            return t
+        # 根据 degree 推断 NURBS
+        deg = int(getattr(trajectory, "degree", getattr(trajectory, "Degree", 0)) or 0)
+        kv = getattr(trajectory, "knot_vector", getattr(trajectory, "knotVector", None))
+        if deg >= 1 and (kv is not None):
+            return "NURBS"
+    except Exception:
+        pass
+    return "Unknown"
+
+def _default_knot_vector(degree: int, cp_count: int) -> List[float]:
+    """生成均匀结点向量（Open Uniform），用于 NURBS 默认值。"""
+    m = degree + cp_count + 1
+    if degree <= 0 or cp_count <= 0:
+        return [0.0, 1.0]
+    kv: List[float] = []
+    for i in range(m):
+        if i <= degree:
+            kv.append(0.0)
+        elif i >= m - degree - 1:
+            kv.append(1.0)
+        else:
+            kv.append((i - degree) / (m - 2 * degree - 1))
+    return kv
+
+def normalize_trajectory(trajectory: Any) -> Any:
+    """
+    规范化轨迹：
+    - Straight：确保两个控制点存在。
+    - CubicBezier：提供4个控制点；若 knotVector 缺失，转换为等价 NURBS（degree=3）。
+    - INFPNURBS/NURBS：若 knotVector 为空，自动生成默认 knot 向量；若权重缺失，设为1。
+    返回原对象（就地补全）以保持现有调用兼容。
+    """
+    try:
+        t = trajectory_type_of(trajectory)
+        cps = list(getattr(trajectory, "control_points", getattr(trajectory, "controlPoints", [])) or [])
+        # 补齐 weight
+        for cp in cps:
+            try:
+                if isinstance(cp, dict):
+                    cp.setdefault("weight", 1.0)
+                elif hasattr(cp, "weight") and getattr(cp, "weight") is None:
+                    setattr(cp, "weight", 1.0)
+            except Exception:
+                pass
+        if t == "Straight":
+            if len(cps) < 2:
+                while len(cps) < 2:
+                    # 追加零点或复制末点
+                    if cps:
+                        cps.append(cps[-1])
+                    else:
+                        cps.append(type("CP", (), {"x": 0.0, "y": 0.0, "weight": 1.0})())
+            try:
+                setattr(trajectory, "control_points", cps)
+            except Exception:
+                pass
+            return trajectory
+        if t in ("INFPNURBS", "NURBS"):
+            deg = int(getattr(trajectory, "degree", 0) or 0)
+            kv = list(getattr(trajectory, "knot_vector", getattr(trajectory, "knotVector", [])) or [])
+            if not kv:
+                kv = _default_knot_vector(deg, len(cps))
+                try:
+                    setattr(trajectory, "knot_vector", kv)
+                except Exception:
+                    pass
+            return trajectory
+        if t == "CubicBezier":
+            # 缺 knotVector 时，视作 degree=3 NURBS
+            deg = 3
+            kv = list(getattr(trajectory, "knot_vector", getattr(trajectory, "knotVector", [])) or [])
+            if not kv:
+                kv = _default_knot_vector(deg, len(cps))
+                try:
+                    setattr(trajectory, "degree", deg)
+                    setattr(trajectory, "knot_vector", kv)
+                except Exception:
+                    pass
+            return trajectory
+    except Exception:
+        pass
+    return trajectory
+
+def evaluate_bezier(control_points: List[tuple[float, float]], u: float) -> tuple[float, float]:
+    """简单的三次贝塞尔评估。control_points 需为4个 (x,y)。"""
+    if len(control_points) != 4:
+        return control_points[-1] if control_points else (0.0, 0.0)
+    P0, P1, P2, P3 = control_points
+    x = (1 - u) ** 3 * P0[0] + 3 * (1 - u) ** 2 * u * P1[0] + 3 * (1 - u) * u ** 2 * P2[0] + u ** 3 * P3[0]
+    y = (1 - u) ** 3 * P0[1] + 3 * (1 - u) ** 2 * u * P1[1] + 3 * (1 - u) * u ** 2 * P2[1] + u ** 3 * P3[1]
+    return (x, y)
+
+# === Collision geometry helpers ===
+
+def compute_agv_base_polygon(length: float, width: float, pose: tuple[float, float, float]) -> list[tuple[float, float]]:
+    """根据车体长度/宽度与位姿 (x,y,theta)，返回底盘矩形四角的世界坐标点。"""
+    x, y, theta = pose
+    hl = float(length) / 2.0
+    hw = float(width) / 2.0
+    local = [(-hw, -hl), (hw, -hl), (hw, hl), (-hw, hl)]
+    out: list[tuple[float, float]] = []
+    s = math.sin(theta)
+    c = math.cos(theta)
+    for lx, ly in local:
+        wx = x + lx * c + ly * s
+        wy = y - lx * s + ly * c
+        out.append((wx, wy))
+    return out
+
+def compute_outer_bounding_rect(points: list[tuple[float, float]]) -> tuple[float, float, float, float]:
+    """给定多边形点集，返回外包络矩形 (min_x, min_y, max_x, max_y)。"""
+    if not points:
+        return (0.0, 0.0, 0.0, 0.0)
+    xs = [px for px, _ in points]
+    ys = [py for _, py in points]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+def expand_rect(rect: tuple[float, float, float, float], margin: float) -> tuple[float, float, float, float]:
+    """按安全距离放大矩形。"""
+    x1, y1, x2, y2 = rect
+    m = float(margin)
+    return (x1 - m, y1 - m, x2 + m, y2 + m)
+
+def rects_overlap(r1: tuple[float, float, float, float], r2: tuple[float, float, float, float]) -> bool:
+    """快速二维矩形重叠检测。"""
+    return not (r1[2] < r2[0] or r2[2] < r1[0] or r1[3] < r2[1] or r2[3] < r1[1])
