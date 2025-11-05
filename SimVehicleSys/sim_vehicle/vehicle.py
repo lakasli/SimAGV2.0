@@ -687,37 +687,56 @@ class VehicleSimulator:
                     pass
         except Exception:
             pass
-        if target_x is not None and target_y is not None:
-            try:
-                dist = get_distance(vp.x, vp.y, target_x, target_y)
-                # 使用节点允许的 XY 偏差作为到站执行阈值（默认 0.05m）
-                eps_xy = 0.05
-                np_cur = getattr(cur_node, "node_position", None)
-                try:
-                    if np_cur and getattr(np_cur, "allowed_deviation_xy", None) is not None:
-                        eps_xy = float(getattr(np_cur, "allowed_deviation_xy"))
-                except Exception:
-                    pass
-                if dist > eps_xy:
-                    return
-                # 可选的角度偏差判定（若提供 allowedDeviationTheta 且目标有 theta）
-                try:
-                    ttheta = float(getattr(np_cur, "theta", vp.theta or 0.0) or 0.0)
-                    eps_th = float(getattr(np_cur, "allowed_deviation_theta", 0.0) or 0.0)
-                    if eps_th > 0.0:
-                        def _norm(a: float) -> float:
-                            pi = math.pi
-                            return (a + pi) % (2 * pi) - pi
-                        if abs(_norm(ttheta - float(vp.theta or 0.0))) > eps_th:
-                            return
-                except Exception:
-                    pass
-            except Exception:
-                # 距离计算异常则保守不执行
-                return
+        # 到站距离与角度偏差的判定由下方“节点坐标/地图坐标双判定”统一处理
         # 执行动作：支持托盘顶升/顶降（JackLoad/JackUnload）以及充电任务（StartCharging）
+        # 到站判定：同时支持节点坐标与地图站点坐标，两者任一满足阈值即视为到站
         node_actions = self.order.nodes[idx].actions or []
         if node_actions:
+            # 计算节点坐标与地图站点坐标的到站距离
+            dist_np = None
+            dist_map = None
+            # 统一默认到站阈值为 0.2m，与 _detect_arrival_and_prune_states 保持一致
+            eps_xy_np = 0.2
+            eps_xy_map = 0.2
+            try:
+                cur_node = self.order.nodes[idx]
+                vp = self.state.agv_position
+                np_cur = getattr(cur_node, "node_position", None)
+                if np_cur is not None and vp is not None:
+                    try:
+                        eps_xy_np = float(getattr(np_cur, "allowed_deviation_xy", eps_xy_np) or eps_xy_np)
+                    except Exception:
+                        pass
+                    try:
+                        tx_np = float(getattr(np_cur, "x", vp.x))
+                        ty_np = float(getattr(np_cur, "y", vp.y))
+                        dist_np = get_distance(vp.x, vp.y, tx_np, ty_np)
+                    except Exception:
+                        dist_np = None
+                # 地图站点坐标作为兜底（即便节点上有坐标也尝试解析）
+                try:
+                    map_name = self.nav_map_name or (vp.map_id if vp else None)
+                    if map_name:
+                        fp = resolve_scene_path(map_name)
+                        pos = find_station_position(fp, str(getattr(cur_node, "node_id", "") or ""))
+                        if pos is not None and vp is not None:
+                            try:
+                                np_allowed = getattr(np_cur, "allowed_deviation_xy", None) if np_cur is not None else None
+                                eps_xy_map = float(np_allowed) if (np_allowed is not None) else eps_xy_map
+                            except Exception:
+                                pass
+                            dist_map = get_distance(vp.x, vp.y, float(pos[0]), float(pos[1]))
+                except Exception:
+                    dist_map = None
+            except Exception:
+                pass
+            # 若任一距离满足阈值，允许执行动作
+            def _arrived() -> bool:
+                ok_np = (dist_np is not None) and (float(dist_np) <= float(eps_xy_np))
+                ok_map = (dist_map is not None) and (float(dist_map) <= float(eps_xy_map))
+                return bool(ok_np or ok_map)
+            if not _arrived():
+                return
             for st in self.state.action_states:
                 for a in node_actions:
                     if st.action_id == a.action_id and st.action_status == ActionStatus.Waiting:
@@ -799,7 +818,7 @@ class VehicleSimulator:
         distance = get_distance(vp.x, vp.y, np.x, np.y)
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
         dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
-        # 使用节点允许的 XY 偏差作为到站阈值（若提供）
+        # 使用节点允许的 XY 偏差作为到站阈值
         xy_eps = 0.1
         try:
             if np and getattr(np, "allowed_deviation_xy", None) is not None:

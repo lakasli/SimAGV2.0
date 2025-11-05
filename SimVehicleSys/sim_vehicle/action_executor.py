@@ -182,10 +182,16 @@ async def execute_points_movement(
         if "theta" not in p:
             target_theta = math.atan2(tx - sx, ty - sy)
         angle_diff = _normalize_angle(target_theta - current_theta)
-
-        # 旋转：遵循允许旋转与最大旋转速度、角度偏差阈值
+        
+        # 旋转：遵循允许旋转与最大旋转速度、角度/距离偏差阈值
         rotate_ok = True if rotation_allowed is None else bool(rotation_allowed)
         theta_eps = 0.1 if allowed_deviation_theta is None else float(allowed_deviation_theta)
+        xy_eps = 0.05 if allowed_deviation_xy is None else max(0.0, float(allowed_deviation_xy))
+        dist_to_target = math.hypot(tx - sx, ty - sy)
+        # 若当前位置与目标已在允许范围内，直接跳过该点
+        if dist_to_target <= xy_eps and abs(angle_diff) <= theta_eps:
+            await asyncio.sleep(delay_sec)
+            continue
         if rotate_ok and abs(angle_diff) > theta_eps:
             # 每步最大旋转：优先使用 max_rotation_speed（rad/s）与 delay_sec 推导
             rlimit = 0.08 * scale
@@ -203,8 +209,11 @@ async def execute_points_movement(
                 await asyncio.sleep(delay_sec)
                 sx, sy, current_theta = _get_current_pose()
                 angle_diff = _normalize_angle(target_theta - current_theta)
+            # 旋转完成后，仅在距离超出阈值时才进行精确 XY 对齐
             try:
-                agv_mgr.update_dynamic(serial, DynamicConfigUpdate(position=Position(x=tx, y=ty)))
+                sx2, sy2, _ = _get_current_pose()
+                if math.hypot(tx - sx2, ty - sy2) > xy_eps:
+                    agv_mgr.update_dynamic(serial, DynamicConfigUpdate(position=Position(x=tx, y=ty)))
             except Exception:
                 pass
             await asyncio.sleep(delay_sec)
@@ -238,6 +247,9 @@ async def execute_points_movement(
                 except Exception:
                     pass
                 await asyncio.sleep(delay_sec)
+                # 若已在允许的 XY 距离范围内，提前结束该点的平移
+                if math.hypot(tx - bx, ty - by) <= xy_eps:
+                    break
 
 
 def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_parameters: Optional[List[Any]] = None) -> None:
