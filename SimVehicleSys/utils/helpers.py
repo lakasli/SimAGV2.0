@@ -160,8 +160,21 @@ def iterate_position_with_straight_line(current_x: float, current_y: float, targ
 
 
 def iterate_position_with_trajectory(current_x: float, current_y: float, target_x: float, target_y: float, speed: float, trajectory: Any) -> tuple[float, float, float]:
-    if int(trajectory.degree) == 1 and len(trajectory.control_points) == 2:
-        return iterate_position_with_straight_line(current_x, current_y, target_x, target_y, speed, trajectory)
+    # 直线快速路径（degree=1 且两个控制点）
+    if int(getattr(trajectory, "degree", 0)) == 1 and len(getattr(trajectory, "control_points", [])) == 2:
+        nx, ny, th = iterate_position_with_straight_line(current_x, current_y, target_x, target_y, speed, trajectory)
+        # 方向/朝向修正
+        try:
+            direction = str(getattr(trajectory, "direction", "") or "").upper()
+            orient = getattr(trajectory, "orientation", None)
+            if direction in ("BACKWARD", "REVERSE", "BACK"):
+                th = ((th + math.pi) + math.pi) % (2 * math.pi) - math.pi
+            if orient is not None:
+                th = float(orient)
+        except Exception:
+            pass
+        return (nx, ny, th)
+    # NURBS 通用路径
     current_u = find_closest_parameter(trajectory, current_x, current_y)
     num_samples = 100
     total_length = 0.0
@@ -175,13 +188,23 @@ def iterate_position_with_trajectory(current_x: float, current_y: float, target_
         prev_x, prev_y = x, y
         first = False
     parameter_step = (speed / total_length) if total_length > 0 else speed * 0.5
-    if int(trajectory.degree) == 2:
+    if int(getattr(trajectory, "degree", 0)) == 2:
         parameter_step = min(parameter_step, 0.05)
     else:
         parameter_step = min(parameter_step, 0.1)
     next_u = min(1.0, current_u + parameter_step)
     next_x, next_y, explicit_theta, _, tangent_theta, has_explicit_theta = evaluate_nurbs_with_tangent(trajectory, next_u)
     final_theta = explicit_theta if has_explicit_theta else tangent_theta
+    # 方向/朝向修正
+    try:
+        direction = str(getattr(trajectory, "direction", "") or "").upper()
+        orient = getattr(trajectory, "orientation", None)
+        if direction in ("BACKWARD", "REVERSE", "BACK"):
+            final_theta = ((final_theta + math.pi) + math.pi) % (2 * math.pi) - math.pi
+        if orient is not None and str(getattr(trajectory, "orientation_type", "")).upper() in ("ABSOLUTE", "FIXED", "CONST"):
+            final_theta = float(orient)
+    except Exception:
+        pass
     distance_to_target = get_distance(next_x, next_y, target_x, target_y)
     if distance_to_target <= speed:
         return (target_x, target_y, final_theta)
@@ -190,6 +213,16 @@ def iterate_position_with_trajectory(current_x: float, current_y: float, target_
         angle = math.atan2(target_x - next_x, target_y - next_y)
         final_x = next_x + speed * math.sin(angle)
         final_y = next_y + speed * math.cos(angle)
+        # 方向/朝向修正
+        try:
+            direction = str(getattr(trajectory, "direction", "") or "").upper()
+            orient = getattr(trajectory, "orientation", None)
+            if direction in ("BACKWARD", "REVERSE", "BACK"):
+                angle = ((angle + math.pi) + math.pi) % (2 * math.pi) - math.pi
+            if orient is not None and str(getattr(trajectory, "orientation_type", "")).upper() in ("ABSOLUTE", "FIXED", "CONST"):
+                angle = float(orient)
+        except Exception:
+            pass
         return (final_x, final_y, angle)
     return (next_x, next_y, final_theta)
 
@@ -224,6 +257,7 @@ def trajectory_type_of(trajectory: Any) -> str:
     """
     获取轨迹类型字符串：返回 "Straight" | "CubicBezier" | "INFPNURBS" | "NURBS" | "Unknown"。
     - 支持 dataclass Trajectory（degree/knot_vector/control_points），或 dict 含 type 字段。
+    - 兼容别名："CubicBeizer" 视为 "CubicBezier"。
     """
     try:
         t = None
@@ -232,7 +266,10 @@ def trajectory_type_of(trajectory: Any) -> str:
         elif isinstance(trajectory, dict):
             t = trajectory.get("type")
         if isinstance(t, str) and t:
-            return t
+            up = t.strip()
+            if up == "CubicBeizer":
+                return "CubicBezier"
+            return up
         # 根据 degree 推断 NURBS
         deg = int(getattr(trajectory, "degree", getattr(trajectory, "Degree", 0)) or 0)
         kv = getattr(trajectory, "knot_vector", getattr(trajectory, "knotVector", None))

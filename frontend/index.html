@@ -1394,7 +1394,7 @@
     function loadPallet(id) {
       const robot = registeredRobots.find(r => r.robot_name === id);
       if (!robot) return;
-      if (robot.hasPallet) return; // 已有则忽略
+      if (robot.hasPallet) return; 
       // 初始化动画参数
       robot._palletAnimLoading = true;
       robot._palletAnimStart = performance.now();
@@ -1509,68 +1509,85 @@
       };
     }
 
-    // 解析 binLocationsList，按 pointName 建立索引：{ pointName -> { locationNames:[], binTaskStrings:[], binTaskObjects:[] } }
+    // 解析 binLocationList，按楼层分别建立索引：
+    // { byFloor: [ Map(pointNameUpper -> { locationNames, binTaskStrings, binTaskObjects }) ] }
+    // 注意：不跨楼层聚合，同名点位仅在当前楼层显示其对应的库位信息。
     function buildBinLocationIndex(layers) {
-      const byPointName = new Map();
+      const byFloor = [];
 
-      function recordEntry(pointName, instanceName, binTaskString) {
-        if (!pointName) return;
-        const key = String(pointName).trim().toUpperCase();
-        let entry = byPointName.get(key);
-        if (!entry) { entry = { locationNames: [], binTaskStrings: [], binTaskObjects: [] }; byPointName.set(key, entry); }
-        if (instanceName) entry.locationNames.push(String(instanceName).trim());
-        if (typeof binTaskString === 'string' && binTaskString.trim() !== '') {
-          entry.binTaskStrings.push(binTaskString);
-          try {
-            const parsed = JSON.parse(binTaskString);
-            entry.binTaskObjects.push(parsed);
-          } catch (_) {
-            // 非 JSON 内容时忽略解析错误，仅保留字符串
-          }
-        }
-      }
+      function buildIndexForLayer(layer) {
+        const byPointName = new Map();
 
-      function traverse(obj) {
-        if (!obj) return;
-        if (Array.isArray(obj)) { obj.forEach(traverse); return; }
-        if (typeof obj === 'object') {
-          if (Array.isArray(obj.binLocationList)) {
-            for (const loc of obj.binLocationList) {
-              const pName = String(loc?.pointName || '').trim();
-              const iName = String(loc?.instanceName || '').trim();
-              const props = Array.isArray(loc?.property) ? loc.property : (Array.isArray(loc?.properties) ? loc.properties : []);
-              let taskStrs = [];
-              for (const prop of (props || [])) {
-                if (prop && String(prop.key || '').trim() === 'binTask' && typeof prop.stringValue === 'string') {
-                  taskStrs.push(prop.stringValue);
-                }
-              }
-              if (taskStrs.length === 0) {
-                // 某些地图可能将 JSON 存在 "value" 中（Base64 或其它），此处仅兜底尝试字符串字段
-                // 若无可用字符串，则仍记录库位名称，库位详情为空
-                recordEntry(pName, iName, undefined);
-              } else {
-                for (const s of taskStrs) recordEntry(pName, iName, s);
-              }
+        function recordEntry(pointName, instanceName, binTaskString) {
+          if (!pointName) return;
+          const key = String(pointName).trim().toUpperCase();
+          let entry = byPointName.get(key);
+          if (!entry) { entry = { locationNames: [], binTaskStrings: [], binTaskObjects: [] }; byPointName.set(key, entry); }
+          if (instanceName) entry.locationNames.push(String(instanceName).trim());
+          if (typeof binTaskString === 'string' && binTaskString.trim() !== '') {
+            entry.binTaskStrings.push(binTaskString);
+            try {
+              const parsed = JSON.parse(binTaskString);
+              entry.binTaskObjects.push(parsed);
+            } catch (_) {
+              // 非 JSON 内容时忽略解析错误，仅保留字符串
             }
           }
-          // 继续递归对象子键
-          for (const k in obj) {
-            if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
-            const v = obj[k];
-            if (v && (typeof v === 'object' || Array.isArray(v))) traverse(v);
+        }
+
+        function traverse(obj) {
+          if (!obj) return;
+          if (Array.isArray(obj)) { obj.forEach(traverse); return; }
+          if (typeof obj === 'object') {
+            if (Array.isArray(obj.binLocationList)) {
+              for (const loc of obj.binLocationList) {
+                const pName = String(loc?.pointName || '').trim();
+                const iName = String(loc?.instanceName || '').trim();
+                const props = Array.isArray(loc?.property) ? loc.property : (Array.isArray(loc?.properties) ? loc.properties : []);
+                let taskStrs = [];
+                for (const prop of (props || [])) {
+                  if (prop && String(prop.key || '').trim() === 'binTask' && typeof prop.stringValue === 'string') {
+                    taskStrs.push(prop.stringValue);
+                  }
+                }
+                if (taskStrs.length === 0) {
+                  // 某些地图可能将 JSON 存在 "value" 中（Base64 或其它），此处仅兜底尝试字符串字段
+                  // 若无可用字符串，则仍记录库位名称，库位详情为空
+                  recordEntry(pName, iName, undefined);
+                } else {
+                  for (const s of taskStrs) recordEntry(pName, iName, s);
+                }
+              }
+            }
+            // 继续递归对象子键（仅遍历当前楼层对象）
+            for (const k in obj) {
+              if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+              const v = obj[k];
+              if (v && (typeof v === 'object' || Array.isArray(v))) traverse(v);
+            }
           }
         }
+
+        try { traverse(layer); } catch (_) {}
+        return byPointName;
       }
 
-      try { (layers || []).forEach(traverse); } catch (_) {}
-      window.binLocationIndex = { byPointName };
+      try {
+        for (const layer of (layers || [])) {
+          byFloor.push(buildIndexForLayer(layer));
+        }
+      } catch (_) { /* 忽略异常 */ }
+
+      window.binLocationIndex = { byFloor };
     }
 
+    // 在当前楼层查找点位对应的库位信息，不跨楼层聚合
     function lookupBinLocationInfo(pointName) {
       const key = String(pointName || '').trim().toUpperCase();
-      const byPointName = window.binLocationIndex?.byPointName;
-      return (byPointName && byPointName.get(key)) || null;
+      const idx = (typeof currentFloorIndex === 'number') ? currentFloorIndex : 0;
+      const byFloor = window.binLocationIndex?.byFloor;
+      const map = Array.isArray(byFloor) ? byFloor[idx] : null;
+      return (map && map.get(key)) || null;
     }
 
     // 将 binTaskObjects 中的操作列表格式化为可读文本
@@ -2053,20 +2070,15 @@
       ctx.fill();
       ctx.stroke();
 
-      // 托盘绘制：若有模型 footprint（米），按米转换；否则按默认比例
-      const bodySize = 24;
-      let palletW = bodySize * 1.20;
-      let palletL = bodySize * 1.10;
-      try {
-        const fp = robot.shelfModel && robot.shelfModel.footprint;
-        const wm = Number(fp && (fp.width_m ?? fp.width));
-        const lm = Number(fp && (fp.length_m ?? fp.length));
-        if (isFinite(wm) && isFinite(lm) && wm > 0 && lm > 0) {
-          const meterScale = 20; // 与 worldToScreen 保持一致
-          palletW = wm * meterScale;
-          palletL = lm * meterScale;
-        }
-      } catch (_) {}
+      // 托盘绘制：模型 footprint（米），按米转换
+      const fp = robot.shelfModel && robot.shelfModel.footprint;
+      const wm = Number(fp && (fp.width_m ?? fp.width));
+      const lm = Number(fp && (fp.length_m ?? fp.length));
+      if (isFinite(wm) && isFinite(lm) && wm > 0 && lm > 0) {
+        const meterScale = 20; // 与 worldToScreen 保持一致
+        palletW = wm * meterScale;
+        palletL = lm * meterScale;
+      }
       const shouldDrawPallet = !!robot.hasPallet || !!robot._palletAnimLoading || !!robot._palletAnimUnloading;
       if (shouldDrawPallet) {
         // 动画：加载时 3 秒淡入，并略微上滑（+6px 到 0），最终与身体居中重合

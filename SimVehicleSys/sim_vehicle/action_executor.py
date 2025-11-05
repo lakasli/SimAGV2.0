@@ -107,6 +107,11 @@ async def execute_points_movement(
     agv_mgr: Any,
     ws_mgr: Any,
     delay_sec: float = 0.05,
+    max_speed: Optional[float] = None,
+    rotation_allowed: Optional[bool] = None,
+    max_rotation_speed: Optional[float] = None,
+    allowed_deviation_xy: Optional[float] = None,
+    allowed_deviation_theta: Optional[float] = None,
 ) -> None:
     """沿点序列执行平滑运动（含旋转/平移）。
 
@@ -178,10 +183,19 @@ async def execute_points_movement(
             target_theta = math.atan2(tx - sx, ty - sy)
         angle_diff = _normalize_angle(target_theta - current_theta)
 
-        if abs(angle_diff) > 0.1:
-            max_step = 0.08 * scale
-            while abs(angle_diff) > 0.1:
-                rot_step = math.copysign(min(abs(angle_diff), max_step), angle_diff)
+        # 旋转：遵循允许旋转与最大旋转速度、角度偏差阈值
+        rotate_ok = True if rotation_allowed is None else bool(rotation_allowed)
+        theta_eps = 0.1 if allowed_deviation_theta is None else float(allowed_deviation_theta)
+        if rotate_ok and abs(angle_diff) > theta_eps:
+            # 每步最大旋转：优先使用 max_rotation_speed（rad/s）与 delay_sec 推导
+            rlimit = 0.08 * scale
+            try:
+                if max_rotation_speed is not None:
+                    rlimit = max(1e-6, float(max_rotation_speed) * float(delay_sec))
+            except Exception:
+                pass
+            while abs(angle_diff) > theta_eps:
+                rot_step = math.copysign(min(abs(angle_diff), rlimit), angle_diff)
                 try:
                     agv_mgr.move_rotate(serial, rot_step)
                 except Exception:
@@ -197,13 +211,25 @@ async def execute_points_movement(
         else:
             P0, P1, P2, P3 = _bezier_control_points(sx, sy, current_theta, tx, ty, target_theta)
             dist = math.hypot(tx - sx, ty - sy)
-            steps = max(12, min(60, int(dist * 20))) if dist > 0.0 else 12
+            # 平移步数：遵循最大速度（米/秒），每步位移不超过 max_speed * delay_sec
+            if max_speed is not None and max_speed > 0:
+                try:
+                    max_step_dist = float(max_speed) * float(delay_sec)
+                    steps = max(12, min(200, int(math.ceil(dist / max_step_dist)))) if dist > 0.0 else 12
+                except Exception:
+                    steps = max(12, min(60, int(dist * 20))) if dist > 0.0 else 12
+            else:
+                steps = max(12, min(60, int(dist * 20))) if dist > 0.0 else 12
             for i in range(1, steps + 1):
                 t = i / steps
                 bx, by = _bezier_point(P0, P1, P2, P3, t)
                 btheta = _bezier_tangent_theta(P0, P1, P2, P3, t)
                 _, _, cur_theta = _get_current_pose()
-                smooth_theta = _step_towards(cur_theta, btheta, max_delta=0.15 * scale)
+                # 若禁止旋转，则保持当前朝向
+                if rotate_ok:
+                    smooth_theta = _step_towards(cur_theta, btheta, max_delta=0.15 * scale)
+                else:
+                    smooth_theta = cur_theta
                 try:
                     agv_mgr.update_dynamic(
                         serial,

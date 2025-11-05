@@ -90,7 +90,15 @@ def _parse_trajectory(d: Optional[JsonDict]) -> Optional[Trajectory]:
                 orientation=_get(cp, "orientation", default=None),
             ))
         # Build Trajectory dataclass using typed lists
-        return Trajectory(degree=degree, knot_vector=[float(k) for k in knots], control_points=cps)
+        traj = Trajectory(degree=degree, knot_vector=[float(k) for k in knots], control_points=cps)
+        # 保留 type 字段（如存在），兼容 Straight/CubicBezier/INFPNURBS
+        try:
+            t = _get(d, "type", default=None)
+            if isinstance(t, str) and t:
+                setattr(traj, "type", t)
+        except Exception:
+            pass
+        return traj
     except Exception:
         return None
 
@@ -139,6 +147,20 @@ def _parse_edges(arr: Optional[Iterable[JsonDict]]) -> List[Edge]:
             trajectory=traj,
             actions=actions,
         ))
+        # 将边的方向/朝向信息附加到轨迹对象，供规划/运动模块使用
+        try:
+            if traj is not None:
+                orient = _get(e, "orientation", default=None)
+                if orient is not None:
+                    setattr(traj, "orientation", orient)
+                orient_type = _get(e, "orientationType", default=None)
+                if orient_type is not None:
+                    setattr(traj, "orientation_type", orient_type)
+                direction = _get(e, "direction", default=None)
+                if direction is not None:
+                    setattr(traj, "direction", direction)
+        except Exception:
+            pass
     return edges
 
 

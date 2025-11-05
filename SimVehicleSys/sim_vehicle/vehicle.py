@@ -690,8 +690,28 @@ class VehicleSimulator:
         if target_x is not None and target_y is not None:
             try:
                 dist = get_distance(vp.x, vp.y, target_x, target_y)
-                if dist > 0.01:
+                # 使用节点允许的 XY 偏差作为到站执行阈值（默认 0.05m）
+                eps_xy = 0.05
+                np_cur = getattr(cur_node, "node_position", None)
+                try:
+                    if np_cur and getattr(np_cur, "allowed_deviation_xy", None) is not None:
+                        eps_xy = float(getattr(np_cur, "allowed_deviation_xy"))
+                except Exception:
+                    pass
+                if dist > eps_xy:
                     return
+                # 可选的角度偏差判定（若提供 allowedDeviationTheta 且目标有 theta）
+                try:
+                    ttheta = float(getattr(np_cur, "theta", vp.theta or 0.0) or 0.0)
+                    eps_th = float(getattr(np_cur, "allowed_deviation_theta", 0.0) or 0.0)
+                    if eps_th > 0.0:
+                        def _norm(a: float) -> float:
+                            pi = math.pi
+                            return (a + pi) % (2 * pi) - pi
+                        if abs(_norm(ttheta - float(vp.theta or 0.0))) > eps_th:
+                            return
+                except Exception:
+                    pass
             except Exception:
                 # 距离计算异常则保守不执行
                 return
@@ -763,7 +783,14 @@ class VehicleSimulator:
             is_start_of_order = int(getattr(self.state, "last_node_sequence_id", 0) or 0) == 0
             cur_theta = float(vp.theta or 0.0)
             angle_diff = _norm(float(updated_theta) - cur_theta)
-            if is_start_of_order and abs(angle_diff) > 1e-3:
+            # 使用节点允许角度偏差作为对齐阈值（若提供）
+            align_eps = 1e-3
+            try:
+                if np and getattr(np, "allowed_deviation_theta", None) is not None:
+                    align_eps = float(np.allowed_deviation_theta)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            if is_start_of_order and abs(angle_diff) > align_eps:
                 # 起步阶段仅转向，不更新平移，避免漂移
                 applyRotationStepInSim(self, float(updated_theta), base_step=0.15)
                 return
@@ -772,7 +799,14 @@ class VehicleSimulator:
         distance = get_distance(vp.x, vp.y, np.x, np.y)
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
         dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
-        should_arrive = distance < (float(self.config.settings.speed) * scale * dt) + 0.1
+        # 使用节点允许的 XY 偏差作为到站阈值（若提供）
+        xy_eps = 0.1
+        try:
+            if np and getattr(np, "allowed_deviation_xy", None) is not None:
+                xy_eps = float(np.allowed_deviation_xy)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        should_arrive = distance < (float(self.config.settings.speed) * scale * dt) + xy_eps
         next_node_id = next_node.node_id
         next_node_seq = next_node.sequence_id
         applyTranslateStepInSim(self, float(updated_x), float(updated_y))
@@ -780,7 +814,21 @@ class VehicleSimulator:
         def _norm(a: float) -> float:
             pi = math.pi
             return (a + pi) % (2 * pi) - pi
-        applyRotationStepInSim(self, float(updated_theta), base_step=0.15)
+        # 若上一条边限制旋转，则跳过旋转；否则按最大旋转速度约束步进
+        try:
+            prev_edge = next((e for e in self.state.edge_states if e.sequence_id == next_node.sequence_id - 1), None)
+            rotation_allowed = True if prev_edge is None else bool(getattr(prev_edge, "rotation_allowed", True))
+            if rotation_allowed:
+                max_rot_speed = None if prev_edge is None else getattr(prev_edge, "max_rotation_speed", None)
+                base = 0.15
+                if max_rot_speed is not None:
+                    try:
+                        base = float(max_rot_speed) * float(dt) / max(0.0001, float(self.config.settings.sim_time_scale))
+                    except Exception:
+                        base = 0.15
+                applyRotationStepInSim(self, float(updated_theta), base_step=float(base))
+        except Exception:
+            applyRotationStepInSim(self, float(updated_theta), base_step=0.15)
         if should_arrive:
             if self.state.node_states:
                 self.state.node_states.pop(0)
@@ -1092,7 +1140,6 @@ class VehicleSimulator:
                 orig_y = float(pts[0].get("y", vp.y))
                 cur_x = float(vp.x)
                 cur_y = float(vp.y)
-                # 更新首点坐标为当前坐标；保持朝向与第二点一致（若存在）
                 pts[0]["x"] = cur_x
                 pts[0]["y"] = cur_y
                 if len(pts) >= 2:
@@ -1172,8 +1219,14 @@ class VehicleSimulator:
             pos = None
         if not pos:
             return
-        # 距离阈值判定（find_station_position 返回 (x, y) 元组）
+        # 距离阈值判定（find_station位置返回 (x, y) 元组），支持节点允许偏差
         arrive_threshold = 0.2
+        try:
+            np_next = getattr(next_node, "node_position", None)
+            if np_next and getattr(np_next, "allowed_deviation_xy", None) is not None:
+                arrive_threshold = float(getattr(np_next, "allowed_deviation_xy"))
+        except Exception:
+            pass
         dx = float(self.state.agv_position.x) - float(pos[0])
         dy = float(self.state.agv_position.y) - float(pos[1])
         if dx * dx + dy * dy > arrive_threshold * arrive_threshold:
@@ -1203,7 +1256,14 @@ class VehicleSimulator:
         next_edge = next((e for e in self.state.edge_states if e.sequence_id == next_node.sequence_id - 1), None)
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
         dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
-        speed = float(self.config.settings.speed) * scale * dt
+        # 使用边的 maxSpeed 作为上限（若提供）
+        base_speed = float(self.config.settings.speed)
+        try:
+            if next_edge is not None and getattr(next_edge, "max_speed", None) is not None:
+                base_speed = min(base_speed, float(getattr(next_edge, "max_speed")))
+        except Exception:
+            pass
+        speed = float(base_speed) * scale * dt
         if next_edge and next_edge.trajectory is not None:
             try:
                 normalize_trajectory(next_edge.trajectory)

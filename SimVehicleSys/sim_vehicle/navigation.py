@@ -3,6 +3,12 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import json
 import math
+from SimVehicleSys.utils.helpers import (
+    evaluate_nurbs_with_tangent,
+    evaluate_bezier,
+    normalize_trajectory,
+    trajectory_type_of,
+)
 
 
 project_root = Path(__file__).resolve().parents[2]
@@ -302,6 +308,80 @@ def nearest_station(pos: Tuple[float, float], stations: List[dict]) -> Optional[
             best_d = d
             best_id = s["id"]
     return best_id
+
+
+# === Trajectory → polyline sampling (Straight / CubicBezier / INFPNURBS) ===
+def trajectory_polyline(
+    trajectory: any,
+    start: Tuple[float, float],
+    end: Tuple[float, float],
+    steps: int = 50,
+    orientation: Optional[float] = None,
+    direction: Optional[str] = None,
+) -> List[dict]:
+    """将订单轨迹采样为多段点列，支持 Straight / CubicBezier / INFPNURBS。
+
+    - orientation: 若提供且类型为绝对朝向，则覆盖切线朝向。
+    - direction: 若为 BACKWARD/REVERSE，则在朝向上加 π。
+    """
+    try:
+        normalize_trajectory(trajectory)
+    except Exception:
+        pass
+    ttype = trajectory_type_of(trajectory)
+    pts: List[dict] = []
+    sx, sy = float(start[0]), float(start[1])
+    ex, ey = float(end[0]), float(end[1])
+    dir_up = str(direction or getattr(trajectory, "direction", "") or "").upper()
+    def _apply_dir_theta(th: float) -> float:
+        if dir_up in ("BACKWARD", "REVERSE", "BACK"):
+            return (th + math.pi)
+        return th
+    if ttype == "Straight":
+        steps = max(2, int(steps))
+        for i in range(steps + 1):
+            t = i / steps
+            x = sx + t * (ex - sx)
+            y = sy + t * (ey - sy)
+            # 默认沿线切线为朝向（以 +Y 为 0 度定义）
+            th = math.atan2(ex - sx, ey - sy)
+            if orientation is not None:
+                th = float(orientation)
+            th = _apply_dir_theta(th)
+            pts.append({"x": x, "y": y, "theta": th})
+        return pts
+    if ttype == "CubicBezier":
+        cps = getattr(trajectory, "control_points", [])
+        control_pts = [(float(cps[i].x), float(cps[i].y)) for i in range(min(4, len(cps)))] if cps else [(sx, sy), (sx, sy), (ex, ey), (ex, ey)]
+        steps = max(10, int(steps))
+        prev_x = None
+        prev_y = None
+        for i in range(steps + 1):
+            u = i / steps
+            bx, by = evaluate_bezier(control_pts, u)
+            if prev_x is not None and prev_y is not None:
+                dx = bx - prev_x
+                dy = by - prev_y
+                th = math.atan2(dx, dy)
+            else:
+                th = math.atan2(ex - sx, ey - sy)
+            if orientation is not None:
+                th = float(orientation)
+            th = _apply_dir_theta(th)
+            pts.append({"x": bx, "y": by, "theta": th})
+            prev_x, prev_y = bx, by
+        return pts
+    # 默认按 NURBS 处理（兼容 INFPNURBS/NURBS）
+    steps = max(20, int(steps))
+    for i in range(steps + 1):
+        u = i / steps
+        nx, ny, explicit_theta, _, tangent_theta, has_explicit_theta = evaluate_nurbs_with_tangent(trajectory, u)
+        th = explicit_theta if has_explicit_theta else tangent_theta
+        if orientation is not None:
+            th = float(orientation)
+        th = _apply_dir_theta(th)
+        pts.append({"x": nx, "y": ny, "theta": th})
+    return pts
 
 
 # === Active error injection (map obstacles) skeleton ===
