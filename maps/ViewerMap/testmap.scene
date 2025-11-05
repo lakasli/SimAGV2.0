@@ -26429,7 +26429,7 @@
             }
         },
         "id": 11476,
-        "name": "beidaceshi-08221401",
+        "name": "test1",
         "width": 94.744,
         "height": 79.96,
         "setting": "",
@@ -28209,7 +28209,6 @@
         },
         "robotGroups": [],
         "robotLabels": [],
-        "floors": 1,
         "robots": [],
         "points": [
             {
@@ -30220,7 +30219,6 @@
         },
         "robotGroups": [],
         "robotLabels": [],
-        "floors": 1,
         "robots": [],
         "points": [
             {
@@ -45452,7 +45450,6 @@
         },
         "robotGroups": [],
         "robotLabels": [],
-        "floors": 1,
         "robots": [],
         "points": [
             {
