@@ -331,8 +331,88 @@ def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_para
                         load_dimensions=ldim,
                     )
                 ]
+                # 设置叉高（米）：默认 0.1m，若存在边约束则按 [minHeight, maxHeight] 夹取
+                try:
+                    default_h = 0.1
+                    min_h = None
+                    max_h = None
+                    try:
+                        seq = int(getattr(sim_vehicle.state, "last_node_sequence_id", 0) or 0)
+                        edges = list(getattr(sim_vehicle.state, "edge_states", []) or [])
+                        for e in edges:
+                            try:
+                                s = int(getattr(e, "sequence_id", -999) or -999)
+                            except Exception:
+                                s = -999
+                            if s in (seq - 1, seq):
+                                if getattr(e, "min_height", None) is not None:
+                                    try:
+                                        min_h = float(getattr(e, "min_height"))
+                                    except Exception:
+                                        pass
+                                if getattr(e, "max_height", None) is not None:
+                                    try:
+                                        max_h = float(getattr(e, "max_height"))
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        pass
+                    h = float(default_h)
+                    if min_h is not None:
+                        try:
+                            h = max(h, float(min_h))
+                        except Exception:
+                            pass
+                    if max_h is not None:
+                        try:
+                            h = min(h, float(max_h))
+                        except Exception:
+                            pass
+                    sim_vehicle.state.fork_state.fork_height = float(h)
+                except Exception:
+                    pass
             else:
                 sim_vehicle.state.loads = []
+                # 卸货同时将叉高清零（米）：默认 0.0m；若存在边约束则按 [minHeight, maxHeight] 夹取
+                try:
+                    default_h = 0.0
+                    min_h = None
+                    max_h = None
+                    try:
+                        seq = int(getattr(sim_vehicle.state, "last_node_sequence_id", 0) or 0)
+                        edges = list(getattr(sim_vehicle.state, "edge_states", []) or [])
+                        for e in edges:
+                            try:
+                                s = int(getattr(e, "sequence_id", -999) or -999)
+                            except Exception:
+                                s = -999
+                            if s in (seq - 1, seq):
+                                if getattr(e, "min_height", None) is not None:
+                                    try:
+                                        min_h = float(getattr(e, "min_height"))
+                                    except Exception:
+                                        pass
+                                if getattr(e, "max_height", None) is not None:
+                                    try:
+                                        max_h = float(getattr(e, "max_height"))
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        pass
+                    h = float(default_h)
+                    if min_h is not None:
+                        try:
+                            h = max(h, float(min_h))
+                        except Exception:
+                            pass
+                    if max_h is not None:
+                        try:
+                            h = min(h, float(max_h))
+                        except Exception:
+                            pass
+                    sim_vehicle.state.fork_state.fork_height = float(h)
+                except Exception:
+                    pass
         except Exception:
             pass
         try:

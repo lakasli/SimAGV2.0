@@ -1,0 +1,94 @@
+{
+  "headerId": 902,
+  "timestamp": "2025-11-06T06:20:04.393Z",
+  "version": "v2",
+  "manufacturer": "SEER",
+  "serialNumber": "AMB-01",
+  "driving": true,
+  "operatingMode": "AUTOMATIC",
+  "nodeStates": [],
+  "edgeStates": [],
+  "lastNodeId": "AP5",
+  "orderId": "75982a12-7b9a-48a3-a8f7-efa1ee1cc465",
+  "orderUpdateId": 0,
+  "lastNodeSequenceId": 2,
+  "actionStates": [
+    {
+      "actionId": "act-1762390872680",
+      "actionStatus": "WAITING",
+      "actionType": "JackUnload",
+      "actionDescription": "JackUnload",
+      "resultDescription": null
+    }
+  ],
+  "information": [
+    {
+      "infoType": "PalletAction",
+      "infoReferences": [
+        {
+          "referenceKey": "operation",
+          "referenceValue": "JackLoad"
+        },
+        {
+          "referenceKey": "recfile",
+          "referenceValue": "shelf/BD1.shelf"
+        }
+      ],
+      "infoDescription": null,
+      "infoLevel": "INFO"
+    }
+  ],
+  "loads": [
+    {
+      "loadId": "BD1",
+      "loadType": "shelf",
+      "loadPosition": "top",
+      "boundingBoxReference": {
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "theta": 0
+      },
+      "loadDimensions": {
+        "length": 1.2,
+        "width": 0.9,
+        "height": 0.15
+      },
+      "weight": null
+    }
+  ],
+  "batteryState": {
+    "batteryCharge": 95.99418037533768,
+    "batteryVoltage": null,
+    "batteryHealth": null,
+    "charging": false,
+    "reach": null
+  },
+  "safetyState": {
+    "eStop": "NONE",
+    "fieldViolation": false
+  },
+  "paused": false,
+  "newBaseRequest": false,
+  "agvPosition": {
+    "x": -6.799,
+    "y": -5.779,
+    "theta": 3.141592653589779,
+    "mapId": "test1",
+    "mapDescription": null,
+    "positionInitialized": true,
+    "localizationScore": null,
+    "deviationRange": null
+  },
+  "velocity": {
+    "vx": 0,
+    "vy": 0,
+    "omega": 0
+  },
+  "zoneSetId": null,
+  "waitingForInteractionZoneRelease": false,
+  "forkState": {
+    "forkHeight": 0.09999999787027021
+  },
+  "errors": []
+}

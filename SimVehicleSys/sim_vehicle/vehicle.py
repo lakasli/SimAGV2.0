@@ -72,6 +72,8 @@ class VehicleSimulator:
     # 订单路由的站点名序列（用于到站检测与状态裁剪）
     nav_route_node_ids: Optional[List[str]]
     charging_requested: bool = False
+    # 订单边的速度上限映射，用于导航步进时限速（key: edgeId/"from->to"/"from-to"）
+    nav_edge_speed_caps: Optional[dict] = None
 
     # 统一日志器：用于在状态发布时打印关键字段到终端
     logger = setup_logger()
@@ -353,6 +355,28 @@ class VehicleSimulator:
         self.state.edge_states.clear()
         self._process_order_nodes()
         self._process_order_edges()
+        # 构建订单边的限速映射，供导航步进时使用
+        try:
+            caps = {}
+            for e in list(self.order.edges or []):
+                ms = getattr(e, "max_speed", None)
+                if ms is None:
+                    continue
+                try:
+                    s = str(getattr(e, "start_node_id", "") or "")
+                    t = str(getattr(e, "end_node_id", "") or "")
+                except Exception:
+                    s = str(getattr(e, "start_node_id", "") or "")
+                    t = str(getattr(e, "end_node_id", "") or "")
+                if s and t:
+                    caps[f"{s}->{t}"] = float(ms)
+                    caps[f"{s}-{t}"] = float(ms)
+                eid = str(getattr(e, "edge_id", "") or "")
+                if eid:
+                    caps[eid] = float(ms)
+            self.nav_edge_speed_caps = caps
+        except Exception:
+            self.nav_edge_speed_caps = None
         try:
             if self.order and self.order.nodes:
                 ordered_nodes = sorted(list(self.order.nodes), key=lambda n: int(n.sequence_id))
@@ -384,6 +408,13 @@ class VehicleSimulator:
                 released=edge.released,
                 edge_description=edge.edge_description,
                 trajectory=edge.trajectory,
+                # propagate speed/rotation constraints from order edge
+                max_speed=edge.max_speed,
+                rotation_allowed=edge.rotation_allowed,
+                max_rotation_speed=edge.max_rotation_speed,
+                # propagate height constraints from order edge (meters)
+                max_height=edge.max_height,
+                min_height=edge.min_height,
             ))
             for action in edge.actions or []:
                 self._add_action_state(action)
@@ -695,9 +726,9 @@ class VehicleSimulator:
             # 计算节点坐标与地图站点坐标的到站距离
             dist_np = None
             dist_map = None
-            # 统一默认到站阈值为 0.2m，与 _detect_arrival_and_prune_states 保持一致
-            eps_xy_np = 0.2
-            eps_xy_map = 0.2
+            # 统一默认到站阈值为 0.1m
+            eps_xy_np = 0.1
+            eps_xy_map = 0.1
             try:
                 cur_node = self.order.nodes[idx]
                 vp = self.state.agv_position
@@ -825,7 +856,18 @@ class VehicleSimulator:
                 xy_eps = float(np.allowed_deviation_xy)  # type: ignore[attr-defined]
         except Exception:
             pass
-        should_arrive = distance < (float(self.config.settings.speed) * scale * dt) + xy_eps
+        # Arrival check should use the capped base speed (respecting edge maxSpeed)
+        try:
+            prev_edge = next((e for e in self.state.edge_states if e.sequence_id == next_node.sequence_id - 1), None)
+        except Exception:
+            prev_edge = None
+        capped_speed = float(self.config.settings.speed)
+        try:
+            if prev_edge is not None and getattr(prev_edge, "max_speed", None) is not None:
+                capped_speed = min(capped_speed, float(getattr(prev_edge, "max_speed")))
+        except Exception:
+            pass
+        should_arrive = distance < (float(capped_speed) * scale * dt) + xy_eps
         next_node_id = next_node.node_id
         next_node_seq = next_node.sequence_id
         applyTranslateStepInSim(self, float(updated_x), float(updated_y))
@@ -956,14 +998,41 @@ class VehicleSimulator:
             return
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
         dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
-        step = max(1e-9, float(self.config.settings.speed) * scale * dt)
-        remain = step
+        base_step = max(1e-9, float(self.config.settings.speed) * scale * dt)
+        remain = base_step
         guard = 200
         while remain > 1e-9 and self.nav_idx < len(self.nav_points) and guard > 0:
             pt = self.nav_points[self.nav_idx]
             tx = float(pt.get("x", vp.x))
             ty = float(pt.get("y", vp.y))
             ttheta = float(pt.get("theta", vp.theta or 0.0))
+            t_edge_id = str(pt.get("edgeId", "") or "")
+            # 针对订单边限速：按当前点所属边的 maxSpeed 限制步长
+            try:
+                edge_step = base_step
+                caps = self.nav_edge_speed_caps or {}
+                cap_val = None
+                if t_edge_id:
+                    cap_val = caps.get(t_edge_id)
+                    if cap_val is None:
+                        # 解析 "from->to" 或 "from-to" 形式
+                        if "->" in t_edge_id:
+                            parts = t_edge_id.split("->", 2)
+                            if len(parts) == 2:
+                                cap_val = caps.get(f"{parts[0]}->{parts[1]}") or caps.get(f"{parts[0]}-{parts[1]}")
+                        elif "-" in t_edge_id:
+                            parts = t_edge_id.split("-", 2)
+                            if len(parts) == 2:
+                                cap_val = caps.get(f"{parts[0]}->{parts[1]}") or caps.get(f"{parts[0]}-{parts[1]}")
+                if cap_val is not None:
+                    try:
+                        edge_step = max(1e-9, float(min(float(self.config.settings.speed), float(cap_val))) * scale * dt)
+                    except Exception:
+                        edge_step = base_step
+                # 对当前剩余步长进行边限速夹紧
+                remain = min(remain, edge_step)
+            except Exception:
+                pass
             dx = tx - vp.x
             dy = ty - vp.y
             dist = math.hypot(dx, dy)

@@ -99,6 +99,7 @@ def parse_scene_topology(fp: Path) -> dict:
     paths: List[dict] = []
     for r in routes:
         rid = str(r.get("id")) if r.get("id") is not None else None
+        rdesc = r.get("desc")
         a = str(r.get("from")) if r.get("from") is not None else None
         b = str(r.get("to")) if r.get("to") is not None else None
         if not a or not b or a not in stations_map or b not in stations_map:
@@ -112,6 +113,7 @@ def parse_scene_topology(fp: Path) -> dict:
         length = _bezier_length(P0, P1, P2, P3, steps=32)
         paths.append({
             "id": rid or f"{a}->{b}",
+            "desc": str(rdesc) if rdesc is not None else None,
             "from": a,
             "to": b,
             "length": length,
@@ -197,6 +199,8 @@ def route_polyline(route: List[str], stations: List[dict], paths: List[dict], st
             cp2 = edge.get("cp2")
             P1 = (cp1["x"], cp1["y"]) if cp1 else P0
             P2 = (cp2["x"], cp2["y"]) if cp2 else P3
+        # 优先使用 routes.desc 作为 edgeId，其次回退为 routes.id，最后 "from->to"
+        edge_id = str(edge.get("desc") or edge.get("id") or f"{a}->{b}")
         for j in range(steps_per_edge + 1):
             t = j / steps_per_edge
             x, y = _bezier_point(P0, P1, P2, P3, t)
@@ -207,7 +211,7 @@ def route_polyline(route: List[str], stations: List[dict], paths: List[dict], st
                 if abs(dx) > 1e-9 or abs(dy) > 1e-9:
                     angle = math.atan2(dx, dy)
                     last_angle = angle
-            pts.append({"x": x, "y": y, "theta": angle})
+            pts.append({"x": x, "y": y, "theta": angle, "edgeId": edge_id})
             prev_x, prev_y = x, y
     if len(pts) >= 2:
         pts[0]["theta"] = pts[1]["theta"]
@@ -228,11 +232,24 @@ def augment_with_corner_turns(
     if not pts:
         return pts
     new_pts: List[dict] = []
-    new_pts.append({"x": float(pts[0]["x"]), "y": float(pts[0]["y"]), "theta": float(pts[0]["theta"])})
+    first = {
+        "x": float(pts[0]["x"]),
+        "y": float(pts[0]["y"]),
+        "theta": float(pts[0]["theta"]),
+    }
+    if "edgeId" in pts[0]:
+        first["edgeId"] = pts[0]["edgeId"]
+    new_pts.append(first)
     for i in range(1, len(pts)):
         prev = new_pts[-1]
         curr_raw = pts[i]
-        curr = {"x": float(curr_raw["x"]), "y": float(curr_raw["y"]), "theta": float(curr_raw["theta"]) }
+        curr = {
+            "x": float(curr_raw["x"]),
+            "y": float(curr_raw["y"]),
+            "theta": float(curr_raw["theta"]),
+        }
+        if "edgeId" in curr_raw:
+            curr["edgeId"] = curr_raw["edgeId"]
         dx = curr["x"] - prev["x"]
         dy = curr["y"] - prev["y"]
         dpos2 = dx * dx + dy * dy
@@ -241,7 +258,10 @@ def augment_with_corner_turns(
             steps = max(1, int(abs(dtheta) / max(1e-6, step_delta)))
             for n in range(1, steps + 1):
                 mid_theta = _normalize_angle(prev["theta"] + dtheta * (n / steps))
-                new_pts.append({"x": prev["x"], "y": prev["y"], "theta": mid_theta})
+                turn_pt = {"x": prev["x"], "y": prev["y"], "theta": mid_theta}
+                if "edgeId" in prev:
+                    turn_pt["edgeId"] = prev["edgeId"]
+                new_pts.append(turn_pt)
         new_pts.append(curr)
     return new_pts
 
@@ -389,3 +409,4 @@ def inject_random_obstacle(fp: Path, position: Tuple[float, float], radius: floa
     """在地图中随机位置添加障碍物（骨架：占位，不改动原地图文件）。"""
     # TODO: 将障碍物以运行时结构记录，并在路径规划/到站检测中参考该结构进行可达性判断。
     pass
+

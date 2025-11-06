@@ -1399,6 +1399,16 @@
       robot._palletAnimLoading = true;
       robot._palletAnimStart = performance.now();
       robot._palletAnimProgress = 0;
+      // 启动叉高竖条加载动画（3秒），目标为当前状态中的叉高（米）；若未知则使用 0.1m
+      try {
+        const target = (isFinite(Number(robot.forkHeight)) ? Number(robot.forkHeight) : 0.1);
+        robot._forkBarAnimLoading = true;
+        robot._forkBarAnimUnloading = false;
+        robot._forkBarAnimStart = performance.now();
+        robot._forkBarAnimProgress = 0;
+        robot._forkBarAnimStartHeight = (isFinite(Number(robot._forkBarDisplayHeight)) ? Number(robot._forkBarDisplayHeight) : (isFinite(Number(robot.forkHeight)) ? Number(robot.forkHeight) : 0));
+        robot._forkBarAnimTargetHeight = target;
+      } catch (_) { /* 忽略一次错误 */ }
       startPalletAnimationLoop();
     }
     function unloadPallet(id) {
@@ -1408,6 +1418,16 @@
       robot._palletAnimUnloading = true;
       robot._palletAnimStart = performance.now();
       robot._palletAnimProgress = 0;
+      // 启动叉高竖条卸载动画（3秒），目标为状态中的叉高（通常为 0.0m；若未知则 0.0m）
+      try {
+        const target = (isFinite(Number(robot.forkHeight)) ? Number(robot.forkHeight) : 0.0);
+        robot._forkBarAnimLoading = false;
+        robot._forkBarAnimUnloading = true;
+        robot._forkBarAnimStart = performance.now();
+        robot._forkBarAnimProgress = 0;
+        robot._forkBarAnimStartHeight = (isFinite(Number(robot._forkBarDisplayHeight)) ? Number(robot._forkBarDisplayHeight) : (isFinite(Number(robot.forkHeight)) ? Number(robot.forkHeight) : 0));
+        robot._forkBarAnimTargetHeight = target;
+      } catch (_) { /* 忽略一次错误 */ }
       startPalletAnimationLoop();
     }
 
@@ -1441,6 +1461,43 @@
               any = true;
             }
           }
+          // 叉高竖条动画（加载/卸载 3 秒）：显示值向目标值平滑过渡
+          try {
+            if (r._forkBarAnimLoading) {
+              const dur = 3000;
+              const p = Math.max(0, Math.min(1, (now - (r._forkBarAnimStart || now)) / dur));
+              r._forkBarAnimProgress = p;
+              const startH = (isFinite(Number(r._forkBarAnimStartHeight)) ? Number(r._forkBarAnimStartHeight) : 0);
+              // 目标高度优先取当前状态中的叉高，回退到启动时目标
+              const liveTarget = (isFinite(Number(r.forkHeight)) ? Number(r.forkHeight) : undefined);
+              const targetH = (typeof liveTarget !== 'undefined') ? liveTarget : (isFinite(Number(r._forkBarAnimTargetHeight)) ? Number(r._forkBarAnimTargetHeight) : 0.1);
+              r._forkBarDisplayHeight = startH + (targetH - startH) * p;
+              if (p >= 1) {
+                r._forkBarAnimLoading = false;
+                r._forkBarDisplayHeight = (isFinite(Number(r.forkHeight)) ? Number(r.forkHeight) : targetH);
+              } else {
+                any = true;
+              }
+            } else if (r._forkBarAnimUnloading) {
+              const dur = 3000;
+              const p = Math.max(0, Math.min(1, (now - (r._forkBarAnimStart || now)) / dur));
+              r._forkBarAnimProgress = p;
+              const startH = (isFinite(Number(r._forkBarAnimStartHeight)) ? Number(r._forkBarAnimStartHeight) : 0);
+              const liveTarget = (isFinite(Number(r.forkHeight)) ? Number(r.forkHeight) : undefined);
+              const targetH = (typeof liveTarget !== 'undefined') ? liveTarget : 0.0;
+              r._forkBarDisplayHeight = startH + (targetH - startH) * p;
+              if (p >= 1) {
+                r._forkBarAnimUnloading = false;
+                r._forkBarDisplayHeight = (isFinite(Number(r.forkHeight)) ? Number(r.forkHeight) : targetH);
+              } else {
+                any = true;
+              }
+            } else {
+              // 无动画时保持与状态同步
+              const live = Number(r.forkHeight);
+              if (isFinite(live)) r._forkBarDisplayHeight = live;
+            }
+          } catch (_) { /* 忽略一次错误 */ }
         });
         drawMap();
         if (!any) {
@@ -2112,6 +2169,30 @@
         }
         ctx.restore();
       }
+      // 叉高指示：在机器人右侧绘制竖直高度条，并标注数值
+      try {
+        const fhDisplay = Number(robot && robot._forkBarDisplayHeight);
+        const fhRaw = Number(robot && robot.forkHeight);
+        const fh = (isFinite(fhDisplay) ? fhDisplay : fhRaw);
+        if (isFinite(fh) && fh >= 0) {
+          // 将“米高度”压缩到像素：每 0.01m ≈ 1px，上限 30px，最小 2px
+          const barH = Math.max(2, Math.min(30, fh * 160));
+          ctx.save();
+          ctx.fillStyle = '#f1c40f';
+          ctx.strokeStyle = '#f39c12';
+          ctx.lineWidth = 1;
+          // 竖条位于机器人身体右侧（局部坐标 +X 方向），自身体顶部向上延伸
+          ctx.fillRect(16, 8 - barH, 3, barH);
+          ctx.strokeRect(16, 8 - barH, 3, barH);
+          if (viewTransform.scale > 0.8) {
+            ctx.fillStyle = '#ecf0f1';
+            ctx.font = '6px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${truncateToOneDecimal(fh).toFixed(1)}m`, 11, 8 - barH - 2);
+          }
+          ctx.restore();
+        }
+      } catch (_) { /* 忽略绘制异常 */ }
 
       ctx.restore();
 
@@ -2136,7 +2217,7 @@
     function switchTab(name) { document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active')); document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); if (name === 'register') { document.querySelector('.tab-button[onclick="switchTab(\'register\')"]').classList.add('active'); document.getElementById('registerTab').classList.add('active'); updateRegisterMapOptions(); } else { document.querySelector('.tab-button[onclick="switchTab(\'list\')"]').classList.add('active'); document.getElementById('listTab').classList.add('active'); } }
 
     // 机器人管理（适配当前后端）
-    async function loadRobotList() { try { const resp = await fetch(`${API_BASE_URL}/agvs`); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); const agvs = await resp.json(); registeredRobots = (agvs || []).map(info => ({ robot_name: info.serial_number, type: info.type, ip: info.IP, manufacturer: info.manufacturer, vda_version: info.vda_version, battery: 100, initialPosition: null, currentPosition: null, currentMap: null, commConnected: false, instanceStatus: '停止', lastUpdateTs: 0, hasPallet: false })); updateRobotList(); drawMap(); } catch (err) { console.error('加载机器人列表失败:', err); document.getElementById('status').textContent = '加载机器人列表失败: ' + err.message; } }
+    async function loadRobotList() { try { const resp = await fetch(`${API_BASE_URL}/agvs`); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); const agvs = await resp.json(); registeredRobots = (agvs || []).map(info => ({ robot_name: info.serial_number, type: info.type, ip: info.IP, manufacturer: info.manufacturer, vda_version: info.vda_version, battery: 100, initialPosition: null, currentPosition: null, currentMap: null, commConnected: false, instanceStatus: '停止', lastUpdateTs: 0, hasPallet: false, forkHeight: 0 })); updateRobotList(); drawMap(); } catch (err) { console.error('加载机器人列表失败:', err); document.getElementById('status').textContent = '加载机器人列表失败: ' + err.message; } }
     function clearRobotForm() {
       document.getElementById('robotName').value = '';
       document.getElementById('robotType').value = 'AGV';
@@ -2236,7 +2317,7 @@
     async function registerRobot() { const name = document.getElementById('robotName').value.trim(); const type = document.getElementById('robotType').value; const ip = document.getElementById('robotIP').value.trim(); const manu = document.getElementById('robotManufacturer').value.trim() || 'SEER'; const ver = document.getElementById('robotVersion').value.trim() || 'v2'; const initId = document.getElementById('initialPosition').value; const mapVal = document.getElementById('registerMapSelect').value; if (!name) { try { window.printErrorToStatus('请输入机器人名称','注册'); } catch (_) {} return; } if (!ip) { try { window.printErrorToStatus('请输入机器人IP地址','注册'); } catch (_) {} return; } if (!initId) { try { window.printErrorToStatus('请选择初始位置','注册'); } catch (_) {} return; } const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/; if (!ipRegex.test(ip)) { try { window.printErrorToStatus('请输入有效的IP地址格式','注册'); } catch (_) {} return; } const payload = [{ serial_number: name, manufacturer: manu, type: type, vda_version: ver, IP: ip }]; try { const resp = await fetch(`${API_BASE_URL}/agvs/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); const result = await resp.json(); if ((result.registered || []).includes(name)) { await loadRobotList(); const robot = registeredRobots.find(r => r.robot_name === name); let pos = null; if (mapVal && /(^|\/)VehicleMap\/[^\/]+\.scene$/.test(mapVal)) { const fname = String(mapVal).split('/').pop(); window.registerSceneStationsCache = window.registerSceneStationsCache || {}; let stations = window.registerSceneStationsCache[fname]; if (!stations) { try { const sresp = await fetch(`/maps/VehicleMap/${encodeURIComponent(fname)}`); if (sresp.ok) { const data = await sresp.json(); const root = Array.isArray(data) ? data[0] : data; const points = (root && Array.isArray(root.points)) ? root.points : []; const allowedPrefixes = ['AP','CP','PP','LM','WP']; const startsAllowed = (txt) => allowedPrefixes.some(pref => String(txt || '').trim().toUpperCase().startsWith(pref)); stations = points.filter(p => startsAllowed(String(p.name || p.id || ''))).map(p => ({ id: String(p.id || p.name), instanceName: String(p.name || p.id), pointName: String(p.name || p.id), pos: { x: Number(p.x), y: Number(p.y) } })); } } catch (e) { /* 忽略一次失败 */ } } const s = (stations || []).find(x => String(x.id || x.instanceName || x.pointName) === initId); if (s) { const px = (s && s.pos && typeof s.pos.x !== 'undefined') ? Number(s.pos.x) : Number(s.x); const py = (s && s.pos && typeof s.pos.y !== 'undefined') ? Number(s.pos.y) : Number(s.y); if (isFinite(px) && isFinite(py)) { pos = { x: px, y: py, theta: 0 }; } } } else { const point = (mapData?.points || []).find(p => String(p.id || p.name) === initId); if (point) { pos = { x: point.x, y: point.y, theta: 0 }; } } if (robot && pos) { robot.initialPosition = pos; if (mapVal) robot.currentMap = mapVal; } clearRobotForm(); document.getElementById('status').textContent = `机器人 ${name} 注册成功`; setTimeout(() => document.getElementById('status').textContent = '准备就绪', 3000); } else { try { window.printErrorToStatus('注册失败: ' + JSON.stringify(result),'注册'); } catch (_) {} } } catch (err) { console.error('注册机器人失败:', err); try { window.printErrorToStatus('注册机器人失败: ' + (err && err.message ? err.message : String(err)),'注册'); } catch (_) {} document.getElementById('status').textContent = '注册失败: ' + (err && err.message ? err.message : String(err)); } }
     async function removeRobot(serial) { if (!confirm('确定要删除这个机器人吗？')) return; try { const resp = await fetch(`${API_BASE_URL}/agvs/${serial}`, { method: 'DELETE' }); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); await loadRobotList(); document.getElementById('status').textContent = '机器人已删除'; setTimeout(() => document.getElementById('status').textContent = '准备就绪', 2000); } catch (err) { console.error('删除机器人失败:', err); try { window.printErrorToStatus('删除机器人失败: ' + (err && err.message ? err.message : String(err)),'删除'); } catch (_) {} } }
 
- function updateRobotList() { const c = document.getElementById('robotListContainer'); if (registeredRobots.length === 0) { c.innerHTML = '<p style="color:#bdc3c7;font-style:italic;">暂无注册的机器人</p>'; return; } c.innerHTML = registeredRobots.map(robot => { const battery = robot.battery || 0; const batteryText = truncateToOneDecimal(Number(battery)).toFixed(1); const pos = robot.currentPosition || robot.initialPosition; const posText = pos ? `当前位置: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}) | 方向: ${(pos.theta || 0).toFixed(2)}` : '位置未知'; const selectedStyle = (selectedRobotId === robot.robot_name) ? 'border-left:4px solid #2ecc71;background:#3b4f63;' : ''; const commText = robot.commConnected ? '连接' : '断开'; const commColor = robot.commConnected ? '#00ff00' : '#ff0000'; const instStatus = robot.instanceStatus || '停止'; const instText = instStatus; const instColor = instStatus === '启动' ? '#00ff00' : '#ff0000'; const mapText = robot.currentMap ? robot.currentMap : '未设置'; return `<div class=\"robot-item\" style=\"${selectedStyle}\" onclick=\"selectRobot('${robot.robot_name}')\"><div class=\"robot-header\"><div class=\"robot-name\">${robot.robot_name}</div></div><div class=\"robot-info\" style=\"word-break:break-all;\">类型: ${robot.type} | IP: ${robot.ip}<br>厂商: ${robot.manufacturer || '未知'} | 电量: ${batteryText}%<br>地图: ${mapText}<br>${posText}<br><span style=\"color:${commColor}\">通信状态: ${commText}</span> | <span style=\"color:${instColor}\">实例状态: ${instText}</span></div><div class=\"robot-actions\"><button class=\"btn-small btn-danger\" onclick=\"removeRobot('${robot.robot_name}')\">删除</button><button class=\"btn-small btn-config-small\" onclick=\"openRobotConfig('${robot.robot_name}')\">配置</button></div></div>`; }).join(''); }
+ function updateRobotList() { const c = document.getElementById('robotListContainer'); if (registeredRobots.length === 0) { c.innerHTML = '<p style="color:#bdc3c7;font-style:italic;">暂无注册的机器人</p>'; return; } c.innerHTML = registeredRobots.map(robot => { const battery = robot.battery || 0; const batteryText = truncateToOneDecimal(Number(battery)).toFixed(1); const pos = robot.currentPosition || robot.initialPosition; const posText = pos ? `当前位置: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}) | 方向: ${(pos.theta || 0).toFixed(2)}` : '位置未知'; const selectedStyle = (selectedRobotId === robot.robot_name) ? 'border-left:4px solid #2ecc71;background:#3b4f63;' : ''; const commText = robot.commConnected ? '连接' : '断开'; const commColor = robot.commConnected ? '#00ff00' : '#ff0000'; const instStatus = robot.instanceStatus || '停止'; const instText = instStatus; const instColor = instStatus === '启动' ? '#00ff00' : '#ff0000'; const mapText = robot.currentMap ? robot.currentMap : '未设置'; const fhText = (typeof robot.forkHeight !== 'undefined' && robot.forkHeight !== null) ? `${truncateToOneDecimal(Number(robot.forkHeight)).toFixed(1)} m` : '-'; return `<div class=\"robot-item\" style=\"${selectedStyle}\" onclick=\"selectRobot('${robot.robot_name}')\"><div class=\"robot-header\"><div class=\"robot-name\">${robot.robot_name}</div></div><div class=\"robot-info\" style=\"word-break:break-all;\">类型: ${robot.type} | IP: ${robot.ip}<br>厂商: ${robot.manufacturer || '未知'} | 地图: ${mapText}<br>${posText}<br> 电量: ${batteryText}% | 叉高: ${fhText}<br><span style=\"color:${commColor}\">通信状态: ${commText}</span> | <span style=\"color:${instColor}\">实例状态: ${instText}</span></div><div class=\"robot-actions\"><button class=\"btn-small btn-danger\" onclick=\"removeRobot('${robot.robot_name}')\">删除</button><button class=\"btn-small btn-config-small\" onclick=\"openRobotConfig('${robot.robot_name}')\">配置</button></div></div>`; }).join(''); }
 
     // 配置模态框（实例卡片配置菜单）
     let currentConfigRobotId = null;
@@ -2494,6 +2575,7 @@
         if (!robot) return;
         const agvPos = payload.agv_position || payload.agvPosition || {};
         const batt = payload.battery_state || payload.batteryState || {};
+        const fork = payload.fork_state || payload.forkState || {};
         const mapId = (agvPos && (agvPos.map_id || agvPos.mapId)) || null;
         const px = Number(agvPos && agvPos.x);
         const py = Number(agvPos && agvPos.y);
@@ -2504,6 +2586,8 @@
         if (isFinite(px) && isFinite(py)) {
           robot.currentPosition = { x: px, y: py, theta: isFinite(th) ? th : (robot.currentPosition?.theta || 0) };
         }
+        const fh = Number(fork && (fork.fork_height ?? fork.forkHeight));
+        if (isFinite(fh)) robot.forkHeight = fh;
         robot.instanceStatus = '启动';
         robot.commConnected = true;
         robot.lastUpdateTs = Date.now();

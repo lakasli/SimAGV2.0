@@ -66,6 +66,13 @@ class EdgeState:
     released: bool
     edge_description: Optional[str] = None
     trajectory: Optional[Trajectory] = None
+    # Speed and rotation constraints propagated from order edges
+    max_speed: Optional[float] = None
+    rotation_allowed: Optional[bool] = None
+    max_rotation_speed: Optional[float] = None
+    # Height constraints propagated from order edges (meters)
+    max_height: Optional[float] = None
+    min_height: Optional[float] = None
 
 
 class EStop(str, Enum):
@@ -89,8 +96,8 @@ class BatteryState:
 
 @dataclass
 class ForkState:
-    # 货叉状态，默认高度为 0
-    fork_height: int = 0
+    # 货叉状态（单位：米），默认高度为 0.0m
+    fork_height: float = 0.0
 
 
 @dataclass
