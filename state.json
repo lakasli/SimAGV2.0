@@ -1,64 +1,22 @@
 {
-  "headerId": 902,
-  "timestamp": "2025-11-06T06:20:04.393Z",
+  "headerId": 21056,
+  "timestamp": "2025-11-07T06:46:48.415Z",
   "version": "v2",
   "manufacturer": "SEER",
   "serialNumber": "AMB-01",
-  "driving": true,
+  "driving": false,
   "operatingMode": "AUTOMATIC",
   "nodeStates": [],
   "edgeStates": [],
-  "lastNodeId": "AP5",
+  "lastNodeId": "AP6",
   "orderId": "75982a12-7b9a-48a3-a8f7-efa1ee1cc465",
   "orderUpdateId": 0,
-  "lastNodeSequenceId": 2,
-  "actionStates": [
-    {
-      "actionId": "act-1762390872680",
-      "actionStatus": "WAITING",
-      "actionType": "JackUnload",
-      "actionDescription": "JackUnload",
-      "resultDescription": null
-    }
-  ],
-  "information": [
-    {
-      "infoType": "PalletAction",
-      "infoReferences": [
-        {
-          "referenceKey": "operation",
-          "referenceValue": "JackLoad"
-        },
-        {
-          "referenceKey": "recfile",
-          "referenceValue": "shelf/BD1.shelf"
-        }
-      ],
-      "infoDescription": null,
-      "infoLevel": "INFO"
-    }
-  ],
-  "loads": [
-    {
-      "loadId": "BD1",
-      "loadType": "shelf",
-      "loadPosition": "top",
-      "boundingBoxReference": {
-        "x": 0,
-        "y": 0,
-        "z": 0,
-        "theta": 0
-      },
-      "loadDimensions": {
-        "length": 1.2,
-        "width": 0.9,
-        "height": 0.15
-      },
-      "weight": null
-    }
-  ],
+  "lastNodeSequenceId": 3,
+  "actionStates": [],
+  "information": [],
+  "loads": [],
   "batteryState": {
-    "batteryCharge": 95.99418037533768,
+    "batteryCharge": 63.0071231444681,
     "batteryVoltage": null,
     "batteryHealth": null,
     "charging": false,
@@ -72,8 +30,8 @@
   "newBaseRequest": false,
   "agvPosition": {
     "x": -6.799,
-    "y": -5.779,
-    "theta": 3.141592653589779,
+    "y": -6.959234057315191,
+    "theta": -3.141592653589793,
     "mapId": "test1",
     "mapDescription": null,
     "positionInitialized": true,
@@ -88,7 +46,7 @@
   "zoneSetId": null,
   "waitingForInteractionZoneRelease": false,
   "forkState": {
-    "forkHeight": 0.09999999787027021
+    "forkHeight": 0
   },
   "errors": []
 }

@@ -10,6 +10,7 @@ from SimVehicleSys.config.settings import get_config
 
 from .schemas import AGVInfo, AGVRuntime
 from .schemas import SimSettingsPatch
+from typing import Optional as _Opt
 
 
 def _timestamp() -> str:
@@ -72,6 +73,33 @@ class MqttPublisher:
         base = f"{self.vda_interface}/{info.vda_version}/{info.manufacturer}/{info.serial_number}"
         topic = f"{base}/instantActions"
         action_id = f"backend-move-{uuid.uuid4()}"
+        # 尝试解析提交坐标所在地图的最近站点，并取其 points.name 作为 lastNodeId
+        last_node_label: _Opt[str] = None
+        try:
+            from SimVehicleSys.sim_vehicle.navigation import (
+                resolve_scene_path,
+                parse_scene_topology,
+                nearest_station,
+                find_point_name_by_id,
+            )
+            map_id = str(rt.current_map or "")
+            if map_id:
+                fp = resolve_scene_path(map_id)
+                topo = parse_scene_topology(fp)
+                stations = topo.get("stations") or []
+                try:
+                    x = float(getattr(rt.position, "x", 0.0))
+                    y = float(getattr(rt.position, "y", 0.0))
+                except Exception:
+                    x, y = 0.0, 0.0
+                sid = nearest_station((x, y), stations)  # 返回最近站点的 id（string）
+                if sid:
+                    # 将 id 映射为 .scene 中的 name；若失败则退回 id 字符串
+                    label = find_point_name_by_id(fp, str(sid))
+                    last_node_label = label or str(sid)
+        except Exception:
+            # 地图解析失败时忽略，不影响 initPosition 发布
+            last_node_label = None
         # VDA5050 camelCase payload
         payload = {
             "headerId": 0,
@@ -89,6 +117,8 @@ class MqttPublisher:
                         {"key": "y", "value": rt.position.y},
                         {"key": "theta", "value": rt.position.theta},
                         {"key": "mapId", "value": rt.current_map or "default"},
+                        # 将 lastNodeId 作为额外参数下发，车辆在处理 initPosition 时会直接更新 state.last_node_id
+                        *(([{"key": "lastNodeId", "value": last_node_label}] ) if last_node_label else [])
                     ],
                 }
             ],

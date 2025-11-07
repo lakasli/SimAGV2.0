@@ -237,6 +237,9 @@ def _validate_order(sim_vehicle: Any, order: Order) -> None:
     _enforce_node_actions_blocking_hard(order)
     _validate_and_trim_edge_actions(order)
 
+    # 节点与边的锁定规则：同站点的 released=false 必须成对出现
+    _validate_lock_pairs(order)
+
 
 def _enforce_node_actions_blocking_hard(order: Order) -> None:
     """
@@ -268,6 +271,48 @@ def _validate_and_trim_edge_actions(order: Order) -> None:
             # TODO: 限制动作类型到机构脚本/货叉升降（如 JackLoad/JackUnload/ForkLoad/ForkUnload/Script）
     except Exception:
         pass
+
+
+def _validate_lock_pairs(order: Order) -> None:
+    """校验节点与终止到该节点的边的 released 锁定状态必须成对出现。
+
+    规则:
+    - 若某节点 node.released=False，则所有以该节点为 endNodeId 的边必须 released=False；
+      若存在任意对应边 released=True，抛错。
+    - 至少存在一条以该节点为 endNodeId 的边，否则抛错（防止“孤立锁点”造成不可达却无边约束）。
+    - 若某条边 edge.released=False，则其 endNodeId 对应的节点必须 released=False，否则抛错。
+    """
+    try:
+        node_rel = {str(n.node_id): bool(n.released) for n in (order.nodes or [])}
+        edges = list(order.edges or [])
+        # 反向索引：endNodeId -> list[Edge]
+        end_index = {}
+        for e in edges:
+            end_index.setdefault(str(e.end_node_id), []).append(e)
+        # 节点锁定 -> 边锁定一致性
+        for nid, nrel in node_rel.items():
+            if not nrel:  # 节点锁定
+                related = list(end_index.get(str(nid), []) or [])
+                if not related:
+                    raise ValueError(f"Locked node '{nid}' must have at least one edge ending at it in the same order")
+                inconsistent = [e.edge_id for e in related if bool(e.released)]
+                if inconsistent:
+                    raise ValueError(
+                        f"Lock pair mismatch: node '{nid}' released=false but edges ending at it are released=true: {inconsistent}"
+                    )
+        # 边锁定 -> 节点锁定一致性
+        for e in edges:
+            if not bool(e.released):
+                end_nid = str(e.end_node_id)
+                if node_rel.get(end_nid, True):  # 默认为 True；若未找到节点，也视为不一致
+                    raise ValueError(
+                        f"Lock pair mismatch: edge '{e.edge_id}' released=false but end node '{end_nid}' released=true"
+                    )
+    except Exception as exc:
+        # 将任何解析/一致性错误上抛为 ValueError，保持与其它校验一致的风格
+        if isinstance(exc, ValueError):
+            raise
+        raise ValueError(f"Lock pair validation failed: {exc}")
 
 
 def process_order(sim_vehicle: Any, order_raw: Union[Order, JsonDict]) -> None:

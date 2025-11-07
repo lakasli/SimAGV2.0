@@ -4,6 +4,7 @@ import math
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 from SimVehicleSys.config.settings import get_config
+from SimVehicleSys.utils.logger import setup_logger
 
 from backend.schemas import (
     AGVRuntime,
@@ -13,6 +14,7 @@ from backend.schemas import (
     AGVInfo,
 )
 
+logger = setup_logger()
 
 def _normalize_angle(a: float) -> float:
     return ((a + math.pi) % (2 * math.pi)) - math.pi
@@ -64,7 +66,14 @@ class AGVStateStore:
                                 scale = max(0.0001, float(get_config().settings.sim_time_scale))
                             except Exception:
                                 scale = 1.0
-                            rt.position.theta = _normalize_angle(_step_towards(old_theta, target_heading, max_delta=0.15 * scale))
+                            try:
+                                new_theta = _normalize_angle(_step_towards(old_theta, target_heading, max_delta=0.15 * scale))
+                                logger.info(
+                                    f"[STORE_THETA_STEP] old={float(old_theta):.3f} target={float(target_heading):.3f} scale={scale:.2f} max_delta={0.15*scale:.3f} new={float(new_theta):.3f}"
+                                )
+                                rt.position.theta = new_theta
+                            except Exception:
+                                rt.position.theta = _normalize_angle(_step_towards(old_theta, target_heading, max_delta=0.15 * scale))
                         else:
                             rt.position.theta = _normalize_angle(old_theta)
                 except Exception:

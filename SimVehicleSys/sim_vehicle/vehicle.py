@@ -2,7 +2,7 @@ from __future__ import annotations
 import time
 import math
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 import paho.mqtt.client as mqtt
 
@@ -77,6 +77,9 @@ class VehicleSimulator:
 
     # 统一日志器：用于在状态发布时打印关键字段到终端
     logger = setup_logger()
+    # 导航最后一条边的标识，以及最终目标点坐标（用于最后一段的减速与到站判定）
+    nav_last_edge_id: Optional[str] = None
+    nav_final_point: Optional[Tuple[float, float]] = None
 
     @staticmethod
     def create(config: Config) -> "VehicleSimulator":
@@ -335,9 +338,10 @@ class VehicleSimulator:
         return True
 
     def is_vehicle_ready_for_new_order(self) -> bool:
+        # 导航未运行且位姿已初始化时即可接收新订单；
+        # 是否到达最新释放节点由 _can_accept_new_order 进一步约束。
         return (
-            len(self.state.node_states) == 0 and
-            len(self.state.edge_states) == 0 and
+            not getattr(self, "nav_running", False) and
             bool(self.state.agv_position and self.state.agv_position.position_initialized)
         )
 
@@ -347,7 +351,16 @@ class VehicleSimulator:
         self.state.order_update_id = self.order.order_update_id
         if self.state.order_update_id == 0:
             self.state.last_node_sequence_id = 0
-        # 提前标记导航运行，避免在订单刚接收、路径尚未生成的时间窗内触发订单位姿推进导致起步漂移
+        # 接单时重置导航内部状态，防止沿用上一单的 nav_points/nav_idx 导致在路径未生成前被判定为“已完成”，从而回退到订单位姿推进
+        try:
+            self.nav_points = None
+            self.nav_idx = 0
+            self.nav_last_edge_id = None
+            self.nav_final_point = None
+        except Exception:
+            self.nav_points = None
+            self.nav_idx = 0
+        # 提前标记导航运行占位，避免路径未生成窗口触发订单位姿推进导致起步漂移
         self.nav_running = True
         self.state.driving = True
         self.state.action_states.clear()
@@ -380,8 +393,30 @@ class VehicleSimulator:
         try:
             if self.order and self.order.nodes:
                 ordered_nodes = sorted(list(self.order.nodes), key=lambda n: int(n.sequence_id))
-                route_node_ids = [str(n.node_id) for n in ordered_nodes]
+                # 若存在锁点（released=false），导航仅至第一个锁点的前一个站点
+                cutoff_idx = None
+                for i, n in enumerate(ordered_nodes):
+                    if not bool(getattr(n, "released", True)):
+                        cutoff_idx = max(0, i - 1)
+                        break
+                if cutoff_idx is None:
+                    route_node_ids = [str(n.node_id) for n in ordered_nodes]
+                else:
+                    # 至少保留两个节点用于路径规划（起点->目标），否则抛错提示不可规划
+                    if cutoff_idx < 1:
+                        raise ValueError("Route locked at the first target; cannot plan navigation towards a locked first node")
+                    route_node_ids = [str(ordered_nodes[j].node_id) for j in range(cutoff_idx + 1)]
+                # 为路径规划选择有效的地图：优先 AGV 当前地图；失败时回退到首节点的 mapId；仍失败则回退到配置默认
                 map_name = self.state.agv_position.map_id if self.state.agv_position else None
+                try:
+                    _ = resolve_scene_path(map_name)
+                except Exception:
+                    try:
+                        first_np = ordered_nodes[0].node_position if ordered_nodes and ordered_nodes[0] else None
+                        fallback_map = getattr(first_np, "map_id", None) if first_np else None
+                        map_name = fallback_map or self.config.settings.map_id
+                    except Exception:
+                        map_name = self.config.settings.map_id
                 self.start_path_navigation_by_nodes(route_node_ids, map_name)
         except Exception as e:
             print(f"order path navigation failed: {e}")
@@ -825,6 +860,15 @@ class VehicleSimulator:
         if not np:
             return
         updated_x, updated_y, updated_theta = self._calculate_new_position(vp, np, next_node)
+        try:
+            scale_dbg = max(0.0001, float(self.config.settings.sim_time_scale))
+            dt_dbg = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
+            self.logger.info(
+                f"[ORDER_STEP] last_seq={self.state.last_node_sequence_id} next_id='{next_node.node_id}' dt={dt_dbg:.3f}s scale={scale_dbg:.2f} "
+                f"cur=({vp.x:.3f},{vp.y:.3f}) upd=({updated_x:.3f},{updated_y:.3f}) theta_upd={updated_theta:.3f}"
+            )
+        except Exception:
+            pass
         # 起始站订单驱动位姿更新的纯转向门控：先对齐朝向，再进行平移
         try:
             def _norm(a: float) -> float:
@@ -842,6 +886,12 @@ class VehicleSimulator:
                 pass
             if is_start_of_order and abs(angle_diff) > align_eps:
                 # 起步阶段仅转向，不更新平移，避免漂移
+                try:
+                    self.logger.info(
+                        f"[ORDER_ROT_GATE_START] angle_diff={angle_diff:.4f} eps={align_eps:.4f} cur_theta={cur_theta:.3f} target_theta={float(updated_theta):.3f}"
+                    )
+                except Exception:
+                    pass
                 applyRotationStepInSim(self, float(updated_theta), base_step=0.15)
                 return
         except Exception:
@@ -868,8 +918,20 @@ class VehicleSimulator:
         except Exception:
             pass
         should_arrive = distance < (float(capped_speed) * scale * dt) + xy_eps
+        try:
+            self.logger.info(
+                f"[ORDER_ARRIVE_CHECK] dist={distance:.4f} capped_speed={float(capped_speed):.3f} step={float(capped_speed)*scale*dt:.4f} eps={xy_eps:.3f} result={should_arrive}"
+            )
+        except Exception:
+            pass
         next_node_id = next_node.node_id
         next_node_seq = next_node.sequence_id
+        try:
+            self.logger.info(
+                f"[ORDER_TRANSLATE] -> ({float(updated_x):.3f},{float(updated_y):.3f})"
+            )
+        except Exception:
+            pass
         applyTranslateStepInSim(self, float(updated_x), float(updated_y))
         # 订单驱动位姿更新：朝 updated_theta 逐步旋转，避免起始跳变
         def _norm(a: float) -> float:
@@ -887,10 +949,28 @@ class VehicleSimulator:
                         base = float(max_rot_speed) * float(dt) / max(0.0001, float(self.config.settings.sim_time_scale))
                     except Exception:
                         base = 0.15
+                try:
+                    self.logger.info(
+                        f"[ORDER_ROTATE] target_theta={float(updated_theta):.3f} base_step={float(base):.4f} dt={dt:.3f}s scale={scale:.2f}"
+                    )
+                except Exception:
+                    pass
                 applyRotationStepInSim(self, float(updated_theta), base_step=float(base))
         except Exception:
+            try:
+                self.logger.info(
+                    f"[ORDER_ROTATE_FALLBACK] target_theta={float(updated_theta):.3f} base_step=0.15"
+                )
+            except Exception:
+                pass
             applyRotationStepInSim(self, float(updated_theta), base_step=0.15)
         if should_arrive:
+            try:
+                self.logger.info(
+                    f"[ORDER_ARRIVE] next_id='{next_node_id}' seq={next_node_seq} pop node/edge"
+                )
+            except Exception:
+                pass
             if self.state.node_states:
                 self.state.node_states.pop(0)
             if self.state.edge_states:
@@ -957,7 +1037,11 @@ class VehicleSimulator:
             pass
         if not self.nav_running or self.nav_paused:
             return
-        if not self.nav_points or self.nav_idx >= len(self.nav_points):
+        # 路径尚未就绪：保持导航占位，不关闭 nav_running/driving，等待下一周期（避免首单起步漂移）
+        if not self.nav_points:
+            return
+        # 路径已完成：关闭导航并更新最后站点信息
+        if self.nav_idx >= len(self.nav_points):
             self.nav_running = False
             self.state.driving = False
             try:
@@ -986,12 +1070,6 @@ class VehicleSimulator:
                         self.state.last_node_id = str(target_id)
             except Exception:
                 pass
-            # 清空旧订单的节点/边状态，避免新订单被拒绝为“存在活动状态”
-            try:
-                self.state.node_states.clear()
-                self.state.edge_states.clear()
-            except Exception:
-                pass
             return
         vp = self.state.agv_position
         if not vp:
@@ -999,14 +1077,14 @@ class VehicleSimulator:
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
         dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
         base_step = max(1e-9, float(self.config.settings.speed) * scale * dt)
-        remain = base_step
-        guard = 200
-        while remain > 1e-9 and self.nav_idx < len(self.nav_points) and guard > 0:
+        # 单步推进：每周期仅根据当前点与限速计算一次平移/旋转
+        if self.nav_idx < len(self.nav_points):
             pt = self.nav_points[self.nav_idx]
             tx = float(pt.get("x", vp.x))
             ty = float(pt.get("y", vp.y))
             ttheta = float(pt.get("theta", vp.theta or 0.0))
             t_edge_id = str(pt.get("edgeId", "") or "")
+            # 导航步进日志已移除
             # 针对订单边限速：按当前点所属边的 maxSpeed 限制步长
             try:
                 edge_step = base_step
@@ -1029,93 +1107,100 @@ class VehicleSimulator:
                         edge_step = max(1e-9, float(min(float(self.config.settings.speed), float(cap_val))) * scale * dt)
                     except Exception:
                         edge_step = base_step
-                # 对当前剩余步长进行边限速夹紧
-                remain = min(remain, edge_step)
+                # 起步阶段加速：基于起点距离平方逐步放大步长（对首段边生效）
+                try:
+                    first_id = self.nav_first_edge_id or ""
+                    start_pt = self.nav_start_point
+                    if start_pt is not None and first_id and t_edge_id == first_id:
+                        sx, sy = start_pt
+                        s_dist = math.hypot(vp.x - sx, vp.y - sy)
+                        accel_eps = 0.02
+                        if s_dist <= accel_eps:
+                            # 起步不应完全停滞，给予极小步长。
+                            schedule_up = max(0.01, s_dist)
+                        else:
+                            try:
+                                schedule_up = float(s_dist ** 2)
+                            except Exception:
+                                schedule_up = edge_step
+                        edge_step = min(edge_step, schedule_up)
+                        try:
+                            if self.nav_idx <= 5:
+                                self.logger.info(
+                                    f"[NAV_START_ACCEL] idx={self.nav_idx} s_dist={s_dist:.4f} schedule_up={schedule_up:.4f} edge_step={edge_step:.4f}"
+                                )
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                # 最后一段边的减速：基于距离平方衰减的步进控制
+                try:
+                    last_id = self.nav_last_edge_id or ""
+                    final_pt = self.nav_final_point
+                    if final_pt is not None and last_id and t_edge_id == last_id:
+                        fx, fy = final_pt
+                        y_dist = math.hypot(vp.x - fx, vp.y - fy)
+                        arrive_eps = 0.02
+                        if y_dist <= arrive_eps:
+                            self.nav_idx = len(self.nav_points)
+                            # 不再推进，交由到站裁剪处理
+                            edge_step = 0.0
+                        else:
+                            try:
+                                schedule_x = float(y_dist ** 2)
+                            except Exception:
+                                schedule_x = edge_step
+                            edge_step = min(edge_step, schedule_x, y_dist)
+                except Exception:
+                    pass
+                step_len = min(base_step, edge_step)
             except Exception:
-                pass
+                step_len = base_step
             dx = tx - vp.x
             dy = ty - vp.y
             dist = math.hypot(dx, dy)
+            # 所有点位上执行“先转向后平移”的门控：转向未对齐则只做转向，不做平移
+            def _norm(a: float) -> float:
+                pi = math.pi
+                return (a + pi) % (2 * pi) - pi
+            cur_theta = float(vp.theta or 0.0)
+            angle_diff = _norm(ttheta - cur_theta)
+            align_eps = 1e-3
+            if abs(angle_diff) > align_eps:
+                # 转向门控日志已移除
+                applyRotationStepInSim(self, float(ttheta), base_step=0.15)
+                return
             # 起步门控：在导航起始（第一个点位）时，先完成纯转向，再允许平移
-            # 这样可避免“边运动边转向”，符合“站点完成转向后再前进/后退”的需求
             if self.nav_idx == 0:
-                def _norm(a: float) -> float:
-                    pi = math.pi
-                    return (a + pi) % (2 * pi) - pi
                 cur_theta = float(vp.theta or 0.0)
                 angle_diff = _norm(ttheta - cur_theta)
                 start_align_eps = 1e-3
                 if abs(angle_diff) > start_align_eps:
-                    # 起步阶段允许在一个周期内根据时间缩放执行多步转向，以加速对齐
                     try:
-                        rot_steps = max(1, int(round(scale)))
+                        self.logger.info(
+                            f"[NAV_START_ROT] angle_diff={angle_diff:.4f} eps={start_align_eps:.4f} applyRotation base=0.15"
+                        )
                     except Exception:
-                        rot_steps = 1
-                    processed = 0
-                    while processed < rot_steps:
-                        applyRotationStepInSim(self, float(ttheta), base_step=0.15)
-                        processed += 1
-                        cur_theta = float(vp.theta or 0.0)
-                        angle_diff = _norm(ttheta - cur_theta)
-                        if abs(angle_diff) <= start_align_eps:
-                            break
-                    # 起步阶段仅进行转向，不进行平移
-                    remain = 0.0
-                    guard -= 1
-                    continue
+                        pass
+                    applyRotationStepInSim(self, float(ttheta), base_step=0.15)
+                    return
             if dist <= 1e-9:
-                # 纯转向点：按步进更新朝向，避免一次性跳变
-                def _norm(a: float) -> float:
-                    pi = math.pi
-                    return (a + pi) % (2 * pi) - pi
-                # 在高时间缩放下，允许一个周期内推进多个纯转向点
-                try:
-                    rot_steps = max(1, int(round(scale)))
-                except Exception:
-                    rot_steps = 1
-                steps_done = 0
-                while steps_done < rot_steps and self.nav_idx < len(self.nav_points):
-                    pt_cur = self.nav_points[self.nav_idx]
-                    ttheta_cur = float(pt_cur.get("theta", vp.theta or 0.0))
-                    aligned = applyRotationStepInSim(self, float(ttheta_cur), base_step=0.15)
-                    guard -= 1
-                    steps_done += 1
-                    if aligned:
-                        self.nav_idx += 1
-                        # 若下一个点是平移点，则停止在本周期继续推进，交由后续逻辑处理
-                        if self.nav_idx < len(self.nav_points):
-                            nxt = self.nav_points[self.nav_idx]
-                            nx = float(nxt.get("x", vp.x))
-                            ny = float(nxt.get("y", vp.y))
-                            if abs(nx - vp.x) > 1e-9 or abs(ny - vp.y) > 1e-9:
-                                break
-                    else:
-                        # 未对齐则退出循环，下一周期继续
-                        break
-                # 消耗本周期的步进额度，保持转向阶段的逐帧效果
-                remain = 0.0
-                continue
-            if dist <= remain:
+                # 纯转向点：统一为单步门控，每周期仅执行一次旋转步进
+                # 纯转向点日志已移除
+                aligned = applyRotationStepInSim(self, float(ttheta), base_step=0.15)
+                if aligned:
+                    self.nav_idx += 1
+                return
+            if dist <= step_len:
+                # 移除详细导航目标步进日志
                 applyTranslateStepInSim(self, float(tx), float(ty))
-                # 移动到点位后，车头朝向也按步进调整，避免瞬时跳变
-                def _norm(a: float) -> float:
-                    pi = math.pi
-                    return (a + pi) % (2 * pi) - pi
-                applyRotationStepInSim(self, float(ttheta), base_step=0.15)
-                remain -= dist
                 self.nav_idx += 1
-                guard -= 1
             else:
-                ratio = remain / max(dist, 1e-9)
+                ratio = step_len / max(dist, 1e-9)
                 new_x = vp.x + dx * ratio
                 new_y = vp.y + dy * ratio
+                # 移除详细导航平移步进日志
                 applyTranslateStepInSim(self, float(new_x), float(new_y))
-                # 在移动过程中也采用步进式角度调整，避免起始阶段跳变
-                def _norm(a: float) -> float:
-                    pi = math.pi
-                    return (a + pi) % (2 * pi) - pi
-                applyRotationStepInSim(self, float(ttheta), base_step=0.15)
-                remain = 0.0
         # 导航过程中：到站检测与状态裁剪
         try:
             self._detect_arrival_and_prune_states()
@@ -1149,12 +1234,6 @@ class VehicleSimulator:
                             self.state.last_node_sequence_id = ns.sequence_id
                     except Exception:
                         pass
-            except Exception:
-                pass
-            # 清空旧订单的节点/边状态，避免新订单被拒绝为“存在活动状态”
-            try:
-                self.state.node_states.clear()
-                self.state.edge_states.clear()
             except Exception:
                 pass
         else:
@@ -1206,7 +1285,7 @@ class VehicleSimulator:
                 raise ValueError(f"No nearest station found for station '{sid}'")
             route.append(str(nearest))
         try:
-            pts = route_polyline(route, stations, paths, steps_per_edge=20)
+            pts = route_polyline(route, stations, paths, steps_per_edge=1)
         except Exception:
             try:
                 emit_error(52702, {"serial_number": self.config.vehicle.serial_number, "map": map_name, "route": route})  # path plan failed
@@ -1219,7 +1298,28 @@ class VehicleSimulator:
         except Exception:
             scale = 1.0
         dynamic_step_delta = max(0.02, 0.08 * scale)
+        before_aug_len = len(pts) if pts else 0
         pts = augment_with_corner_turns(pts, theta_threshold=0.1, step_delta=dynamic_step_delta)
+        after_aug_len = len(pts) if pts else 0
+        try:
+            self.logger.info(
+                f"[ROUTE_BUILD] nodes={len(route_node_ids)} scale={scale:.2f} step_delta={dynamic_step_delta:.3f} "
+                f"pts_before={before_aug_len} pts_after={after_aug_len}"
+            )
+        except Exception:
+            pass
+        # 记录最后一条边与最终点坐标，用于最后一段的减速控制与到站阈值判断
+        try:
+            if pts:
+                last_pt = pts[-1]
+                self.nav_last_edge_id = str(last_pt.get("edgeId", "") or "")
+                self.nav_final_point = (float(last_pt.get("x", 0.0)), float(last_pt.get("y", 0.0)))
+            else:
+                self.nav_last_edge_id = None
+                self.nav_final_point = None
+        except Exception:
+            self.nav_last_edge_id = None
+            self.nav_final_point = None
         # 起步修正：将首个导航点的坐标替换为当前 AGV 姿态的坐标，避免导航开始阶段回跳到站点坐标
         try:
             vp = self.state.agv_position
@@ -1230,6 +1330,11 @@ class VehicleSimulator:
                 cur_y = float(vp.y)
                 pts[0]["x"] = cur_x
                 pts[0]["y"] = cur_y
+                # 记录起步加速的起点坐标
+                try:
+                    self.nav_start_point = (cur_x, cur_y)
+                except Exception:
+                    self.nav_start_point = None
                 if len(pts) >= 2:
                     pts[0]["theta"] = float(pts[1].get("theta", pts[0].get("theta", 0.0)))
                 # 规范化首段插入的纯转向点：若其坐标与原始首点坐标一致，则替换为当前坐标
@@ -1254,7 +1359,19 @@ class VehicleSimulator:
                             continue
                         break
                     if k > 1 and k < len(pts):
+                        removed = k - 1
                         pts = [pts[0]] + pts[k:]
+                        try:
+                            self.logger.info(
+                                f"[ROUTE_START_PRUNE] removed={removed} threshold={prune_threshold:.2f} first_target=({pts[1].get('x', cur_x):.3f},{pts[1].get('y', cur_y):.3f})"
+                            )
+                        except Exception:
+                            pass
+                        # 记录首段边 ID（用于起步加速，仅在首个实际平移目标就绪后设置）
+                        try:
+                            self.nav_first_edge_id = str(pts[1].get("edgeId", "") or "") if len(pts) >= 2 else None
+                        except Exception:
+                            self.nav_first_edge_id = None
                 except Exception:
                     pass
         except Exception:
@@ -1264,6 +1381,18 @@ class VehicleSimulator:
         self.nav_running = True
         self.nav_paused = False
         self.state.driving = True
+        # 打印前几个导航点坐标，便于复现实验对比
+        try:
+            preview_cnt = min(5, len(self.nav_points or []))
+            pts_preview = []
+            for i in range(preview_cnt):
+                p = self.nav_points[i]
+                pts_preview.append(f"({float(p.get('x', 0.0)):.3f},{float(p.get('y', 0.0)):.3f})")
+            self.logger.info(
+                f"[ROUTE_READY] pts={len(self.nav_points or [])} last_edge='{self.nav_last_edge_id}' final=({(self.nav_final_point or (0.0,0.0))[0]:.3f},{(self.nav_final_point or (0.0,0.0))[1]:.3f}) preview={pts_preview}"
+            )
+        except Exception:
+            pass
         # 保存订单路由的站点名序列（用于到站检测与状态裁剪）
         try:
             self.nav_route_node_ids = list(route_node_ids)
@@ -1285,14 +1414,32 @@ class VehicleSimulator:
             return
         cur_seq = int(self.state.last_node_sequence_id or 0)
         next_node = None
+        # 仅考虑当前导航路由中的节点，并跳过锁定（released=false）的节点
+        try:
+            route_ids = set(self.nav_route_node_ids or [])
+        except Exception:
+            route_ids = set(self.nav_route_node_ids or [])
         for n in ordered_nodes:
             try:
                 s = int(getattr(n, "sequence_id", 0) or 0)
             except Exception:
                 s = 0
-            if s > cur_seq:
-                next_node = n
-                break
+            if s <= cur_seq:
+                continue
+            # 若存在路由约束，则仅在路由节点集合内进行到站检测
+            nid = str(getattr(n, "node_id", "") or "")
+            if route_ids and nid not in route_ids:
+                continue
+            # 锁点不参与到站推进，等待后续订单解锁
+            try:
+                if not bool(getattr(n, "released", True)):
+                    # 命中锁点则直接停止到站检测（不向后跳过锁点）
+                    next_node = None
+                    break
+            except Exception:
+                pass
+            next_node = n
+            break
         if not next_node:
             return
         next_node_id = str(getattr(next_node, "node_id", "") or "")
@@ -1300,15 +1447,26 @@ class VehicleSimulator:
             return
         # 站点位置解析
         pos = None
+        fp = None
+        pos = None
         try:
-            fp = resolve_scene_path(self.nav_map_name or (self.state.agv_position.map_id if self.state.agv_position else None))
+            map_name = self.nav_map_name or (self.state.agv_position.map_id if self.state.agv_position else None)
+            fp = resolve_scene_path(map_name)
             pos = find_station_position(fp, next_node_id)
         except Exception:
-            pos = None
+            # 回退到节点自身的地图（nodePosition.mapId），提高首单成功率
+            try:
+                np_next = getattr(next_node, "node_position", None)
+                fallback_map = getattr(np_next, "map_id", None) if np_next else None
+                if fallback_map:
+                    fp = resolve_scene_path(fallback_map)
+                    pos = find_station_position(fp, next_node_id)
+            except Exception:
+                pos = None
         if not pos:
             return
         # 距离阈值判定（find_station位置返回 (x, y) 元组），支持节点允许偏差
-        arrive_threshold = 0.2
+        arrive_threshold = 0.02
         try:
             np_next = getattr(next_node, "node_position", None)
             if np_next and getattr(np_next, "allowed_deviation_xy", None) is not None:
@@ -1319,8 +1477,12 @@ class VehicleSimulator:
         dy = float(self.state.agv_position.y) - float(pos[1])
         if dx * dx + dy * dy > arrive_threshold * arrive_threshold:
             return
-        # 到站：更新 lastNodeId 与 lastNodeSequenceId
-        self.state.last_node_id = next_node_id
+        # 到站：优先用地图 points.name 作为 lastNodeId（如可解析），否则回退为节点 ID
+        try:
+            label = find_point_name_by_id(fp, str(next_node_id)) if fp else None
+            self.state.last_node_id = label or str(next_node_id)
+        except Exception:
+            self.state.last_node_id = str(next_node_id)
         try:
             next_seq = int(getattr(next_node, "sequence_id", 0) or 0)
         except Exception:
@@ -1352,6 +1514,19 @@ class VehicleSimulator:
         except Exception:
             pass
         speed = float(base_speed) * scale * dt
+        try:
+            deg = None
+            has_traj = bool(next_edge and getattr(next_edge, "trajectory", None) is not None)
+            if has_traj:
+                try:
+                    deg = int(getattr(getattr(next_edge, "trajectory", None), "degree", 0) or 0)
+                except Exception:
+                    deg = None
+            self.logger.info(
+                f"[ORDER_CALC] base_speed={float(base_speed):.3f} scale={scale:.2f} dt={dt:.3f}s step_speed={speed:.4f} traj={has_traj} degree={deg}"
+            )
+        except Exception:
+            pass
         if next_edge and next_edge.trajectory is not None:
             try:
                 normalize_trajectory(next_edge.trajectory)

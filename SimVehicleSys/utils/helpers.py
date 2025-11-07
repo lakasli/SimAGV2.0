@@ -39,8 +39,14 @@ def iterate_position(current_x: float, current_y: float, target_x: float, target
     dx = target_x - current_x
     dy = target_y - current_y
     angle = math.atan2(dx, dy)
-    next_x = current_x + speed * math.sin(angle)
-    next_y = current_y + speed * math.cos(angle)
+    # 防止超步长导致越过目标：将步长限制为“剩余距离”
+    remaining = get_distance(current_x, current_y, target_x, target_y)
+    step = min(max(0.0, float(speed)), remaining)
+    next_x = current_x + step * math.sin(angle)
+    next_y = current_y + step * math.cos(angle)
+    # 若步长覆盖目标，则直接返回目标坐标
+    if step >= remaining - 1e-12:
+        return (target_x, target_y, angle)
     return (next_x, next_y, angle)
 
 

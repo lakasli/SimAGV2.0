@@ -1,24 +1,8 @@
 {
     "orderId": "75982a12-7b9a-48a3-a8f7-efa1ee1cc465",
-    "orderUpdateId": 0,
+    "orderUpdateId": 1,
     "zoneSetId": "",
     "nodes": [
-        {
-            "nodeId": "AP1",
-            "sequenceId": 1,
-            "nodeDescription": "Device initial position",
-            "released": true,
-            "nodePosition": {
-                "x": -6.81,
-                "y": -4.57,
-                "theta": 0,
-                "allowedDeviationXY": 0.5,
-                "allowedDeviationTheta": 0.5,
-                "mapId": "test1",
-                "mapDescription": "Id: test1"
-            },
-            "actions": []
-        },
         {
             "nodeId": "AP5",
             "sequenceId": 2,
@@ -39,7 +23,7 @@
             "nodeId": "AP6",
             "sequenceId": 3,
             "nodeDescription": "Exitvector for PointOfInterest 04678a1e-3de5403f-bafc-e8badbee202a Dolly",
-            "released": false,
+            "released": true,
             "nodePosition": {
                 "x": -6.81,
                 "y": -6.99,
@@ -50,44 +34,30 @@
                 "mapDescription": "Id: test1"
             },
             "actions": []
+        },
+        {
+            "nodeId": "AP10",
+            "sequenceId": 4,
+            "nodeDescription": "Device initial position",
+            "released": true,
+            "nodePosition": {
+                "x": -5.41,
+                "y": -6.99,
+                "theta": 0,
+                "allowedDeviationXY": 0.5,
+                "allowedDeviationTheta": 0.5,
+                "mapId": "test1",
+                "mapDescription": "Id: test1"
+            },
+            "actions": []
         }
     ],
     "edges": [
         {
-            "edgeId": "AP1-AP5",
-            "sequenceId": 1,
-            "edgeDescription": "Edge connecting AP1 to AP5",
-            "released": true,
-            "startNodeId": "AP1",
-            "endNodeId": "AP5",
-            "maxSpeed": 1,
-            "maxHeight": null,
-            "minHeight": null,
-            "orientation": null,
-            "direction": null,
-            "rotationAllowed": false,
-            "maxRotationSpeed": null,
-            "trajectory": {
-                "type": "bezier3",
-                "controlPoints": [
-                    {
-                        "x": -6.799,
-                        "y": -4.978
-                    },
-                    {
-                        "x": -6.799,
-                        "y": -5.375
-                    }
-                ]
-            },
-            "length": null,
-            "actions": []
-        },
-        {
             "edgeId": "AP5-AP6",
             "sequenceId": 2,
             "edgeDescription": "Edge connecting AP5 to AP6",
-            "released": false,
+            "released": true,
             "startNodeId": "AP5",
             "endNodeId": "AP6",
             "maxSpeed": 2,
@@ -112,9 +82,39 @@
             },
             "length": null,
             "actions": []
+        },
+        {
+            "edgeId": "AP6-AP10",
+            "sequenceId": 3,
+            "edgeDescription": "Edge connecting AP6 to AP10",
+            "released": true,
+            "startNodeId": "AP6",
+            "endNodeId": "AP10",
+            "maxSpeed": 1,
+            "maxHeight": null,
+            "minHeight": null,
+            "orientation": null,
+            "direction": null,
+            "rotationAllowed": false,
+            "maxRotationSpeed": null,
+            "trajectory": {
+                "type": "bezier3",
+                "controlPoints": [
+                    {
+                        "x": -6.329,
+                        "y": -6.979
+                    },
+                    {
+                        "x": -5.867,
+                        "y": -6.979
+                    }
+                ]
+            },
+            "length": null,
+            "actions": []
         }
     ],
-    "headerId": 0,
+    "headerId": 1,
     "timeStamp": "11/15/2022 11:59:09",
     "version": "v2",
     "manufacturer": "SEER",

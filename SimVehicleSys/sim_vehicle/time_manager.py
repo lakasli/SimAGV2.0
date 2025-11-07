@@ -2,6 +2,7 @@ from __future__ import annotations
 import threading
 import time
 from typing import Any, Optional
+from SimVehicleSys.utils.logger import setup_logger
 
 
 def set_sim_time_scale(config: Any, scale: float) -> None:
@@ -27,6 +28,8 @@ class SimClock:
         self.tick_ms = int(tick_ms)
         self._thread: Optional[threading.Thread] = None
         self._stop = False
+        self._clock_logged = False
+        self.logger = setup_logger()
 
     def start(self, mqtt_client: Any) -> None:
         if self._thread and self._thread.is_alive():
@@ -53,6 +56,14 @@ class SimClock:
                 scale = max(0.0001, float(self.config.settings.sim_time_scale))
                 eff_state_freq = max(1e-6, float(self.config.settings.state_frequency) * scale)
                 eff_vis_freq = max(1e-6, float(self.config.settings.visualization_frequency) * scale)
+                if not self._clock_logged:
+                    try:
+                        self.logger.info(
+                            f"[Clock] tick={base_tick}ms scale={scale:.2f} eff_state_freq={eff_state_freq:.2f} eff_vis_freq={eff_vis_freq:.2f}"
+                        )
+                    except Exception:
+                        pass
+                    self._clock_logged = True
                 state_elapsed_ms += base_tick
                 if state_elapsed_ms >= (1000.0 / eff_state_freq):
                     state_elapsed_ms = 0.0
@@ -62,5 +73,8 @@ class SimClock:
                     visualization_elapsed_ms = 0.0
                     self.sim.publish_visualization(mqtt_client)
             except Exception as e:
-                print(f"SimClock tick error: {e}")
+                try:
+                    self.logger.error(f"SimClock tick error: {e}")
+                except Exception:
+                    print(f"SimClock tick error: {e}")
             time.sleep(base_tick / 1000.0)
