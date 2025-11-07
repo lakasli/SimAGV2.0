@@ -80,6 +80,13 @@ class VehicleSimulator:
     # 导航最后一条边的标识，以及最终目标点坐标（用于最后一段的减速与到站判定）
     nav_last_edge_id: Optional[str] = None
     nav_final_point: Optional[Tuple[float, float]] = None
+    # 加减速距离（米）：仅在起步/转弯后前 1m 加速，终点前 1m 减速
+    nav_accel_distance_m: float = 1.0
+    nav_decel_distance_m: float = 1.0
+
+    # 可选：首段边与起步点（动态设置）
+    nav_first_edge_id: Optional[str] = None
+    nav_start_point: Optional[Tuple[float, float]] = None
 
     @staticmethod
     def create(config: Config) -> "VehicleSimulator":
@@ -1107,50 +1114,50 @@ class VehicleSimulator:
                         edge_step = max(1e-9, float(min(float(self.config.settings.speed), float(cap_val))) * scale * dt)
                     except Exception:
                         edge_step = base_step
-                # 起步阶段加速：基于起点距离平方逐步放大步长（对首段边生效）
+                # 起步/转弯后的加速：仅在起步点（或最新转弯完成点）2m 内生效
                 try:
-                    first_id = self.nav_first_edge_id or ""
                     start_pt = self.nav_start_point
-                    if start_pt is not None and first_id and t_edge_id == first_id:
+                    accel_m = max(0.0, float(self.nav_accel_distance_m))
+                    if start_pt is not None and accel_m > 0.0:
                         sx, sy = start_pt
                         s_dist = math.hypot(vp.x - sx, vp.y - sy)
-                        accel_eps = 0.02
-                        if s_dist <= accel_eps:
-                            # 起步不应完全停滞，给予极小步长。
-                            schedule_up = max(0.01, s_dist)
-                        else:
-                            try:
-                                schedule_up = float(s_dist ** 2)
-                            except Exception:
-                                schedule_up = edge_step
-                        edge_step = min(edge_step, schedule_up)
-                        try:
-                            if self.nav_idx <= 5:
-                                self.logger.info(
-                                    f"[NAV_START_ACCEL] idx={self.nav_idx} s_dist={s_dist:.4f} schedule_up={schedule_up:.4f} edge_step={edge_step:.4f}"
-                                )
-                        except Exception:
-                            pass
+                        if s_dist < accel_m:
+                            ramp = s_dist / max(accel_m, 1e-9)
+                            # 线性加速阶梯：避免零步长
+                            schedule_up = max(0.01, edge_step * float(ramp))
+                            edge_step = min(edge_step, schedule_up)
                 except Exception:
                     pass
-                # 最后一段边的减速：基于距离平方衰减的步进控制
+                # 终点前 2m 的减速：不限定最后一条边，只要接近最终目标即减速
                 try:
-                    last_id = self.nav_last_edge_id or ""
                     final_pt = self.nav_final_point
-                    if final_pt is not None and last_id and t_edge_id == last_id:
+                    decel_m = max(0.0, float(self.nav_decel_distance_m))
+                    if final_pt is not None and decel_m > 0.0:
                         fx, fy = final_pt
                         y_dist = math.hypot(vp.x - fx, vp.y - fy)
                         arrive_eps = 0.02
                         if y_dist <= arrive_eps:
+                            # 到达最终目标：结束导航
                             self.nav_idx = len(self.nav_points)
-                            # 不再推进，交由到站裁剪处理
                             edge_step = 0.0
-                        else:
-                            try:
-                                schedule_x = float(y_dist ** 2)
-                            except Exception:
-                                schedule_x = edge_step
+                        elif y_dist < decel_m:
+                            ramp_down = y_dist / max(decel_m, 1e-9)
+                            schedule_x = max(0.01, edge_step * float(ramp_down))
                             edge_step = min(edge_step, schedule_x, y_dist)
+                except Exception:
+                    pass
+                # 转弯前 2m 的预减速：若当前目标是转弯锚点，则在接近时减速
+                try:
+                    cur_pt = pt
+                    if bool(cur_pt.get("turnAnchor", False)):
+                        ax = float(cur_pt.get("x", vp.x))
+                        ay = float(cur_pt.get("y", vp.y))
+                        a_dist = math.hypot(vp.x - ax, vp.y - ay)
+                        decel_m = max(0.0, float(self.nav_decel_distance_m))
+                        if a_dist < decel_m:
+                            ramp_down = a_dist / max(decel_m, 1e-9)
+                            schedule_a = max(0.01, edge_step * float(ramp_down))
+                            edge_step = min(edge_step, schedule_a, a_dist)
                 except Exception:
                     pass
                 step_len = min(base_step, edge_step)
@@ -1189,6 +1196,17 @@ class VehicleSimulator:
                 # 纯转向点日志已移除
                 aligned = applyRotationStepInSim(self, float(ttheta), base_step=0.15)
                 if aligned:
+                    # 仅当上一个“平移点”标记为转弯锚点时，才重置起步点
+                    try:
+                        prev_idx = self.nav_idx - 1
+                        if prev_idx >= 0 and self.nav_points and prev_idx < len(self.nav_points):
+                            prev_pt = self.nav_points[prev_idx]
+                            if bool(prev_pt.get("turnAnchor", False)):
+                                vp_now = self.state.agv_position
+                                if vp_now:
+                                    self.nav_start_point = (float(vp_now.x), float(vp_now.y))
+                    except Exception:
+                        pass
                     self.nav_idx += 1
                 return
             if dist <= step_len:

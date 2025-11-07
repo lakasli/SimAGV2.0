@@ -255,6 +255,11 @@ def augment_with_corner_turns(
         dpos2 = dx * dx + dy * dy
         dtheta = _normalize_angle(curr["theta"] - prev["theta"])
         if abs(dtheta) > theta_threshold and dpos2 > pos_eps:
+            # 标记拐角的前一平移点为转弯锚点，用于提前减速
+            try:
+                new_pts[-1]["turnAnchor"] = True
+            except Exception:
+                pass
             steps = max(1, int(abs(dtheta) / max(1e-6, step_delta)))
             for n in range(1, steps + 1):
                 mid_theta = _normalize_angle(prev["theta"] + dtheta * (n / steps))
