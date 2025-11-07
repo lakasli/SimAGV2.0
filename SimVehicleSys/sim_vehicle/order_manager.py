@@ -5,6 +5,8 @@ from SimVehicleSys.protocol.vda_2_0_0.order import Order, Node, Edge
 from SimVehicleSys.protocol.vda_2_0_0.action import Action, ActionParameter, BlockingType
 from SimVehicleSys.protocol.vda5050_common import NodePosition, Trajectory, ControlPoint
 from SimVehicleSys.sim_vehicle.action_executor import execute_pallet_action_in_sim
+from SimVehicleSys.utils.helpers import canonicalize_map_id
+from SimVehicleSys.sim_vehicle.error_manager import emit_error
 
 
 JsonDict = Dict[str, Any]
@@ -232,6 +234,33 @@ def _validate_order(sim_vehicle: Any, order: Order) -> None:
             continue
         if not n.node_position.map_id:
             n.node_position.map_id = current_map
+
+    # 严格校验：订单中的 nodePosition.mapId 必须与仿真车当前加载的地图一致
+    try:
+        cfg = getattr(sim_vehicle, "config", None)
+        settings = getattr(cfg, "settings", None)
+        expected_raw = current_map or (getattr(settings, "map_id", None))
+        expected_map_name = canonicalize_map_id(expected_raw)
+    except Exception:
+        expected_map_name = canonicalize_map_id(current_map)
+    for n in order.nodes:
+        np = getattr(n, "node_position", None)
+        if np is None:
+            continue
+        node_map_name = canonicalize_map_id(getattr(np, "map_id", None))
+        if node_map_name != expected_map_name:
+            # 上报错误 90012 并拒绝执行订单
+            try:
+                serial = str(getattr(getattr(getattr(sim_vehicle, "config", None), "vehicle", None), "serial_number", "") or "")
+                emit_error(90012, {
+                    "serial_number": serial,
+                    "expected_map": expected_map_name,
+                    "provided_map": node_map_name,
+                    "node_id": str(getattr(n, "node_id", "") or ""),
+                })
+            except Exception:
+                pass
+            raise ValueError("order's nodePosition not in map")
 
     # 补充协议约束的骨架校验与规范化
     _enforce_node_actions_blocking_hard(order)

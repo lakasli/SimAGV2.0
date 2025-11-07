@@ -101,3 +101,15 @@ class SimSettingsPatch(BaseModel):
     battery_move_loaded_multiplier: Optional[float] = None
     battery_charge_per_min: Optional[float] = None
     frontend_poll_interval_ms: Optional[int] = None
+
+
+class SwitchMapRequest(BaseModel):
+    # 地图标识，例如 "duoc" 或 "VehicleMap/duoc.scene"
+    map: str
+    # 站点名称或 ID（可选）：若提供，则优先按站点定位
+    switch_point: Optional[str] = None
+    # 切换后中心坐标（米），在未提供站点时作为兜底
+    center_x: Optional[float] = None
+    center_y: Optional[float] = None
+    # 切换后朝向（弧度），可选
+    initiate_angle: Optional[float] = None

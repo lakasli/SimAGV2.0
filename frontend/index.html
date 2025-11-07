@@ -2501,19 +2501,25 @@
           if (!sResp.ok) throw new Error(`静态配置更新失败: HTTP ${sResp.status}`);
           robot.ip = newIP;
         }
-        // 动态配置更新：电量 + 位置（含朝向）
-        const dBody = { battery_level: isNaN(battery) ? undefined : battery, position: pos, current_map: mapVal || undefined };
-        const dResp = await fetch(`${API_BASE_URL}/agv/${id}/config/dynamic`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dBody)
-        });
-        if (!dResp.ok) throw new Error(`动态配置更新失败: HTTP ${dResp.status}`);
-        const status = await dResp.json();
+        // 使用即时动作 switchMap 进行地图切换与重定位（替代原逻辑）
+        if (mapVal && /(^|\/)(VehicleMap|ViewerMap)\/[^\/]+\.scene$/.test(mapVal)) {
+          const swBody = { map: mapVal };
+          if (initId) swBody.switch_point = initId;
+          if (isFinite(pos?.x) && isFinite(pos?.y)) { swBody.center_x = pos.x; swBody.center_y = pos.y; }
+          if (!isNaN(orientation)) swBody.initiate_angle = orientation;
+          const swResp = await fetch(`${API_BASE_URL}/agv/${id}/instant/switch-map`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(swBody)
+          });
+          if (!swResp.ok) throw new Error(`发布 switchMap 失败: HTTP ${swResp.status}`);
+        }
+        // 不再通过动态配置更新位置/地图，避免与 switchMap 冲突
+        // 若需要仅更新电量，可在此处独立调用动态配置接口（可选）。此处遵循“删除原本的逻辑”，不提交动态配置。
         if (newType) robot.type = newType;
         if (newManu) robot.manufacturer = newManu;
         if (newVer) robot.version = newVer;
         updateRobotList();
         drawMap();
-        document.getElementById('status').textContent = `机器人 ${id} 配置已更新`;
+        document.getElementById('status').textContent = `机器人 ${id} 已发送 switchMap 即时动作`;
         setTimeout(() => document.getElementById('status').textContent = '准备就绪', 2000);
       } catch (err) {
         console.error('更新配置失败:', err);

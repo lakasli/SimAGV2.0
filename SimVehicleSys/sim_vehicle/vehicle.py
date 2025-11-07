@@ -659,8 +659,120 @@ class VehicleSimulator:
         pass
 
     def _handle_switch_map_action(self, action: Action) -> None:
-        # 切换地图与重定位骨架
-        pass
+        # 切换地图与重定位：支持参数
+        # map/mapId/map_id: 地图标识（如 "duoc" 或 "VehicleMap/duoc.scene"）
+        # switchPoint: 站点名称或ID（优先用于定位）
+        # center_x/center_y: 切换后位置坐标（米，作为兜底）
+        # initiate_angle/theta: 切换后朝向（弧度，作为兜底）
+        try:
+            params = action.action_parameters or []
+
+            def _get_str(*keys: str) -> Optional[str]:
+                for k in keys:
+                    for p in params:
+                        if str(getattr(p, "key", "")).lower() == str(k).lower():
+                            v = getattr(p, "value", None)
+                            return None if v is None else str(v)
+                return None
+
+            def _get_float(*keys: str) -> Optional[float]:
+                for k in keys:
+                    for p in params:
+                        if str(getattr(p, "key", "")).lower() == str(k).lower():
+                            try:
+                                v = getattr(p, "value", None)
+                                return None if v is None else float(v)  # type: ignore
+                            except Exception:
+                                try:
+                                    return float(str(getattr(p, "value", "0") or "0"))
+                                except Exception:
+                                    return None
+                return None
+
+            map_raw = _get_str("map", "mapId", "map_id")
+            if not map_raw:
+                # 无地图参数则不进行切换
+                return
+            # 解析目标站点与位置参数
+            switch_point = _get_str("switchPoint", "stationId")
+            cx = _get_float("center_x", "x")
+            cy = _get_float("center_y", "y")
+            ang = _get_float("initiate_angle", "theta")
+
+            # 解析 .scene 文件以便按站点定位（若提供了 switchPoint）
+            pos_x: Optional[float] = cx
+            pos_y: Optional[float] = cy
+            theta: Optional[float] = ang
+            try:
+                fp = resolve_scene_path(map_raw)
+                if switch_point:
+                    sp = find_station_position(fp, str(switch_point))
+                    if isinstance(sp, tuple) and len(sp) == 2:
+                        pos_x, pos_y = float(sp[0]), float(sp[1])
+                # 若未提供 theta，则保持现朝向
+                if theta is None and self.state.agv_position:
+                    try:
+                        theta = float(self.state.agv_position.theta or 0.0)
+                    except Exception:
+                        theta = 0.0
+            except Exception:
+                # 地图解析失败时，仍进行 mapId 切换，仅按提供坐标/角度更新
+                if theta is None and self.state.agv_position:
+                    try:
+                        theta = float(self.state.agv_position.theta or 0.0)
+                    except Exception:
+                        theta = 0.0
+
+            # 更新 VDA5050 state 的位置与地图
+            try:
+                if not self.state.agv_position:
+                    self.state.agv_position = AgvPosition(x=float(pos_x or 0.0), y=float(pos_y or 0.0), theta=float(theta or 0.0), position_initialized=True, map_id=str(map_raw))
+                else:
+                    self.state.agv_position.x = float(pos_x or 0.0)
+                    self.state.agv_position.y = float(pos_y or 0.0)
+                    self.state.agv_position.theta = float(theta or 0.0)
+                    self.state.agv_position.position_initialized = True
+                    self.state.agv_position.map_id = str(map_raw)
+                # 可视化位置同步
+                self.visualization.agv_position = self.state.agv_position
+            except Exception:
+                pass
+
+            # 清理导航状态（切图通常中断当前导航）
+            try:
+                self.nav_running = False
+                self.state.driving = False
+                self.nav_points = None
+                self.nav_idx = 0
+                self.nav_map_name = None
+                self.nav_target_station = None
+                self.nav_last_edge_id = None
+                self.nav_final_point = None
+                self.nav_route_node_ids = None
+            except Exception:
+                pass
+
+            # 同步到集中式运行态存储，以便后端与前端立即接收新的地图/位置
+            try:
+                from backend.schemas import DynamicConfigUpdate, Position
+                dyn = DynamicConfigUpdate(
+                    current_map=str(map_raw),
+                    position=Position(x=float(pos_x or 0.0), y=float(pos_y or 0.0), theta=float(theta or 0.0)),
+                )
+                global_store.update_dynamic(self.config.vehicle.serial_number, dyn)
+            except Exception:
+                pass
+
+            # 记录切图日志，便于调试
+            try:
+                self.logger.info(
+                    f"[SWITCH_MAP] serial={self.config.vehicle.serial_number} map='{str(map_raw)}' pos=({float(pos_x or 0.0):.3f},{float(pos_y or 0.0):.3f}) theta={float(theta or 0.0):.3f} anchor='{switch_point or ''}'"
+                )
+            except Exception:
+                pass
+        except Exception:
+            # 保守失败：不抛出异常以免影响其他动作
+            pass
 
     def _handle_rotate_agv_action(self, action: Action) -> None:
         # 旋转车体骨架：仅更新 theta（后续对接 AGVManager）

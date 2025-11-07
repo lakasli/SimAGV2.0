@@ -7,6 +7,7 @@ from typing import Optional
 
 import paho.mqtt.client as mqtt
 from SimVehicleSys.config.settings import get_config
+from SimVehicleSys.utils.helpers import canonicalize_map_id
 
 from .schemas import AGVInfo, AGVRuntime
 from .schemas import SimSettingsPatch
@@ -111,12 +112,13 @@ class MqttPublisher:
                 {
                     "actionType": "initPosition",
                     "actionId": action_id,
-                    "blockingType": "SOFT",
+                    "blockingType": "HARD",
                     "actionParameters": [
                         {"key": "x", "value": rt.position.x},
                         {"key": "y", "value": rt.position.y},
                         {"key": "theta", "value": rt.position.theta},
-                        {"key": "mapId", "value": rt.current_map or "default"},
+                        # mapId 仅为 VehicleMap 下的 scene 文件名（不含扩展名）
+                        {"key": "mapId", "value": (canonicalize_map_id(getattr(rt, "current_map", None)))},
                         # 将 lastNodeId 作为额外参数下发，车辆在处理 initPosition 时会直接更新 state.last_node_id
                         *(([{"key": "lastNodeId", "value": last_node_label}] ) if last_node_label else [])
                     ],
@@ -196,4 +198,47 @@ class MqttPublisher:
             if rc != mqtt.MQTT_ERR_SUCCESS:
                 raise RuntimeError(f"MQTT publish simConfig failed rc={rc}")
         except Exception as e:
+            raise
+
+    def publish_switch_map(self, info: AGVInfo, *, map_name: str, switch_point: Optional[str] = None, center_x: Optional[float] = None, center_y: Optional[float] = None, initiate_angle: Optional[float] = None) -> None:
+        """发布地图切换即时动作到 MQTT `.../instantActions` 主题。
+
+        参数名与设备端约定保持一致：map、switchPoint、center_x、center_y、initiate_angle。
+        """
+        if not self.client:
+            raise RuntimeError("MQTT publisher not connected")
+        base = f"{self.vda_interface}/{info.vda_version}/{info.manufacturer}/{info.serial_number}"
+        topic = f"{base}/instantActions"
+        action_id = f"backend-switchmap-{uuid.uuid4()}"
+        params = [{"key": "map", "value": map_name}]
+        if switch_point:
+            params.append({"key": "switchPoint", "value": switch_point})
+        if center_x is not None:
+            params.append({"key": "center_x", "value": center_x})
+        if center_y is not None:
+            params.append({"key": "center_y", "value": center_y})
+        if initiate_angle is not None:
+            params.append({"key": "initiate_angle", "value": initiate_angle})
+        payload = {
+            "headerId": 0,
+            "timestamp": _timestamp(),
+            "version": self.vda_full_version,
+            "manufacturer": info.manufacturer,
+            "serialNumber": info.serial_number,
+            "actions": [
+                {
+                    "actionType": "switchMap",
+                    "actionId": action_id,
+                    "actionDescription": "Manual switchMap",
+                    "blockingType": "HARD",
+                    "actionParameters": params,
+                }
+            ],
+        }
+        try:
+            info_obj = self.client.publish(topic, json.dumps(payload), qos=1, retain=False)
+            rc = getattr(info_obj, "rc", mqtt.MQTT_ERR_SUCCESS)
+            if rc != mqtt.MQTT_ERR_SUCCESS:
+                raise RuntimeError(f"MQTT publish switchMap failed rc={rc}")
+        except Exception:
             raise

@@ -11,6 +11,7 @@ from typing import Union
 from .schemas import AGVRegistration, RegisterRequest, RegisterResponse, UnregisterResponse, AGVInfo, StaticConfigPatch, DynamicConfigUpdate, StatusResponse
 from .schemas import SimSettingsPatch
 from .schemas import TranslateRequest, RotateRequest
+from .schemas import SwitchMapRequest
 from .agv_manager import AGVManager
 from .sim_process_manager import SimulatorProcessManager
 from fastapi import WebSocket
@@ -688,3 +689,25 @@ def publish_order(serial_number: str, body: dict = Body(...)):
     # 返回兼容的 orderId（同时提供两种命名以兼容旧前端）
     _oid = body.get("orderId") or body.get("order_id")
     return {"published": True, "serial_number": serial_number, "orderId": _oid, "order_id": _oid}
+
+# 发布地图切换即时动作到 MQTT
+@app.post("/api/agv/{serial_number}/instant/switch-map")
+def publish_switch_map(serial_number: str, body: SwitchMapRequest):
+    info = agv_manager.get_agv(serial_number)
+    if not info:
+        raise HTTPException(status_code=404, detail="AGV not found")
+    publisher = getattr(app.state, "mqtt_publisher", None)
+    if not publisher:
+        raise HTTPException(status_code=500, detail="MQTT publisher not available")
+    try:
+        publisher.publish_switch_map(
+            info,
+            map_name=body.map,
+            switch_point=body.switch_point,
+            center_x=body.center_x,
+            center_y=body.center_y,
+            initiate_angle=body.initiate_angle,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Publish switchMap failed: {e}")
+    return {"published": True, "serial_number": serial_number}
