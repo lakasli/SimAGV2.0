@@ -576,8 +576,10 @@
     })();
     // 配置
     const API_BASE_URL = window.location.origin + '/api';
-    // 可配置的前端轮询间隔（毫秒），从后端 /api/config 读取，默认 100ms
+    // 可配置的前端轮询间隔（毫秒），从后端 /api/config 读取
     window.FRONTEND_POLL_INTERVAL_MS = 1000;
+    // 安全范围中心前移偏移量（米），用于将旋转矩形中心沿车头方向平移
+    window.CENTER_FORWARD_OFFSET_M = 0.1;
     async function loadFrontendConfig() {
       try {
         const resp = await fetch(`${API_BASE_URL}/config`);
@@ -586,6 +588,10 @@
           const v = Number(data && data.polling_interval_ms);
           if (isFinite(v) && v > 0) {
             window.FRONTEND_POLL_INTERVAL_MS = v;
+          }
+          const off = Number(data && (data.center_forward_offset_m ?? data.centerForwardOffsetM));
+          if (isFinite(off)) {
+            window.CENTER_FORWARD_OFFSET_M = Math.max(0, Math.min(5, off));
           }
         }
       } catch (_) { /* ignore */ }
@@ -2228,7 +2234,7 @@
       const shelfWm = fp ? Number(fp.width_m ?? fp.width) : NaN;
       const shelfLm = fp ? Number(fp.length_m ?? fp.length) : NaN;
       const hasShelf = isFinite(shelfWm) && isFinite(shelfLm) && shelfWm > 0 && shelfLm > 0;
-      const safeFactor = 1.1; // 与服务端一致
+      const safeFactor = 1.05; // 与服务端一致
       // 取 AGV 与托盘的矩形，以相同朝向叠加，最终安全范围为同向矩形的并集
       const finalWm = (hasShelf ? Math.max(baseWm, shelfWm) : baseWm) * safeFactor; // 宽（局部 X）
       const finalLm = (hasShelf ? Math.max(baseLm, shelfLm) : baseLm) * safeFactor; // 长（局部 Y）
@@ -2238,10 +2244,15 @@
       const wpx = finalWm * meterScale * viewTransform.scale;
       const lpx = finalLm * meterScale * viewTransform.scale;
 
-      // 绘制“朝向一致”的旋转矩形
+      // 绘制“朝向一致”的旋转矩形（中心前移偏移量）
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(thetaRad);
+      // 将几何中心沿车头方向（局部 -Y）平移 CENTER_FORWARD_OFFSET_M 米
+      try {
+        const offsetPx = (Number(window.CENTER_FORWARD_OFFSET_M) || 0) * meterScale * viewTransform.scale;
+        if (offsetPx) ctx.translate(0, -offsetPx);
+      } catch (_) {}
       const isCollision = !!(robot && robot._collisionActive);
       const fillColor = isCollision ? '#e74c3c' : '#3498db';
       const strokeColor = isCollision ? '#c0392b' : '#3498db';

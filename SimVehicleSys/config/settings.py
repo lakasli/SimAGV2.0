@@ -43,6 +43,8 @@ class Settings:
     battery_move_loaded_multiplier: float
     battery_charge_per_min: float
     frontend_poll_interval_ms: int
+    # 前向中心偏移量（米）：几何中心沿车头方向平移，用于安全范围计算/渲染
+    center_forward_offset_m: float
 
 
 @dataclass
@@ -120,5 +122,6 @@ def get_config(config_path: Optional[str] = None) -> Config:
             battery_move_loaded_multiplier=2.5,
             battery_charge_per_min=10.0,
             frontend_poll_interval_ms=1000,
+            center_forward_offset_m=0.1,
         ),
     )

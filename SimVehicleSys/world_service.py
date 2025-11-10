@@ -96,7 +96,7 @@ class WorldModelService:
                             p1,
                             length_default=self.defaultLength,
                             width_default=self.defaultWidth,
-                            safeFactor=1.2,
+                            safeFactor=1.05,
                         )
                         if not r1:
                             continue
@@ -106,7 +106,7 @@ class WorldModelService:
                                 p2,
                                 length_default=self.defaultLength,
                                 width_default=self.defaultWidth,
-                                safeFactor=1.2,
+                                safeFactor=1.05,
                             )
                             if not r2:
                                 continue

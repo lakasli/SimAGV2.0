@@ -291,7 +291,8 @@ class MqttHandler:
         self._collision_stop = True
 
     def _collision_loop(self) -> None:
-        tick_ms = 100
+        # 基础碰撞检测步长（毫秒）；实际休眠时间将按 sim_time_scale 缩放
+        base_tick_ms = 100
         # 默认底盘尺寸：支持运行时覆盖
         try:
             length_default = float(getattr(self.config.settings, "length", 1.03))
@@ -299,15 +300,22 @@ class MqttHandler:
         except Exception:
             length_default, width_default = 1.03, 0.745
         while not self._collision_stop:
+            # 计算基于时间缩放的有效睡眠秒数：scale 越大，检测越频繁
+            eff_sleep_s = base_tick_ms / 1000.0
+            try:
+                scale = max(0.0001, float(getattr(self.config.settings, "sim_time_scale", 1.0)))
+                eff_sleep_s = (base_tick_ms / scale) / 1000.0
+            except Exception:
+                pass
             try:
                 # 自身安全包围盒
                 my_rect = None
                 try:
-                    my_rect = computeSafetyRectForVehicle(self.sim, safeFactor=1.2)
+                    my_rect = computeSafetyRectForVehicle(self.sim, safeFactor=1.05)
                 except Exception:
                     my_rect = None
                 if my_rect is None:
-                    time.sleep(tick_ms / 1000.0)
+                    time.sleep(eff_sleep_s)
                     continue
                 # 拷贝对等状态快照，避免长锁
                 with self._peer_states_lock:
@@ -315,7 +323,7 @@ class MqttHandler:
                 any_overlap = False
                 for peer_serial, peer_state in peers:
                     try:
-                        peer_rect = computeSafetyRectForStatePayload(peer_state, length_default=length_default, width_default=width_default, safeFactor=1.2)
+                        peer_rect = computeSafetyRectForStatePayload(peer_state, length_default=length_default, width_default=width_default, safeFactor=1.05)
                         if not peer_rect:
                             continue
                         if rects_overlap(my_rect, peer_rect):
@@ -368,4 +376,4 @@ class MqttHandler:
                     pass
             except Exception:
                 pass
-            time.sleep(tick_ms / 1000.0)
+            time.sleep(eff_sleep_s)

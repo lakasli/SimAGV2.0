@@ -91,7 +91,7 @@ def index():
         raise HTTPException(status_code=404, detail="Frontend not found")
     return FileResponse(index_file)
 
-# 前端配置：提供轮询间隔（毫秒）
+# 前端配置：提供轮询间隔（毫秒）与中心前移偏移量（米）
 @app.get("/api/config")
 def get_frontend_config():
     try:
@@ -104,10 +104,25 @@ def get_frontend_config():
             interval = int(getattr(cfg.settings, "frontend_poll_interval_ms", 100))
         # 安全边界：至少 10ms，至多 5000ms
         interval = max(10, min(5000, interval))
-        return {"polling_interval_ms": interval}
+        # 中心前移偏移量（米）：用于安全范围几何中心沿车头方向平移
+        try:
+            offset_rt = getattr(app.state, "center_forward_offset_m", None)
+        except Exception:
+            offset_rt = None
+        if offset_rt is not None:
+            offset = float(offset_rt)
+        else:
+            try:
+                cfg = get_config()
+                offset = float(getattr(cfg.settings, "center_forward_offset_m", 0.1))
+            except Exception:
+                offset = 0.1
+        # 合理边界：0~5 米
+        offset = max(0.0, min(5.0, offset))
+        return {"polling_interval_ms": interval, "center_forward_offset_m": offset}
     except Exception:
         # 失败时回退到 100ms
-        return {"polling_interval_ms": 100}
+        return {"polling_interval_ms": 100, "center_forward_offset_m": 0.1}
 
 # --- Navigation APIs ---
 
@@ -184,6 +199,11 @@ async def _start_ws_broadcast():
     try:
         cfg = get_config()
         app.state.frontend_poll_interval_ms = int(getattr(cfg.settings, "frontend_poll_interval_ms", 1000))
+        # 初始化中心前移偏移量运行态值
+        try:
+            app.state.center_forward_offset_m = float(getattr(cfg.settings, "center_forward_offset_m", 0.2))
+        except Exception:
+            app.state.center_forward_offset_m = 0.2
     except Exception:
         app.state.frontend_poll_interval_ms = 1000
     # 记录每个 AGV 最近一次提交的仿真设置（用于前端预填）

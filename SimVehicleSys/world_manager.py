@@ -3,6 +3,7 @@ from typing import Iterable, Any, List, Tuple, Optional, Dict
 import time
 from pathlib import Path
 import json
+import math
 
 from .utils.helpers import (
     compute_agv_base_polygon,
@@ -12,12 +13,15 @@ from .utils.helpers import (
 from .sim_vehicle.state_manager import global_store
 
 
+# 前向中心偏移量（米）：将车辆几何中心沿车头方向平移，用于安全范围计算与渲染
+centerForwardOffsetM: float = 0.1
+
 def check_collision(vehicles: Iterable[Any]) -> bool:
-    """快速检测是否存在两车安全范围重叠（考虑托盘并按 1.2 扩大包围盒）。"""
+    """快速检测是否存在两车安全范围重叠（考虑托盘并按 1. 扩大包围盒）。"""
     rects: List[Tuple[float, float, float, float]] = []
     for v in vehicles:
         try:
-            rect = computeSafetyRectForVehicle(v, safeFactor=1.2)
+            rect = computeSafetyRectForVehicle(v, safeFactor=1.05)
             if rect:
                 rects.append(rect)
         except Exception:
@@ -146,7 +150,7 @@ def scaleRect(rect: Tuple[float, float, float, float], factor: float) -> Tuple[f
     return (xmin - dx, ymin - dy, xmax + dx, ymax + dy)
 
 
-def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.2) -> Optional[Tuple[float, float, float, float]]:
+def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.05) -> Optional[Tuple[float, float, float, float]]:
     """计算车辆的安全包围盒（考虑托盘尺寸），并按 safeFactor 扩大。
 
     尺寸来源：优先使用运行时配置 config.settings 的 length/width；否则采用默认值。
@@ -170,7 +174,10 @@ def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.2) -> Option
         theta = float(getattr(pos, "theta", 0.0) or 0.0)
         px = float(getattr(pos, "x", 0.0) or 0.0)
         py = float(getattr(pos, "y", 0.0) or 0.0)
-        base_poly = compute_agv_base_polygon(base_length, base_width, (px, py, theta))
+        # 将几何中心沿车头方向平移 centerForwardOffsetM 米
+        px_f = px + centerForwardOffsetM * math.sin(theta)
+        py_f = py + centerForwardOffsetM * math.cos(theta)
+        base_poly = compute_agv_base_polygon(base_length, base_width, (px_f, py_f, theta))
         base_rect = compute_outer_bounding_rect(base_poly)
 
         # 托盘/货架尺寸，若存在则与车辆包围盒合并
@@ -178,7 +185,7 @@ def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.2) -> Option
         if shelf_fp is not None:
             shelf_len, shelf_wid, _ = shelf_fp
             if (shelf_len or 0.0) > 0.0 or (shelf_wid or 0.0) > 0.0:
-                shelf_poly = compute_agv_base_polygon(float(shelf_len or 0.0), float(shelf_wid or 0.0), (px, py, theta))
+                shelf_poly = compute_agv_base_polygon(float(shelf_len or 0.0), float(shelf_wid or 0.0), (px_f, py_f, theta))
                 shelf_rect = compute_outer_bounding_rect(shelf_poly)
                 # 合并矩形（取并集的外包矩形）
                 xmin = min(base_rect[0], shelf_rect[0])
@@ -187,7 +194,7 @@ def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.2) -> Option
                 ymax = max(base_rect[3], shelf_rect[3])
                 base_rect = (xmin, ymin, xmax, ymax)
 
-        # 安全范围：按 1.2 倍扩大（如需额外常量安全距，可叠加 expand）
+        # 安全范围：按 1.05 倍扩大（如需额外常量安全距，可叠加 expand）
         safe_rect = scaleRect(base_rect, max(1.0, float(safeFactor)))
         return safe_rect
     except Exception:
@@ -256,8 +263,8 @@ def _getShelfFootprintFromStatePayload(state_payload: Dict[str, Any]) -> Optiona
     return None
 
 
-def computeSafetyRectForStatePayload(state_payload: Dict[str, Any], length_default: float = 1.03, width_default: float = 0.745, safeFactor: float = 1.1) -> Optional[Tuple[float, float, float, float]]:
-    """基于 VDA5050 state JSON(payload) 计算安全包围盒，支持 1.2 放大与托盘尺寸融合。
+def computeSafetyRectForStatePayload(state_payload: Dict[str, Any], length_default: float = 1.03, width_default: float = 0.745, safeFactor: float = 1.05) -> Optional[Tuple[float, float, float, float]]:
+    """基于 VDA5050 state JSON(payload) 计算安全包围盒，支持 1.05 放大与托盘尺寸融合。
     朝向取值优先使用 `theta`，若缺失则回退到 `orientation`，与系统约定保持一致（0 度为 +Y 方向）。
     """
     try:
@@ -268,13 +275,16 @@ def computeSafetyRectForStatePayload(state_payload: Dict[str, Any], length_defau
         if raw_theta is None:
             raw_theta = agv.get("orientation", 0.0)
         theta = float(raw_theta or 0.0)
-        base_poly = compute_agv_base_polygon(float(length_default or 1.03), float(width_default or 0.745), (px, py, theta))
+        # 将几何中心沿车头方向平移 centerForwardOffsetM 米
+        px_f = px + centerForwardOffsetM * math.sin(theta)
+        py_f = py + centerForwardOffsetM * math.cos(theta)
+        base_poly = compute_agv_base_polygon(float(length_default or 1.03), float(width_default or 0.745), (px_f, py_f, theta))
         base_rect = compute_outer_bounding_rect(base_poly)
         shelf_fp = _getShelfFootprintFromStatePayload(state_payload)
         if shelf_fp is not None:
             shelf_len, shelf_wid, _ = shelf_fp
             if (shelf_len or 0.0) > 0.0 or (shelf_wid or 0.0) > 0.0:
-                shelf_poly = compute_agv_base_polygon(float(shelf_len or 0.0), float(shelf_wid or 0.0), (px, py, theta))
+                shelf_poly = compute_agv_base_polygon(float(shelf_len or 0.0), float(shelf_wid or 0.0), (px_f, py_f, theta))
                 shelf_rect = compute_outer_bounding_rect(shelf_poly)
                 xmin = min(base_rect[0], shelf_rect[0])
                 ymin = min(base_rect[1], shelf_rect[1])
@@ -297,7 +307,7 @@ class CollisionService:
     def __init__(self, vehicles: Iterable[Any], tick_ms: int = 100, safety_margin: float = 0.1) -> None:
         self.vehicles = list(vehicles)
         self.tick_ms = int(tick_ms)
-        # safety_margin 保留为常量扩张（可选）；主要安全范围由 1.2 倍缩放确定
+        # safety_margin 保留为常量扩张（可选）；主要安全范围由 1.05 倍缩放确定
         self.safety_margin = float(safety_margin)
         self._stop = False
         # 记录因碰撞而触发的暂停序列号集合，用于恢复判断
@@ -336,7 +346,7 @@ class CollisionService:
         owners: List[Any] = []
         for v in self.vehicles:
             try:
-                safe_rect = computeSafetyRectForVehicle(v, safeFactor=1.2)
+                safe_rect = computeSafetyRectForVehicle(v, safeFactor=1.05)
                 if safe_rect is None:
                     continue
                 # 如配置了常量安全边距，则叠加扩展（保证更保守）
