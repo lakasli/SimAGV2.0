@@ -53,6 +53,13 @@ class SimClock:
         while not self._stop:
             try:
                 self.sim.update_state()
+                # 处理即时 factsheet 请求：收到 factsheetRequest 动作后立即广播一次
+                try:
+                    if getattr(self.sim, "_factsheet_request", False):
+                        self.sim.publish_factsheet(mqtt_client)
+                        setattr(self.sim, "_factsheet_request", False)
+                except Exception:
+                    pass
                 scale = max(0.0001, float(self.config.settings.sim_time_scale))
                 eff_state_freq = max(1e-6, float(self.config.settings.state_frequency) * scale)
                 eff_vis_freq = max(1e-6, float(self.config.settings.visualization_frequency) * scale)

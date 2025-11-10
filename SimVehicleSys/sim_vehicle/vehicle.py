@@ -597,15 +597,26 @@ class VehicleSimulator:
 
     # === InstantActions skeleton handlers ===
     def _handle_stop_pause_action(self, action: Action) -> None:
+        # 暂停导航步进：不清除已规划路径，但停止运动
         self.nav_paused = True
         self.state.paused = True
+        try:
+            self.state.driving = False
+        except Exception:
+            pass
 
     def _handle_start_pause_action(self, action: Action) -> None:
+        # 恢复导航步进：保留路径，若导航仍在进行则恢复为行驶态
         self.nav_paused = False
         self.state.paused = False
+        try:
+            if getattr(self, "nav_running", False):
+                self.state.driving = True
+        except Exception:
+            pass
 
     def _handle_cancel_order_action(self, action: Action) -> None:
-        # 取消当前订单与导航状态
+        # 取消当前订单与导航状态：停止运动、清除已规划路径，并重置相关标志
         try:
             self.order = None
         except Exception:
@@ -613,11 +624,42 @@ class VehicleSimulator:
         try:
             self.state.node_states.clear()
             self.state.edge_states.clear()
-            self.state.action_states.clear()
         except Exception:
             pass
+        # 清空订单标识与更新号
+        try:
+            self.state.order_id = ""
+            self.state.order_update_id = 0
+        except Exception:
+            pass
+        # 停止导航与运动
         self.nav_running = False
         self.state.driving = False
+        # 取消暂停状态（恢复为未暂停，以避免后续导航受残留影响）
+        try:
+            self.nav_paused = False
+            self.state.paused = False
+        except Exception:
+            pass
+        # 清除路径规划与导航内部状态
+        try:
+            self.nav_points = None
+            self.nav_idx = 0
+            self.nav_map_name = None
+            self.nav_target_station = None
+            self.nav_route_node_ids = None
+            self.nav_first_edge_id = None
+            self.nav_start_point = None
+            self.nav_last_edge_id = None
+            self.nav_final_point = None
+            self.nav_edge_speed_caps = None
+        except Exception:
+            pass
+        # 可选：调用占位的错误注入接口，后续可扩展为上报/记录
+        try:
+            self.inject_navigation_cancel()
+        except Exception:
+            pass
 
     def _handle_factsheet_request_action(self, action: Action) -> None:
         # 立即发布一次 factsheet（需在调用点传入 mqtt 客户端时触发）
@@ -1037,20 +1079,8 @@ class VehicleSimulator:
         except Exception:
             pass
         should_arrive = distance < (float(capped_speed) * scale * dt) + xy_eps
-        try:
-            self.logger.info(
-                f"[ORDER_ARRIVE_CHECK] dist={distance:.4f} capped_speed={float(capped_speed):.3f} step={float(capped_speed)*scale*dt:.4f} eps={xy_eps:.3f} result={should_arrive}"
-            )
-        except Exception:
-            pass
         next_node_id = next_node.node_id
         next_node_seq = next_node.sequence_id
-        try:
-            self.logger.info(
-                f"[ORDER_TRANSLATE] -> ({float(updated_x):.3f},{float(updated_y):.3f})"
-            )
-        except Exception:
-            pass
         applyTranslateStepInSim(self, float(updated_x), float(updated_y))
         # 订单驱动位姿更新：朝 updated_theta 逐步旋转，避免起始跳变
         def _norm(a: float) -> float:
@@ -1068,28 +1098,11 @@ class VehicleSimulator:
                         base = float(max_rot_speed) * float(dt) / max(0.0001, float(self.config.settings.sim_time_scale))
                     except Exception:
                         base = 0.15
-                try:
-                    self.logger.info(
-                        f"[ORDER_ROTATE] target_theta={float(updated_theta):.3f} base_step={float(base):.4f} dt={dt:.3f}s scale={scale:.2f}"
-                    )
-                except Exception:
-                    pass
+
                 applyRotationStepInSim(self, float(updated_theta), base_step=float(base))
         except Exception:
-            try:
-                self.logger.info(
-                    f"[ORDER_ROTATE_FALLBACK] target_theta={float(updated_theta):.3f} base_step=0.15"
-                )
-            except Exception:
-                pass
             applyRotationStepInSim(self, float(updated_theta), base_step=0.15)
         if should_arrive:
-            try:
-                self.logger.info(
-                    f"[ORDER_ARRIVE] next_id='{next_node_id}' seq={next_node_seq} pop node/edge"
-                )
-            except Exception:
-                pass
             if self.state.node_states:
                 self.state.node_states.pop(0)
             if self.state.edge_states:
@@ -1428,16 +1441,7 @@ class VehicleSimulator:
         except Exception:
             scale = 1.0
         dynamic_step_delta = max(0.02, 0.08 * scale)
-        before_aug_len = len(pts) if pts else 0
         pts = augment_with_corner_turns(pts, theta_threshold=0.1, step_delta=dynamic_step_delta)
-        after_aug_len = len(pts) if pts else 0
-        try:
-            self.logger.info(
-                f"[ROUTE_BUILD] nodes={len(route_node_ids)} scale={scale:.2f} step_delta={dynamic_step_delta:.3f} "
-                f"pts_before={before_aug_len} pts_after={after_aug_len}"
-            )
-        except Exception:
-            pass
         # 记录最后一条边与最终点坐标，用于最后一段的减速控制与到站阈值判断
         try:
             if pts:
@@ -1511,18 +1515,6 @@ class VehicleSimulator:
         self.nav_running = True
         self.nav_paused = False
         self.state.driving = True
-        # 打印前几个导航点坐标，便于复现实验对比
-        try:
-            preview_cnt = min(5, len(self.nav_points or []))
-            pts_preview = []
-            for i in range(preview_cnt):
-                p = self.nav_points[i]
-                pts_preview.append(f"({float(p.get('x', 0.0)):.3f},{float(p.get('y', 0.0)):.3f})")
-            self.logger.info(
-                f"[ROUTE_READY] pts={len(self.nav_points or [])} last_edge='{self.nav_last_edge_id}' final=({(self.nav_final_point or (0.0,0.0))[0]:.3f},{(self.nav_final_point or (0.0,0.0))[1]:.3f}) preview={pts_preview}"
-            )
-        except Exception:
-            pass
         # 保存订单路由的站点名序列（用于到站检测与状态裁剪）
         try:
             self.nav_route_node_ids = list(route_node_ids)

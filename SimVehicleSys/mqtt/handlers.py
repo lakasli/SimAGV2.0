@@ -79,7 +79,8 @@ class MqttHandler:
             actions.append(Action(action_type=at, action_id=aid, blocking_type=bt_enum, action_parameters=params))
         return InstantActions(
             header_id=g(data, "header_id", "headerId", 0),
-            timestamp=g(data, "timestamp", "timestamp", ""),
+            # 支持 'timestamp' 与 'timeStamp' 两种键名
+            timestamp=(data.get("timestamp", data.get("timeStamp", ""))),
             version=g(data, "version", "version", self.config.vehicle.vda_full_version),
             manufacturer=g(data, "manufacturer", "manufacturer", self.config.vehicle.manufacturer),
             serial_number=g(data, "serial_number", "serialNumber", self.config.vehicle.serial_number),
