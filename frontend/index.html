@@ -399,6 +399,7 @@
       <button class="btn" onclick="cycleFloor()">切换楼层</button>
       <button class="btn" onclick="resetView()">重置视图</button>
       <button class="btn" onclick="toggleGrid()">网格</button>
+      <button class="btn" onclick="toggleSafetyRange()">安全范围</button>
       <button class="btn" onclick="openSettingsModal()">设置</button>
     </div>
   </div>
@@ -2056,6 +2057,8 @@
         if (!pos) return;
         const sp = worldToScreen(pos.x, pos.y);
         if (sp.x < -50 || sp.x > canvas.width + 50 || sp.y < -50 || sp.y > canvas.height + 50) return;
+        // 安全范围绘制（雷达/水波纹动画）
+        try { drawSafetyRange(sp.x, sp.y, ((pos.theta ?? pos.orientation) || 0), robot); } catch (_) { /* 忽略绘制异常 */ }
         drawRobotIcon(sp.x, sp.y, ((pos.theta ?? pos.orientation) || 0), robot);
       });
     }
@@ -2210,6 +2213,76 @@
       }
     }
 
+    // 安全范围开关与绘制（雷达/水波纹动画）
+    let showSafetyRange = true;
+    function toggleSafetyRange() { showSafetyRange = !showSafetyRange; try { document.getElementById('status').textContent = showSafetyRange ? '安全范围：开启' : '安全范围：关闭'; setTimeout(() => document.getElementById('status').textContent = '准备就绪', 2000); } catch (_) {} }
+
+    function drawSafetyRange(cx, cy, thetaRad, robot) {
+      if (!showSafetyRange) return;
+      // 物理尺寸（米）
+      const defaults = { width: 0.745, length: 1.03 };
+      const cp = robot && robot.collisionParams ? robot.collisionParams : {};
+      const baseWm = (typeof cp.width === 'number' && cp.width > 0) ? Number(cp.width) : defaults.width;
+      const baseLm = (typeof cp.length === 'number' && cp.length > 0) ? Number(cp.length) : defaults.length;
+      const fp = robot && robot.shelfModel && robot.shelfModel.footprint ? robot.shelfModel.footprint : null;
+      const shelfWm = fp ? Number(fp.width_m ?? fp.width) : NaN;
+      const shelfLm = fp ? Number(fp.length_m ?? fp.length) : NaN;
+      const hasShelf = isFinite(shelfWm) && isFinite(shelfLm) && shelfWm > 0 && shelfLm > 0;
+      const safeFactor = 1.1; // 与服务端一致
+      // 取 AGV 与托盘的矩形，以相同朝向叠加，最终安全范围为同向矩形的并集
+      const finalWm = (hasShelf ? Math.max(baseWm, shelfWm) : baseWm) * safeFactor; // 宽（局部 X）
+      const finalLm = (hasShelf ? Math.max(baseLm, shelfLm) : baseLm) * safeFactor; // 长（局部 Y）
+
+      // 转屏：米→像素（保持 worldToScreen 的比例与缩放）
+      const meterScale = 20;
+      const wpx = finalWm * meterScale * viewTransform.scale;
+      const lpx = finalLm * meterScale * viewTransform.scale;
+
+      // 绘制“朝向一致”的旋转矩形
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(thetaRad);
+      const isCollision = !!(robot && robot._collisionActive);
+      const fillColor = isCollision ? '#e74c3c' : '#3498db';
+      const strokeColor = isCollision ? '#c0392b' : '#3498db';
+      const fillAlpha = isCollision ? 0.18 : 0.12;
+      const strokeAlpha = isCollision ? 0.8 : 0.45;
+      const rippleBaseColor = isCollision ? '231, 76, 60' : '52, 152, 219';
+      const rippleWidth = isCollision ? 2.8 : 2.2;
+      // 基础填充与描边（加深可视性）
+      ctx.globalAlpha = fillAlpha;
+      ctx.fillStyle = fillColor;
+      ctx.fillRect(-wpx / 2, -lpx / 2, wpx, lpx);
+      ctx.globalAlpha = strokeAlpha;
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([8, 6]);
+      ctx.strokeRect(-wpx / 2, -lpx / 2, wpx, lpx);
+      ctx.globalAlpha = 1.0;
+
+      // 水波纹动画：在旋转矩形内剪裁后绘制同心圆，表达“探测中”
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(-wpx / 2, -lpx / 2, wpx, lpx);
+      ctx.clip();
+      const now = Date.now();
+      const t = (now % 2000) / 2000; // 2s 周期
+      const maxR = Math.sqrt((wpx * 0.5) ** 2 + (lpx * 0.5) ** 2);
+      for (let i = 0; i < 4; i++) {
+        const p = (t + i / 4) % 1;
+        const r = 10 + p * maxR;
+        const alpha = (isCollision ? 0.70 : 0.55) * (1 - p);
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(${rippleBaseColor}, ${alpha.toFixed(3)})`;
+        ctx.lineWidth = rippleWidth;
+        // 圆心取机器人中心（局部坐标原点）
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.restore();
+    }
+
     // 控制
     function resetView() { fitMapToView(); drawMap(); }
     function toggleGrid() { showGrid = !showGrid; drawMap(); }
@@ -2347,6 +2420,10 @@
       const pos = robot.currentPosition || robot.initialPosition || { x: 0, y: 0, theta: 0 };
       document.getElementById('configBattery').value = robot.battery ?? 100;
       document.getElementById('configOrientation').value = pos.theta ?? 0;
+      // 预填物理参数（factsheet 默认值）
+      try { await prefillFactsheetPhysicalParams(robot); } catch (e) { console.warn('预填物理参数失败', e); }
+      // 默认选中“基本”标签
+      switchConfigTab('basic');
       // 打开弹窗
       const modal = document.getElementById('configModal');
       modal.style.display = 'flex';
@@ -2457,6 +2534,18 @@
       const orientation = parseFloat(document.getElementById('configOrientation').value);
       const initId = document.getElementById('configInitialPosition').value;
       const mapVal = document.getElementById('configMapSelect').value;
+      // 读取物理参数输入值
+      const n = (v) => { const x = Number(v); return isFinite(x) ? x : undefined; };
+      const phys = {
+        speedMin: n(document.getElementById('factsheetSpeedMin').value),
+        speedMax: n(document.getElementById('factsheetSpeedMax').value),
+        accelerationMax: n(document.getElementById('factsheetAccelMax').value),
+        decelerationMax: n(document.getElementById('factsheetDecelMax').value),
+        heightMin: n(document.getElementById('factsheetHeightMin').value),
+        heightMax: n(document.getElementById('factsheetHeightMax').value),
+        width: n(document.getElementById('factsheetWidth').value),
+        length: n(document.getElementById('factsheetLength').value)
+      };
       // 位置组装
       let pos = robot.currentPosition || robot.initialPosition || { x: 0, y: 0, theta: 0 };
       if (initId) {
@@ -2517,6 +2606,10 @@
         if (newType) robot.type = newType;
         if (newManu) robot.manufacturer = newManu;
         if (newVer) robot.version = newVer;
+        // 应用物理参数到运动控制（速度/加减速）
+        try { await applyPhysicalParamsToMotionControl(id, phys); robot.motionParams = phys; } catch (e) { console.warn('应用运动参数失败', e); }
+        // 传递碰撞参数接口（占位，后续实现具体逻辑）
+        try { await updateCollisionParameters(id, phys); robot.collisionParams = { width: phys.width, length: phys.length, heightMin: phys.heightMin, heightMax: phys.heightMax }; } catch (e) { console.warn('更新碰撞参数失败', e); }
         updateRobotList();
         drawMap();
         document.getElementById('status').textContent = `机器人 ${id} 已发送 switchMap 即时动作`;
@@ -2527,6 +2620,131 @@
       } finally {
         closeConfigModal();
       }
+    }
+    function switchConfigTab(tab) {
+      const btnBasic = document.getElementById('configTabBtnBasic');
+      const btnPhysical = document.getElementById('configTabBtnPhysical');
+      const vBasic = document.getElementById('configTabBasic');
+      const vPhysical = document.getElementById('configTabPhysical');
+      const isBasic = tab === 'basic';
+      vBasic.style.display = isBasic ? 'block' : 'none';
+      vPhysical.style.display = isBasic ? 'none' : 'block';
+      btnBasic.style.background = isBasic ? '#34495e' : '#2b3b4b';
+      btnPhysical.style.background = isBasic ? '#2b3b4b' : '#34495e';
+    }
+    async function prefillFactsheetPhysicalParams(robot) {
+      const setVal = (id, v) => { const el = document.getElementById(id); if (el && typeof v !== 'undefined' && v !== null) el.value = String(v); };
+      const defaults = { speedMin: 0.01, speedMax: 2, accelerationMax: 2, decelerationMax: 2, heightMin: 0.01, heightMax: 0.10, width: 0.745, length: 1.03 };
+      let cfg = null;
+      // 优先从后端读取当前仿真设置（包含物理参数），避免每次打开都退回默认值
+      try {
+        const id = (robot && robot.robot_name) || selectedRobotId || (((registeredRobots || [])[0] && (registeredRobots || [])[0].robot_name) || '');
+        if (id) {
+          const resp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(id)}/sim/settings`);
+          if (resp && resp.ok) {
+            const s = await resp.json();
+            cfg = {
+              speedMin: Number(s.speed_min ?? defaults.speedMin),
+              speedMax: Number(s.speed_max ?? (typeof s.speed === 'number' ? s.speed : defaults.speedMax)),
+              accelerationMax: Number(s.acceleration_max ?? defaults.accelerationMax),
+              decelerationMax: Number(s.deceleration_max ?? defaults.decelerationMax),
+              heightMin: Number(s.height_min ?? defaults.heightMin),
+              heightMax: Number(s.height_max ?? defaults.heightMax),
+              width: Number(s.width ?? defaults.width),
+              length: Number(s.length ?? defaults.length)
+            };
+          }
+        }
+      } catch (e) {
+        console.warn('读取后端物理参数失败，回退到factsheet.json', e);
+      }
+      // 其次使用已缓存到机器人实例的参数
+      if (!cfg && robot && robot.motionParams) {
+        cfg = Object.assign({}, defaults, robot.motionParams);
+      }
+      // 最后回退到 factsheet.json
+      if (!cfg) {
+        try {
+          let resp = await fetch('/factsheet.json');
+          if (!resp || !resp.ok) resp = await fetch('../factsheet.json');
+          if (resp && resp.ok) {
+            const data = await resp.json();
+            const p = (data && data.physicalParameters) ? data.physicalParameters : {};
+            cfg = {
+              speedMin: Number(p.speedMin ?? defaults.speedMin),
+              speedMax: Number(p.speedMax ?? defaults.speedMax),
+              accelerationMax: Number(p.accelerationMax ?? defaults.accelerationMax),
+              decelerationMax: Number(p.decelerationMax ?? defaults.decelerationMax),
+              heightMin: Number(p.heightMin ?? defaults.heightMin),
+              heightMax: Number(p.heightMax ?? defaults.heightMax),
+              width: Number(p.width ?? defaults.width),
+              length: Number(p.length ?? defaults.length)
+            };
+          }
+        } catch (e) { /* 读取失败使用默认值 */ }
+      }
+      cfg = cfg || defaults;
+      setVal('factsheetSpeedMin', cfg.speedMin);
+      setVal('factsheetSpeedMax', cfg.speedMax);
+      setVal('factsheetAccelMax', cfg.accelerationMax);
+      setVal('factsheetDecelMax', cfg.decelerationMax);
+      setVal('factsheetHeightMin', cfg.heightMin);
+      setVal('factsheetHeightMax', cfg.heightMax);
+      setVal('factsheetWidth', cfg.width);
+      setVal('factsheetLength', cfg.length);
+    }
+    async function applyPhysicalParamsToMotionControl(id, params) {
+      // 将物理参数同步到仿真设置（速度、速度上下限、加减速）
+      const patch = {};
+      const n = (v) => { const x = Number(v); return isFinite(x) ? x : undefined; };
+      const sMin = n(params.speedMin), sMax = n(params.speedMax), aMax = n(params.accelerationMax), dMax = n(params.decelerationMax);
+      // 注意：后端对 speed 的校验为 [0,2]，避免 400 报错，不直接用 speedMax 覆盖运行速度。
+      // 若希望同步运行速度，仅在合法范围内设置；否则跳过，让速度由现有值与上下限共同决定。
+      if (typeof sMax !== 'undefined') {
+        const candidate = Number(sMax);
+        if (isFinite(candidate) && candidate >= 0 && candidate <= 2) {
+          patch.speed = candidate;
+        }
+      }
+      if (typeof sMin !== 'undefined') patch.speed_min = sMin;
+      if (typeof sMax !== 'undefined') patch.speed_max = sMax;
+      if (typeof aMax !== 'undefined') patch.acceleration_max = aMax;
+      if (typeof dMax !== 'undefined') patch.deceleration_max = dMax;
+      // 同步几何与高度约束到后端（用于碰撞与 factsheet）
+      const hMin = n(params.heightMin), hMax = n(params.heightMax), w = n(params.width), l = n(params.length);
+      if (typeof hMin !== 'undefined') patch.height_min = hMin;
+      if (typeof hMax !== 'undefined') patch.height_max = hMax;
+      if (typeof w !== 'undefined') patch.width = w;
+      if (typeof l !== 'undefined') patch.length = l;
+      // 基本有效性校验（避免发送明显无效值）
+      const errs = [];
+      if (typeof sMin !== 'undefined' && typeof sMax !== 'undefined' && sMin > sMax) errs.push('最小速度不能大于最大速度');
+      if (typeof patch.speed !== 'undefined') {
+        if (!(patch.speed >= 0 && patch.speed <= 2)) errs.push('运行速度需在[0,2]范围内');
+        if (typeof sMin !== 'undefined' && patch.speed < sMin) errs.push('运行速度应不低于最小速度');
+      }
+      if (errs.length) {
+        try { window.printErrorToStatus('参数无效: ' + errs.join('; '), '配置'); } catch (_) {}
+        return;
+      }
+      // 缓存到前端，供可能的本地绘制或校验使用
+      window.MOTION_LIMITS = { speedMin: sMin, speedMax: sMax, accelerationMax: aMax, decelerationMax: dMax };
+      if (Object.keys(patch).length > 0) {
+        const resp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(id)}/sim/settings`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch)
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      }
+    }
+    async function updateCollisionParameters(id, params) {
+      // 碰撞参数接口占位：将几何与高度约束写入前端缓存，后续用于碰撞检测绘制/后端同步
+      try {
+        const robot = registeredRobots.find(r => r.robot_name === id);
+        if (robot) {
+          robot.collisionParams = { width: params.width, length: params.length, heightMin: params.heightMin, heightMax: params.heightMax };
+        }
+        // 后续：可在此处调用后端 API 提交碰撞几何参数，例如 /agv/:id/sim/collision
+      } catch (e) { console.warn('碰撞参数缓存失败', e); }
     }
     // WebSocket 和基础运动辅助函数
     function initWebSocket() {
@@ -2539,6 +2757,8 @@
             const msg = JSON.parse(ev.data);
             if (msg && msg.type === 'mqtt_state' && msg.payload) {
               applyWSState(msg.payload);
+            } else if (msg && msg.type === 'mqtt_instantActions' && msg.payload) {
+              try { handleWSInstantActions(msg.payload); } catch (e) { console.warn('处理即时动作失败', e); }
             } else if (msg && msg.type === 'pallet_action') {
               const serial = String(msg.serial || msg.serial_number || '').trim();
               const op = String(msg.operation || '').trim();
@@ -2562,6 +2782,24 @@
       } catch (err) {
         console.error('WS初始化失败:', err);
       }
+    }
+    function handleWSInstantActions(payload) {
+      try {
+        const serial = String((payload && (payload.serial_number || payload.serialNumber)) || '').trim();
+        if (!serial) return;
+        const robot = registeredRobots.find(r => r.robot_name === serial);
+        if (!robot) return;
+        const actions = Array.isArray(payload.actions) ? payload.actions : [];
+        for (const a of actions) {
+          const type = String((a && (a.action_type || a.actionType)) || '').trim();
+          const aid = String((a && (a.action_id || a.actionId)) || '').trim();
+          if (type.toLowerCase() === 'stoppause' && /^collision_stop_/i.test(aid)) {
+            robot._collisionActive = true;
+          } else if (type.toLowerCase() === 'startpause' && /^collision_start_/i.test(aid)) {
+            robot._collisionActive = false;
+          }
+        }
+      } catch (e) { /* 忽略异常 */ }
     }
     // 电量显示辅助：截断到 1 位小数，限制在 [0,100]
     function truncateToOneDecimal(v) {
@@ -2968,21 +3206,38 @@
   </script>
   <!-- 配置弹窗（参考 SimulatorViewer 设计，简化样式） -->
   <div id="configModal" class="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:2000;">
-    <div class="modal-content" style="width:420px; background:#2c3e50; color:#ecf0f1; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,.3);">
+    <div class="modal-content" style="width:520px; background:#2c3e50; color:#ecf0f1; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,.3);">
       <div class="modal-header" style="padding:12px 16px; border-bottom:1px solid #34495e; display:flex; align-items:center; justify-content:space-between;">
         <div class="modal-title" style="font-weight:bold;">机器人高级配置</div>
         <button class="modal-close" onclick="closeConfigModal()" style="background:transparent; border:none; color:#ecf0f1; font-size:20px; cursor:pointer;">&times;</button>
       </div>
       <div style="padding:16px;">
-        <div class="form-group"><label class="form-label">机器人名称</label><input type="text" class="form-input" id="configRobotName" placeholder=""></div>
-        <div class="form-group"><label class="form-label">机器人类型</label><select class="form-select" id="configRobotType"><option value="AGV">AGV</option><option value="Fork">Fork</option><option value="Load">Load</option></select></div>
-        <div class="form-group"><label class="form-label">机器人IP地址</label><input type="text" class="form-input" id="configRobotIP" placeholder=""></div>
-        <div class="form-group"><label class="form-label">厂商</label><input type="text" class="form-input" id="configRobotManufacturer" placeholder="厂商名称"></div>
-        <div class="form-group"><label class="form-label">版本</label><input type="text" class="form-input" id="configRobotVersion" placeholder="版本号" value="v2"></div>
-        <div class="form-group"><label class="form-label">已加载地图</label><select class="form-select" id="configMapSelect" style="width:100%"><option value="">不变</option><option value="testmap">已加载地图 (testmap)</option></select><div id="configMapSelectedText" class="form-hint" style="font-size:12px;color:#bdc3c7;word-break:break-all;margin-top:4px;">当前: <span id="configMapSelectedLabel"></span></div></div>
-        <div class="form-group"><label class="form-label">初始位置</label><select class="form-select" id="configInitialPosition"><option value="">选择初始位置</option></select></div>
-        <div class="form-group"><label class="form-label">电量 (%)</label><input type="number" class="form-input" id="configBattery" value="100" min="0" max="100"></div>
-        <div class="form-group"><label class="form-label">朝向 (弧度)</label><input type="number" class="form-input" id="configOrientation" value="0" step="0.01" min="-3.14" max="3.14"></div>
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <button id="configTabBtnBasic" onclick="switchConfigTab('basic')" style="flex:1; padding:8px; border:none; border-radius:4px; background:#34495e; color:#ecf0f1; cursor:pointer;">基本</button>
+          <button id="configTabBtnPhysical" onclick="switchConfigTab('physical')" style="flex:1; padding:8px; border:none; border-radius:4px; background:#2b3b4b; color:#ecf0f1; cursor:pointer;">物理参数</button>
+        </div>
+        <div id="configTabBasic" style="display:block;">
+          <div class="form-group"><label class="form-label">机器人名称</label><input type="text" class="form-input" id="configRobotName" placeholder=""></div>
+          <div class="form-group"><label class="form-label">机器人类型</label><select class="form-select" id="configRobotType"><option value="AGV">AGV</option><option value="Fork">Fork</option><option value="Load">Load</option></select></div>
+          <div class="form-group"><label class="form-label">机器人IP地址</label><input type="text" class="form-input" id="configRobotIP" placeholder=""></div>
+          <div class="form-group"><label class="form-label">厂商</label><input type="text" class="form-input" id="configRobotManufacturer" placeholder="厂商名称"></div>
+          <div class="form-group"><label class="form-label">版本</label><input type="text" class="form-input" id="configRobotVersion" placeholder="版本号" value="v2"></div>
+          <div class="form-group"><label class="form-label">已加载地图</label><select class="form-select" id="configMapSelect" style="width:100%"><option value="">不变</option><option value="testmap">已加载地图 (testmap)</option></select><div id="configMapSelectedText" class="form-hint" style="font-size:12px;color:#bdc3c7;word-break:break-all;margin-top:4px;">当前: <span id="configMapSelectedLabel"></span></div></div>
+          <div class="form-group"><label class="form-label">初始位置</label><select class="form-select" id="configInitialPosition"><option value="">选择初始位置</option></select></div>
+          <div class="form-group"><label class="form-label">电量 (%)</label><input type="number" class="form-input" id="configBattery" value="100" min="0" max="100"></div>
+          <div class="form-group"><label class="form-label">朝向 (弧度)</label><input type="number" class="form-input" id="configOrientation" value="0" step="0.01" min="-3.14" max="3.14"></div>
+        </div>
+        <div id="configTabPhysical" style="display:none;">
+          <div class="form-group"><label class="form-label">最小速度 (m/s)</label><input type="number" class="form-input" id="factsheetSpeedMin" step="0.01" placeholder="默认 0.01"></div>
+          <div class="form-group"><label class="form-label">最大速度 (m/s)</label><input type="number" class="form-input" id="factsheetSpeedMax" step="0.01" placeholder="默认 2"></div>
+          <div class="form-group"><label class="form-label">最大加速度 (m/s²)</label><input type="number" class="form-input" id="factsheetAccelMax" step="0.01" placeholder="默认 2"></div>
+          <div class="form-group"><label class="form-label">最大减速度 (m/s²)</label><input type="number" class="form-input" id="factsheetDecelMax" step="0.01" placeholder="默认 2"></div>
+          <div class="form-group"><label class="form-label">最小高度 (m)</label><input type="number" class="form-input" id="factsheetHeightMin" step="0.01" placeholder="默认 0.01"></div>
+          <div class="form-group"><label class="form-label">最大高度 (m)</label><input type="number" class="form-input" id="factsheetHeightMax" step="0.01" placeholder="默认 0.10"></div>
+          <div class="form-group"><label class="form-label">宽度 (m)</label><input type="number" class="form-input" id="factsheetWidth" step="0.001" placeholder="默认 0.745"></div>
+          <div class="form-group"><label class="form-label">长度 (m)</label><input type="number" class="form-input" id="factsheetLength" step="0.001" placeholder="默认 1.03"></div>
+          <div class="form-hint" style="font-size:12px;color:#bdc3c7;word-break:break-all;margin-top:6px;">注：速度/加减速会影响运动控制；宽度/长度/高度参数留作碰撞管理接口。</div>
+        </div>
         <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
           <button class="btn-saveconfig" onclick="saveConfig()">保存配置</button>
           <button class="btn-cancel-small" onclick="closeConfigModal()">取消</button>

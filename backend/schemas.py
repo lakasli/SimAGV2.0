@@ -91,6 +91,15 @@ class SimSettingsPatch(BaseModel):
     # 对应 SimVehicleSys.config.settings.Settings 中的字段，均为可选以便局部更新
     action_time: Optional[float] = None
     speed: Optional[float] = None
+    # 物理参数扩展（factsheet.physicalParameters）：用于约束运动与碰撞
+    speed_min: Optional[float] = None
+    speed_max: Optional[float] = None
+    acceleration_max: Optional[float] = None
+    deceleration_max: Optional[float] = None
+    height_min: Optional[float] = None
+    height_max: Optional[float] = None
+    width: Optional[float] = None
+    length: Optional[float] = None
     state_frequency: Optional[int] = None
     visualization_frequency: Optional[int] = None
     map_id: Optional[str] = None

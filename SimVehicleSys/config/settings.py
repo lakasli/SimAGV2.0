@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 import pathlib
+import json
 
 
 @dataclass
@@ -23,6 +24,15 @@ class VehicleConfig:
 class Settings:
     action_time: float
     speed: float
+    # 物理参数（factsheet.physicalParameters）：用于约束运动控制与碰撞几何
+    speed_min: float
+    speed_max: float
+    acceleration_max: float
+    deceleration_max: float
+    height_min: float
+    height_max: float
+    width: float
+    length: float
     state_frequency: int
     visualization_frequency: int
     map_id: str
@@ -48,6 +58,34 @@ def _project_root() -> pathlib.Path:
 
 def get_config(config_path: Optional[str] = None) -> Config:
     # 如需覆盖配置，可在调用处对返回对象做修改（例如覆盖 serial_number）。
+    # 尝试读取项目根目录 factsheet.json 的物理参数作为默认值
+    pr = _project_root()
+    fp_defaults = {
+        "speedMin": 0.01,
+        "speedMax": 2.0,
+        "accelerationMax": 2,
+        "decelerationMax": 2,
+        "heightMin": 0.01,
+        "heightMax": 0.10,
+        "width": 0.745,
+        "length": 1.03,
+    }
+    try:
+        fs_path = pr / "factsheet.json"
+        if fs_path.exists():
+            with fs_path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            p = (data or {}).get("physicalParameters") or {}
+            for k in fp_defaults.keys():
+                try:
+                    v = p.get(k)
+                    if v is not None:
+                        fp_defaults[k] = float(v)
+                except Exception:
+                    pass
+    except Exception:
+        # 读取失败则使用内置默认值
+        pass
     return Config(
         mqtt_broker=MqttBrokerConfig(
             host="127.0.0.1",
@@ -62,7 +100,16 @@ def get_config(config_path: Optional[str] = None) -> Config:
         ),
         settings=Settings(
             action_time=1.0,
-            speed=2.0,
+            # 默认运行速度以 factsheet 的最大速度为准
+            speed=float(fp_defaults["speedMax"]),
+            speed_min=float(fp_defaults["speedMin"]),
+            speed_max=float(fp_defaults["speedMax"]),
+            acceleration_max=float(fp_defaults["accelerationMax"]),
+            deceleration_max=float(fp_defaults["decelerationMax"]),
+            height_min=float(fp_defaults["heightMin"]),
+            height_max=float(fp_defaults["heightMax"]),
+            width=float(fp_defaults["width"]),
+            length=float(fp_defaults["length"]),
             state_frequency=10,
             visualization_frequency=1,
             map_id="default",

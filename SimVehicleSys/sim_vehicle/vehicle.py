@@ -1073,6 +1073,16 @@ class VehicleSimulator:
         except Exception:
             prev_edge = None
         capped_speed = float(self.config.settings.speed)
+        # 应用速度上下限，再叠加边限速
+        try:
+            s_cfg = getattr(self.config, "settings", None)
+            if s_cfg is not None:
+                try:
+                    capped_speed = max(float(getattr(s_cfg, "speed_min", 0.0)), min(capped_speed, float(getattr(s_cfg, "speed_max", capped_speed))))
+                except Exception:
+                    pass
+        except Exception:
+            pass
         try:
             if prev_edge is not None and getattr(prev_edge, "max_speed", None) is not None:
                 capped_speed = min(capped_speed, float(getattr(prev_edge, "max_speed")))
@@ -1208,7 +1218,18 @@ class VehicleSimulator:
             return
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
         dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
-        base_step = max(1e-9, float(self.config.settings.speed) * scale * dt)
+        # 计算基础步长：按速度上下限夹取
+        try:
+            s_cfg = getattr(self.config, "settings", None)
+            base_speed = float(self.config.settings.speed)
+            if s_cfg is not None:
+                try:
+                    base_speed = max(float(getattr(s_cfg, "speed_min", 0.0)), min(base_speed, float(getattr(s_cfg, "speed_max", base_speed))))
+                except Exception:
+                    pass
+        except Exception:
+            base_speed = float(self.config.settings.speed)
+        base_step = max(1e-9, base_speed * scale * dt)
         # 单步推进：每周期仅根据当前点与限速计算一次平移/旋转
         if self.nav_idx < len(self.nav_points):
             pt = self.nav_points[self.nav_idx]
@@ -1677,6 +1698,40 @@ class VehicleSimulator:
 
     def _build_factsheet_payload(self) -> dict:
         """构建 factsheet 载荷骨架，结构与文档一致，便于后续填充真实参数。"""
+        s = self.config.settings
+        # 使用当前动态设置值（支持运行时热更新），缺失时采用合理默认
+        try:
+            speed_min = float(getattr(s, "speed_min", 0.01) or 0.01)
+        except Exception:
+            speed_min = 0.01
+        try:
+            speed_max = float(getattr(s, "speed_max", getattr(s, "speed", 2.0)) or float(getattr(s, "speed", 2.0)))
+        except Exception:
+            speed_max = float(getattr(s, "speed", 2.0))
+        try:
+            accel_max = float(getattr(s, "acceleration_max", 2) or 2)
+        except Exception:
+            accel_max = 2
+        try:
+            decel_max = float(getattr(s, "deceleration_max", 2) or 2)
+        except Exception:
+            decel_max = 2
+        try:
+            height_min = float(getattr(s, "height_min", 0.01) or 0.01)
+        except Exception:
+            height_min = 0.01
+        try:
+            height_max = float(getattr(s, "height_max", 0.10) or 0.10)
+        except Exception:
+            height_max = 0.10
+        try:
+            width = float(getattr(s, "width", 0.745) or 0.745)
+        except Exception:
+            width = 0.745
+        try:
+            length = float(getattr(s, "length", 1.03) or 1.03)
+        except Exception:
+            length = 1.03
         return {
             "header_id": 0,
             "timestamp": get_timestamp(),
@@ -1693,14 +1748,14 @@ class VehicleSimulator:
                 "navigationTypes": ["VIRTUAL_LINE_GUIDED"],
             },
             "physicalParameters": {
-                "speedMin": 0.01,
-                "speedMax": float(self.config.settings.speed),
-                "accelerationMax": 0.5,
-                "decelerationMax": 0.5,
-                "heightMin": 2.234,
-                "heightMax": 2.234,
-                "width": 0.951,
-                "length": 1.72169,
+                "speedMin": speed_min,
+                "speedMax": speed_max,
+                "accelerationMax": accel_max,
+                "decelerationMax": decel_max,
+                "heightMin": height_min,
+                "heightMax": height_max,
+                "width": width,
+                "length": length,
             },
             "protocolLimits": None,
             "protocolFeatures": None,

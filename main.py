@@ -6,6 +6,9 @@ import os
 from pathlib import Path
 import shutil
 import json
+import threading
+
+from SimVehicleSys.world_service import WorldModelService
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -134,6 +137,12 @@ def main() -> None:
     backend_proc = start_backend()
     time.sleep(1.5)
 
+    # 启动世界模型服务线程（独立线程）
+    print("启动世界模型服务线程...")
+    world_service = WorldModelService(tickMs=100)
+    world_thread = threading.Thread(target=world_service.start, daemon=True)
+    world_thread.start()
+
     print("启动 AGV 仿真器...")
     simulator_procs: list[subprocess.Popen] = []
     try:
@@ -154,6 +163,10 @@ def main() -> None:
                 except Exception:
                     pass
             backend_proc.terminate()
+            try:
+                world_service.stop()
+            except Exception:
+                pass
             if mosq_proc:
                 mosq_proc.terminate()
         except Exception:

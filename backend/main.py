@@ -367,6 +367,15 @@ def get_sim_settings(serial_number: str):
     result = {
         "action_time": pick("action_time", getattr(base, "action_time", 1.0) if base else 1.0),
         "speed": pick("speed", getattr(base, "speed", 1.0) if base else 1.0),
+        # 物理参数（用于前端物理参数弹窗预填与仿真约束）
+        "speed_min": pick("speed_min", getattr(base, "speed_min", 0.01) if base else 0.01),
+        "speed_max": pick("speed_max", getattr(base, "speed_max", 2.0) if base else 2.0),
+        "acceleration_max": pick("acceleration_max", getattr(base, "acceleration_max",2) if base else 2),
+        "deceleration_max": pick("deceleration_max", getattr(base, "deceleration_max", 2) if base else 2),
+        "height_min": pick("height_min", getattr(base, "height_min", 0.01) if base else 0.01),
+        "height_max": pick("height_max", getattr(base, "height_max", 0.10) if base else 0.10),
+        "width": pick("width", getattr(base, "width", 0.745) if base else 0.745),
+        "length": pick("length", getattr(base, "length", 1.03) if base else 1.03),
         "state_frequency": pick("state_frequency", getattr(base, "state_frequency", 10) if base else 10),
         "visualization_frequency": pick("visualization_frequency", getattr(base, "visualization_frequency", 1) if base else 1),
         "map_id": pick("map_id", getattr(base, "map_id", "default") if base else "default"),
