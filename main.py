@@ -24,13 +24,14 @@ def _windows_creation_flags() -> int:
     return 0
 
 def start_backend(port: int) -> subprocess.Popen:
+    host = os.getenv("SIMAGV_BACKEND_HOST", "0.0.0.0")
     cmd = [
         sys.executable,
         "-m",
         "uvicorn",
         "backend.main:app",
         "--host",
-        "127.0.0.1",
+        host,
         "--port",
         str(port),
     ]
@@ -262,12 +263,14 @@ def main() -> None:
     print(f"MQTT 使用端口: {mqtt_port}")
 
     # 后端端口选择：若默认 8000 被占用则回退到下一个可用端口
-    backend_port = 8000
-    if is_port_in_use(backend_port):
+    env_backend_port = os.getenv("SIMAGV_BACKEND_PORT")
+    backend_port = int(env_backend_port) if (env_backend_port and env_backend_port.isdigit()) else 8000
+    if env_backend_port is None and is_port_in_use(backend_port):
         backend_port = find_free_port(backend_port)
         print(f"默认后端端口 8000 已占用，回退到 {backend_port}")
 
-    print(f"启动后端服务 (Uvicorn) 于 http://127.0.0.1:{backend_port} ...")
+    bind_host = os.getenv("SIMAGV_BACKEND_HOST", "0.0.0.0")
+    print(f"启动后端服务 (Uvicorn) 于 http://{bind_host}:{backend_port} ...")
     backend_proc = start_backend(backend_port)
     time.sleep(1.5)
 
