@@ -23,6 +23,7 @@ from .mqtt_bridge import MQTTBridge
 from .mqtt_publisher import MqttPublisher
 import json
 from SimVehicleSys.protocol.vda_2_0_0.order import Order as VDAOrder
+from .agv_config_store import AgvConfigStore
 
 project_root = Path(__file__).resolve().parents[1]
 app = FastAPI(title="SimAGV Backend", version="0.1.0")
@@ -46,6 +47,8 @@ agv_storage = project_root / "backend" / "data" / "registered_agvs.json"
 agv_manager = AGVManager(agv_storage)
 ws_manager = WebSocketManager()
 sim_manager = SimulatorProcessManager(project_root)
+agv_config_dir = project_root / "backend" / "data" / "agv_configs"
+agv_config_store = AgvConfigStore(agv_config_dir)
 
 # Static mounts: frontend and maps
 frontend_dir = project_root / "frontend"
@@ -149,10 +152,75 @@ def list_agvs():
 def register_agvs(body: Union[RegisterRequest, List[AGVRegistration]]):
     regs = body.agvs if isinstance(body, RegisterRequest) else body
     registered, skipped = agv_manager.register_many(regs)
+    # 为新注册的实例创建默认配置文件
+    try:
+        for sn in registered:
+            agv_config_store.ensure_default_for(sn)
+    except Exception as e:
+        print(f"[ConfigStore] ensure default failed: {e}")
     try:
         sim_manager.ensure_running_for_serials(registered)
     except Exception as e:
         print(f"[SimProc] auto-start failed: {e}")
+    # 若存在历史配置，注册后立即推送仿真设置并恢复位置
+    try:
+        publisher = getattr(app.state, "mqtt_publisher", None)
+        for sn in registered:
+            info = agv_manager.get_agv(sn)
+            if not info:
+                continue
+            cfg = agv_config_store.load(sn)
+            if not cfg:
+                continue
+            patch_dict = {
+                k: cfg.get(k)
+                for k in (
+                    "speed_min",
+                    "speed_max",
+                    "acceleration_max",
+                    "deceleration_max",
+                    "height_min",
+                    "height_max",
+                    "width",
+                    "length",
+                    "sim_time_scale",
+                    "state_frequency",
+                    "visualization_frequency",
+                    "action_time",
+                )
+                if cfg.get(k) is not None
+            }
+            if patch_dict and publisher:
+                try:
+                    publisher.publish_sim_settings(info, patch_dict)
+                except Exception:
+                    pass
+            # 恢复地图与位置
+            try:
+                from .schemas import DynamicConfigUpdate, Position
+                pos = cfg.get("last_position") or {}
+                map_id = cfg.get("map_id")
+                dyn = None
+                if map_id or pos:
+                    dyn = DynamicConfigUpdate(
+                        current_map=str(map_id) if map_id is not None else None,
+                        position=Position(
+                            x=float(pos.get("x", 0.0)),
+                            y=float(pos.get("y", 0.0)),
+                            theta=pos.get("theta"),
+                        ) if pos else None,
+                    )
+                if dyn:
+                    rt = agv_manager.update_dynamic(sn, dyn)
+                    if publisher and rt:
+                        try:
+                            publisher.publish_init_position(info, rt)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[ConfigStore] post-register restore failed: {e}")
     return RegisterResponse(registered=registered, skipped=skipped)
 
 @app.delete("/api/agvs/{serial_number}", response_model=UnregisterResponse)
@@ -160,10 +228,28 @@ def unregister_agv(serial_number: str):
     ok = agv_manager.unregister(serial_number)
     if not ok:
         raise HTTPException(status_code=404, detail="AGV not found")
+    # 在注销前保存一次离线快照（若可获取到状态）
+    try:
+        status = agv_manager.get_status(serial_number)
+        if status:
+            from .schemas import AGVRuntime, Position
+            rt = AGVRuntime(
+                battery_level=status.battery_level,
+                current_map=status.current_map,
+                position=Position(x=status.position.x, y=status.position.y, theta=status.position.theta),
+            )
+            agv_config_store.update_runtime_snapshot(serial_number, rt)
+    except Exception:
+        pass
     try:
         sim_manager.stop_for(serial_number)
     except Exception as e:
         print(f"[SimProc] stop failed: {e}")
+    # 删除对应配置文件
+    try:
+        agv_config_store.delete(serial_number)
+    except Exception as e:
+        print(f"[ConfigStore] delete failed for {serial_number}: {e}")
     return UnregisterResponse(removed=True)
 
 @app.patch("/api/agv/{serial_number}/config/static", response_model=AGVInfo)
@@ -221,6 +307,74 @@ async def _start_ws_broadcast():
             print(f"[SimProc] started on startup: {started}")
     except Exception as e:
         print(f"[SimProc] startup ensure failed: {e}")
+    # 启动后加载每个实例的持久化配置，恢复仿真设置与离线快照
+    try:
+        publisher = getattr(app.state, "mqtt_publisher", None)
+        overrides = getattr(app.state, "sim_settings_by_agv", {})
+        for info in agv_manager.list_agvs():
+            cfg = agv_config_store.load(info.serial_number)
+            if not cfg:
+                continue
+            # 发布仿真设置（物理参数与关键运行参数）到设备端
+            patch_dict = {
+                k: cfg.get(k)
+                for k in (
+                    "speed_min",
+                    "speed_max",
+                    "acceleration_max",
+                    "deceleration_max",
+                    "height_min",
+                    "height_max",
+                    "width",
+                    "length",
+                    "sim_time_scale",
+                    "state_frequency",
+                    "visualization_frequency",
+                    "action_time",
+                )
+                if cfg.get(k) is not None
+            }
+            if patch_dict and publisher:
+                try:
+                    publisher.publish_sim_settings(info, patch_dict)
+                except Exception as e:
+                    print(f"[ConfigStore] publish sim settings failed: {e}")
+            try:
+                prev = overrides.get(info.serial_number, {}) if isinstance(overrides, dict) else {}
+                prev.update(patch_dict)
+                overrides[info.serial_number] = prev  # type: ignore[index]
+                app.state.sim_settings_by_agv = overrides
+            except Exception:
+                pass
+            # 恢复地图与位置（若存在离线快照）
+            try:
+                from .schemas import DynamicConfigUpdate, Position
+                pos = cfg.get("last_position") or {}
+                map_id = cfg.get("map_id")
+                dyn = None
+                if map_id or pos:
+                    try:
+                        dyn = DynamicConfigUpdate(
+                            current_map=str(map_id) if map_id is not None else None,
+                            position=Position(
+                                x=float(pos.get("x", 0.0)),
+                                y=float(pos.get("y", 0.0)),
+                                theta=pos.get("theta"),
+                            ) if pos else None,
+                        )
+                    except Exception:
+                        dyn = None
+                if dyn:
+                    rt = agv_manager.update_dynamic(info.serial_number, dyn)
+                    if publisher and rt:
+                        try:
+                            publisher.publish_init_position(info, rt)
+                        except Exception as e:
+                            print(f"[ConfigStore] publish initPosition failed: {e}")
+            except Exception as e:
+                print(f"[ConfigStore] restore runtime failed: {e}")
+    except Exception as e:
+        print(f"[ConfigStore] startup restore failed: {e}")
 
 @app.on_event("shutdown")
 async def _stop_ws_broadcast():
@@ -236,6 +390,39 @@ async def _stop_ws_broadcast():
             print(f"[SimProc] stopped on shutdown: {stopped}")
     except Exception:
         pass
+    # 保存离线快照与最近仿真设置到配置文件
+    try:
+        overrides = getattr(app.state, "sim_settings_by_agv", {})
+        for info in agv_manager.list_agvs():
+            try:
+                # 使用集中式运行态存储的值保存快照
+                from SimVehicleSys.sim_vehicle.state_manager import global_store
+                rt = global_store.get_runtime(info.serial_number)
+                agv_config_store.update_runtime_snapshot(info.serial_number, rt)
+            except Exception:
+                # 回退到状态响应
+                try:
+                    status = agv_manager.get_status(info.serial_number)
+                    if status:
+                        from .schemas import AGVRuntime, Position
+                        rt = AGVRuntime(
+                            battery_level=status.battery_level,
+                            current_map=status.current_map,
+                            position=Position(x=status.position.x, y=status.position.y, theta=status.position.theta),
+                            speed_limit=1.0,
+                        )
+                        agv_config_store.update_runtime_snapshot(info.serial_number, rt)
+                except Exception:
+                    pass
+            # 保存最近一次提交的仿真设置覆盖
+            try:
+                patch = overrides.get(info.serial_number, {}) if isinstance(overrides, dict) else {}
+                if patch:
+                    agv_config_store.update_physical(info.serial_number, patch)
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[ConfigStore] shutdown persist failed: {e}")
 
 @app.post("/api/agv/{serial_number}/config/dynamic", response_model=StatusResponse)
 async def post_dynamic_config(serial_number: str, body: DynamicConfigUpdate):
@@ -252,6 +439,12 @@ async def post_dynamic_config(serial_number: str, body: DynamicConfigUpdate):
                 publisher.publish_init_position(info, rt)
         except Exception as e:
             print(f"Publish initPosition failed: {e}")
+    # 持久化最近运行态快照
+    try:
+        if rt:
+            agv_config_store.update_runtime_snapshot(serial_number, rt)
+    except Exception:
+        pass
     return status
 
 @app.get("/api/agv/{serial_number}/status", response_model=StatusResponse)
@@ -281,6 +474,11 @@ async def move_translate(serial_number: str, body: TranslateRequest):
             publisher.publish_init_position(info, rt)
     except Exception as e:
         print(f"Publish initPosition failed: {e}")
+    # 持久化最近运行态快照
+    try:
+        agv_config_store.update_runtime_snapshot(serial_number, rt)
+    except Exception:
+        pass
     status = agv_manager.get_status(serial_number)
     return status
 
@@ -361,6 +559,11 @@ def post_sim_settings(serial_number: str, body: SimSettingsPatch):
         except Exception:
             pass
         publisher.publish_sim_settings(info, body)
+        # 持久化本次提交的仿真设置覆盖值
+        try:
+            agv_config_store.update_physical(serial_number, body.model_dump(exclude_none=True))
+        except Exception:
+            pass
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Publish sim settings failed: {e}")
     return {"updated": True, "serial_number": serial_number}
@@ -422,6 +625,11 @@ async def move_rotate(serial_number: str, body: RotateRequest):
             publisher.publish_init_position(info, rt)
     except Exception as e:
         print(f"Publish initPosition failed: {e}")
+    # 持久化最近运行态快照
+    try:
+        agv_config_store.update_runtime_snapshot(serial_number, rt)
+    except Exception:
+        pass
     status = agv_manager.get_status(serial_number)
     return status
 

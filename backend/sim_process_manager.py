@@ -7,9 +7,9 @@ from typing import Dict, List, Optional
 
 class SimulatorProcessManager:
     """
-    Windows 专用的仿真实例进程管理器：使用 PowerShell 启动 Python 仿真脚本。
+    Windows 专用的仿真实例进程管理器：直接启动 Python 仿真脚本并持有子进程句柄。
 
-    - 每个序列号一个独立进程：`powershell -NoProfile -ExecutionPolicy Bypass -Command "python -u SimVehicleSys/main.py --serial '<SN>'"`
+    - 每个序列号一个独立进程：`python -u SimVehicleSys/main.py --serial <SN>`
     - 仅在未运行时启动，重复启动将被忽略。
     - 提供停止单个/全部实例的能力，应用关闭时清理。
     """
@@ -19,22 +19,12 @@ class SimulatorProcessManager:
         self.main_py = self.project_root / "SimVehicleSys" / "main.py"
         self._procs: Dict[str, subprocess.Popen] = {}
 
-    def _powershell_cmd(self, serial: str) -> List[str]:
-        """构造 PowerShell 启动命令参数列表。"""
-        # 确保使用绝对路径并正确引用，避免空格路径问题；使用当前 Python 解释器
+    def _python_cmd(self, serial: str) -> List[str]:
+        """构造直接启动 Python 的命令参数列表。"""
         py_exe = str(sys.executable)
         py_path = str(self.main_py)
         serial_s = str(serial)
-        # PowerShell 中使用 & 调用带空格路径的可执行文件
-        ps_script = f'& "{py_exe}" -u "{py_path}" --serial "{serial_s}"'
-        return [
-            "powershell",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            ps_script,
-        ]
+        return [py_exe, "-u", py_path, "--serial", serial_s]
 
     def start_for(self, serial: str) -> bool:
         """为指定序列号启动仿真实例。返回是否新启动。"""
@@ -45,14 +35,13 @@ class SimulatorProcessManager:
         if not self.main_py.exists():
             raise RuntimeError(f"Simulator entry not found: {self.main_py}")
         try:
+            # 直接启动 Python 子进程，便于后续可靠终止
             proc = subprocess.Popen(
-                self._powershell_cmd(serial),
+                self._python_cmd(serial),
                 cwd=str(self.project_root),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                creationflags=0,
-                start_new_session=True,
             )
             self._procs[serial] = proc
             print(f"[SimProc] started {serial} (pid={proc.pid})")
@@ -69,6 +58,7 @@ class SimulatorProcessManager:
             return False
         try:
             if proc.poll() is None:
+                # 先尝试优雅终止，如未退出则强制终止
                 proc.terminate()
                 try:
                     proc.wait(timeout=3)

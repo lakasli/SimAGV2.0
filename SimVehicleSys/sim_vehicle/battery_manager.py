@@ -16,7 +16,7 @@ class BatteryManager:
     - 空闲：每分钟掉电 `battery_idle_drain_per_min` 百分点
     - 空载运动：掉电速度 = 空闲 × `battery_move_empty_multiplier`
     - 载货运动：掉电速度 = 空闲 × `battery_move_loaded_multiplier`
-    - 充电：进入以 "CP" 开头的站点时，每分钟充电 `battery_charge_per_min` 百分点
+    - 充电：进入以 "CP" 开头的站点时自动开始充电（无需额外指令），每分钟充电 `battery_charge_per_min` 百分点
 
     所有参数来源 config.settings，并可在 config.toml 配置。
     """
@@ -116,7 +116,8 @@ class BatteryManager:
                     scale = 1.0
                 dt_eff = dt * scale
 
-                if self._is_at_charging_point() and self._has_charging_command():
+                # 到达 CP 充电站点后即自动充电，不再依赖充电指令
+                if self._is_at_charging_point():
                     rate_per_min = float(self.config.settings.battery_charge_per_min)
                     delta = rate_per_min * (dt_eff / 60.0)
                     charge = min(100.0, charge + delta)
