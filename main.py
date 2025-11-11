@@ -23,12 +23,21 @@ def _windows_creation_flags() -> int:
         return 0
     return 0
 
-def start_backend() -> subprocess.Popen:
-    cmd = [sys.executable, "-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "8000"]
+def start_backend(port: int) -> subprocess.Popen:
+    cmd = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        "backend.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+    ]
     return subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=_windows_creation_flags())
 
 
-def start_mosquitto() -> subprocess.Popen | None:
+def start_mosquitto(port: int | None = None) -> subprocess.Popen | None:
     # 优先在 Linux 使用 PATH 中的 'mosquitto' 可执行文件；Windows 作为回退
     if os.name != "nt":
         exe = shutil.which("mosquitto")
@@ -36,8 +45,16 @@ def start_mosquitto() -> subprocess.Popen | None:
             print("Mosquitto 未找到：请安装 mosquitto 并确保其在 PATH 中。")
             return None
         try:
-            cmd = [exe, "-v"]
-            return subprocess.Popen(cmd, cwd=str(Path(exe).parent), creationflags=_windows_creation_flags())
+            cmd = [exe]
+            if port:
+                cmd += ["-p", str(port)]
+            return subprocess.Popen(
+                cmd,
+                cwd=str(Path(exe).parent),
+                creationflags=_windows_creation_flags(),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         except Exception as e:
             print(f"启动 Mosquitto 失败: {e}")
             return None
@@ -47,8 +64,16 @@ def start_mosquitto() -> subprocess.Popen | None:
         print(f"Mosquitto 未找到: {exe_path}，请安装或检查路径。")
         return None
     try:
-        cmd = [str(exe_path), "-v"]
-        return subprocess.Popen(cmd, cwd=str(exe_path.parent), creationflags=_windows_creation_flags())
+        cmd = [str(exe_path)]
+        if port:
+            cmd += ["-p", str(port)]
+        return subprocess.Popen(
+            cmd,
+            cwd=str(exe_path.parent),
+            creationflags=_windows_creation_flags(),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     except Exception as e:
         print(f"启动 Mosquitto 失败: {e}")
         return None
@@ -128,8 +153,8 @@ def free_port(port: int) -> None:
 
 
 def clean_necessary_ports() -> None:
-    # 启动前清理必要端口：MQTT(1883) 与 后端(8000)
-    for port in (1883, 8000):
+    # 启动前清理必要端口：MQTT(9527) 与 后端(8000)
+    for port in (9527, 8000):
         free_port(port)
 
 # 新增：进程/端口检查工具
@@ -162,6 +187,16 @@ def is_process_running(image_name: str) -> bool:
 
 def is_port_in_use(port: int) -> bool:
     return len(find_pids_on_port(port)) > 0
+
+
+def find_free_port(start: int, max_steps: int = 50) -> int:
+    """从起始端口起向上扫描，返回第一个未占用端口；若找不到则返回起始端口。"""
+    port = int(start)
+    for _ in range(max_steps):
+        if not is_port_in_use(port):
+            return port
+        port += 1
+    return int(start)
 
 
 def _load_registered_agvs() -> list[dict]:
@@ -198,25 +233,42 @@ def start_simulators() -> list[subprocess.Popen]:
 
 
 def main() -> None:
-    print("检查 Mosquitto 运行状态...")
+    print("检查端口并选择可用端口...")
     mosq_proc = None
     img = "mosquitto.exe" if os.name == "nt" else "mosquitto"
+
+    # MQTT 端口选择：若默认 1883 被占用，则回退到下一个可用端口并以该端口启动 mosquitto
+    mqtt_port = 1883
     if is_process_running(img):
         print("检测到 Mosquitto 已在运行")
+        # 假定运行在默认端口；若默认端口不可用则仍使用 1883 以保持配置一致
+        if is_port_in_use(1883):
+            mqtt_port = 1883
+        else:
+            mqtt_port = 1883
     else:
         if is_port_in_use(1883):
-            print("检测到 1883 已被占用，尝试释放...")
-            free_port(1883)
-        print("启动 MQTT Broker (Mosquitto)...")
-        mosq_proc = start_mosquitto()
-    time.sleep(1.0)
+            mqtt_port = find_free_port(1883)
+            print(f"默认端口 1883 已占用，回退到 {mqtt_port}")
+        else:
+            mqtt_port = 1883
+        print(f"启动 MQTT Broker (Mosquitto) 于端口 {mqtt_port}...")
+        mosq_proc = start_mosquitto(mqtt_port)
+        time.sleep(1.0)
 
-    # 仅清理后端端口，避免误杀已运行的 Mosquitto
-    if is_port_in_use(8000):
-        free_port(8000)
+    # 将选定的 MQTT 主机/端口传播到后端与仿真器（环境变量在子进程中自动继承）
+    os.environ["SIMAGV_MQTT_HOST"] = "127.0.0.1"
+    os.environ["SIMAGV_MQTT_PORT"] = str(mqtt_port)
+    print(f"MQTT 使用端口: {mqtt_port}")
 
-    print("启动后端服务 (Uvicorn)...")
-    backend_proc = start_backend()
+    # 后端端口选择：若默认 8000 被占用则回退到下一个可用端口
+    backend_port = 8000
+    if is_port_in_use(backend_port):
+        backend_port = find_free_port(backend_port)
+        print(f"默认后端端口 8000 已占用，回退到 {backend_port}")
+
+    print(f"启动后端服务 (Uvicorn) 于 http://127.0.0.1:{backend_port} ...")
+    backend_proc = start_backend(backend_port)
     time.sleep(1.5)
 
     # 启动世界模型服务线程（独立线程）
@@ -238,30 +290,25 @@ def main() -> None:
             time.sleep(1)
     except KeyboardInterrupt:
         print("Stopping services...")
-        # 在停止前请求后端持久化运行态快照（坐标与地图）
-        # 使用重试与更长超时，提升成功率
+        # 在停止前尝试请求后端持久化运行态快照（坐标与地图）；若不可达则静默跳过
         try:
-            import urllib.request, time as _t
-            import json as _json
-            url = "http://127.0.0.1:8000/api/system/persist-runtime"
-            payload = _json.dumps({}).encode("utf-8")
-            headers = {"Content-Type": "application/json"}
-            attempts = 2
-            last_err = None
-            for i in range(attempts):
-                try:
-                    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-                    with urllib.request.urlopen(req, timeout=5.0) as resp:
-                        print("Persist runtime snapshots:", resp.read().decode("utf-8", errors="ignore"))
-                        last_err = None
-                        break
-                except Exception as _e:
-                    last_err = _e
-                    _t.sleep(0.5)
-            if last_err:
-                print(f"Persist request failed: {last_err}")
-        except Exception as e:
-            print(f"Persist request failed: {e}")
+            if is_port_in_use(backend_port):
+                import urllib.request, time as _t
+                import json as _json
+                url = f"http://127.0.0.1:{backend_port}/api/system/persist-runtime"
+                payload = _json.dumps({}).encode("utf-8")
+                headers = {"Content-Type": "application/json"}
+                attempts = 2
+                for i in range(attempts):
+                    try:
+                        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+                        with urllib.request.urlopen(req, timeout=5.0) as resp:
+                            _ = resp.read()
+                            break
+                    except Exception:
+                        _t.sleep(0.5)
+        except Exception:
+            pass
         try:
             for p in simulator_procs:
                 try:

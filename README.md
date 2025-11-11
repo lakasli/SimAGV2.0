@@ -21,7 +21,7 @@ SimAGV2.0 是一个跨平台（Linux/Windows）的多车 AGV 仿真系统，基�
 - 进入项目根目录并在 Bash 中运行：
   - `python3 ./main.py`
 - 该脚本将：
-  - 检查并启动 `Mosquitto`（端口 `1883`）。
+  - 检查并启动 `Mosquitto`（端口 `9527`）。
   - 启动后端服务（Uvicorn，`http://127.0.0.1:8000`）。
   - 启动世界模型服务线程（碰撞与安全管理）。
   - 根据 `backend\data\registered_agvs.json` 启动一个或多个仿真实例。
@@ -63,7 +63,7 @@ SimAGV2.0 是一个跨平台（Linux/Windows）的多车 AGV 仿真系统，基�
 
 ## 端口与主题约定
 - 后端：`http://127.0.0.1:8000`
-- MQTT Broker：`127.0.0.1:1883`
+- MQTT Broker：`127.0.0.1:9527`
 - VDA MQTT 基础主题：`uagv/{vda_version}/{manufacturer}/{serial_number}`
   - 示例：`uagv/v2/SEER/AMB-01/state`
 
@@ -79,8 +79,8 @@ SimAGV2.0/
 ```
 
 ## 常见问题
-- Mosquitto 未找到：在 Linux 下请确保 `mosquitto` 已安装并在 PATH 中（端口 1883）。
-- 端口占用：一键脚本会尝试释放 `8000/1883`；若仍失败，请手动关闭占用进程后重试。
+- Mosquitto 未找到：在 Linux 下请确保 `mosquitto` 已安装并在 PATH 中（端口 9527）。
+- 端口占用：一键脚本会尝试释放 `8000/9527`；若仍失败，请手动关闭占用进程后重试。
 - 前端无法打开：确认后端已运行且首页 `GET /` 能返回 `frontend/index.html`；也可直接访问静态目录 `/static`。
 - 多车未启动：确认 `backend\data\registered_agvs.json` 已包含目标序列号，或通过注册接口提交后重试。
 

@@ -25,7 +25,7 @@ class MqttPublisher:
         self.config_path = config_path
         self.client: Optional[mqtt.Client] = None
         self.host: str = "127.0.0.1"
-        self.port: int = 1883
+        self.port: int = 9527
         self.vda_interface: str = "uagv"
         self.vda_full_version: str = "2.0.0"
         self._load_config()

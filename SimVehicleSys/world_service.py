@@ -22,7 +22,7 @@ class WorldModelService:
     def __init__(self, tickMs: int = 100) -> None:
         cfg = get_config()
         self.host = str(getattr(cfg.mqtt_broker, "host", "127.0.0.1"))
-        self.port = int(getattr(cfg.mqtt_broker, "port", 1883))
+        self.port = int(getattr(cfg.mqtt_broker, "port", 9527))
         self.vdaInterface = str(getattr(cfg.mqtt_broker, "vda_interface", "uagv"))
         self.defaultLength = float(getattr(cfg.settings, "length", 1.03))
         self.defaultWidth = float(getattr(cfg.settings, "width", 0.745))

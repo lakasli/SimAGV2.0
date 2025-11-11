@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 import pathlib
 import json
+import os
 
 
 @dataclass
@@ -88,10 +89,10 @@ def get_config(config_path: Optional[str] = None) -> Config:
     except Exception:
         # 读取失败则使用内置默认值
         pass
-    return Config(
+    cfg = Config(
         mqtt_broker=MqttBrokerConfig(
             host="127.0.0.1",
-            port="1883",
+            port="9527",
             vda_interface="uagv",
         ),
         vehicle=VehicleConfig(
@@ -125,3 +126,20 @@ def get_config(config_path: Optional[str] = None) -> Config:
             center_forward_offset_m=0.1,
         ),
     )
+
+    # 环境变量覆盖：允许通过 SIMAGV_MQTT_HOST / SIMAGV_MQTT_PORT / SIMAGV_MQTT_INTERFACE 覆盖默认值
+    try:
+        env_host = os.getenv("SIMAGV_MQTT_HOST")
+        if env_host:
+            cfg.mqtt_broker.host = str(env_host)
+        env_port = os.getenv("SIMAGV_MQTT_PORT")
+        if env_port:
+            cfg.mqtt_broker.port = str(env_port)
+        env_iface = os.getenv("SIMAGV_MQTT_INTERFACE")
+        if env_iface:
+            cfg.mqtt_broker.vda_interface = str(env_iface)
+    except Exception:
+        # 保守处理：忽略环境读取错误
+        pass
+
+    return cfg

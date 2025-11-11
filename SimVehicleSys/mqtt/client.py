@@ -25,7 +25,7 @@ def create_client(config: Any) -> mqtt.Client:
 
 def connect(client: mqtt.Client, config: Any) -> None:
     host = getattr(config.mqtt_broker, "host", "127.0.0.1")
-    port = int(getattr(config.mqtt_broker, "port", 1883))
+    port = int(getattr(config.mqtt_broker, "port", 9527))
     client.connect(str(host), int(port), keepalive=60)
 
 

@@ -1,0 +1,20 @@
+{
+  "speed_min": 0.01,
+  "speed_max": 2.0,
+  "acceleration_max": 2.0,
+  "deceleration_max": 2.0,
+  "height_min": 0.01,
+  "height_max": 0.1,
+  "width": 0.745,
+  "length": 1.03,
+  "state_frequency": 10,
+  "visualization_frequency": 1,
+  "sim_time_scale": 1.0,
+  "action_time": 1.0,
+  "map_id": "test1",
+  "last_position": {
+    "x": -2.599,
+    "y": -6.990253080546243,
+    "theta": 0.0
+  }
+}
