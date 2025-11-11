@@ -2399,16 +2399,25 @@
       sel.disabled = false;
     }
     async function registerRobot() { const name = document.getElementById('robotName').value.trim(); const type = document.getElementById('robotType').value; const ip = document.getElementById('robotIP').value.trim(); const manu = document.getElementById('robotManufacturer').value.trim() || 'SEER'; const ver = document.getElementById('robotVersion').value.trim() || 'v2'; const initId = document.getElementById('initialPosition').value; const mapVal = document.getElementById('registerMapSelect').value; if (!name) { try { window.printErrorToStatus('请输入机器人名称','注册'); } catch (_) {} return; } if (!ip) { try { window.printErrorToStatus('请输入机器人IP地址','注册'); } catch (_) {} return; } if (!initId) { try { window.printErrorToStatus('请选择初始位置','注册'); } catch (_) {} return; } const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/; if (!ipRegex.test(ip)) { try { window.printErrorToStatus('请输入有效的IP地址格式','注册'); } catch (_) {} return; } const payload = [{ serial_number: name, manufacturer: manu, type: type, vda_version: ver, IP: ip }]; try { const resp = await fetch(`${API_BASE_URL}/agvs/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); const result = await resp.json(); if ((result.registered || []).includes(name)) { await loadRobotList(); const robot = registeredRobots.find(r => r.robot_name === name); let pos = null; if (mapVal && /(^|\/)VehicleMap\/[^\/]+\.scene$/.test(mapVal)) { const fname = String(mapVal).split('/').pop(); window.registerSceneStationsCache = window.registerSceneStationsCache || {}; let stations = window.registerSceneStationsCache[fname]; if (!stations) { try { const sresp = await fetch(`/maps/VehicleMap/${encodeURIComponent(fname)}`); if (sresp.ok) { const data = await sresp.json(); const root = Array.isArray(data) ? data[0] : data; const points = (root && Array.isArray(root.points)) ? root.points : []; const allowedPrefixes = ['AP','CP','PP','LM','WP']; const startsAllowed = (txt) => allowedPrefixes.some(pref => String(txt || '').trim().toUpperCase().startsWith(pref)); stations = points.filter(p => startsAllowed(String(p.name || p.id || ''))).map(p => ({ id: String(p.id || p.name), instanceName: String(p.name || p.id), pointName: String(p.name || p.id), pos: { x: Number(p.x), y: Number(p.y) } })); } } catch (e) { /* 忽略一次失败 */ } } const s = (stations || []).find(x => String(x.id || x.instanceName || x.pointName) === initId); if (s) { const px = (s && s.pos && typeof s.pos.x !== 'undefined') ? Number(s.pos.x) : Number(s.x); const py = (s && s.pos && typeof s.pos.y !== 'undefined') ? Number(s.pos.y) : Number(s.y); if (isFinite(px) && isFinite(py)) { pos = { x: px, y: py, theta: 0 }; } } } else { const point = (mapData?.points || []).find(p => String(p.id || p.name) === initId); if (point) { pos = { x: point.x, y: point.y, theta: 0 }; } } // 同步地图与初始位置到后端（持久化并发布 initPosition）
-      if (pos && mapVal) {
+      // 使用即时动作 switchMap 设置地图与初始位置（避免与动态配置冲突）
+      if (mapVal && /(^|\/)(VehicleMap|ViewerMap)\/[^\/]+\.scene$/.test(mapVal)) {
+        const swBody = { map: mapVal };
+        if (initId) swBody.switch_point = initId;
+        if (pos && isFinite(pos.x) && isFinite(pos.y)) { swBody.center_x = pos.x; swBody.center_y = pos.y; }
         try {
-          await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(name)}/config/dynamic`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ current_map: mapVal, position: pos })
+          const swResp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(name)}/instant/switch-map`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(swBody)
           });
-        } catch (e) { /* 忽略一次失败，不影响注册逻辑 */ }
+          if (!swResp.ok) console.warn('注册后 switchMap 失败:', swResp.status);
+        } catch (e) { console.warn('注册后 switchMap 异常:', e); }
       }
-      if (robot && pos) { robot.initialPosition = pos; if (mapVal) robot.currentMap = mapVal; } clearRobotForm(); document.getElementById('status').textContent = `机器人 ${name} 注册成功`; setTimeout(() => document.getElementById('status').textContent = '准备就绪', 3000); } else { try { window.printErrorToStatus('注册失败: ' + JSON.stringify(result),'注册'); } catch (_) {} } } catch (err) { console.error('注册机器人失败:', err); try { window.printErrorToStatus('注册机器人失败: ' + (err && err.message ? err.message : String(err)),'注册'); } catch (_) {} document.getElementById('status').textContent = '注册失败: ' + (err && err.message ? err.message : String(err)); } }
+      if (robot && pos) { robot.initialPosition = pos; /* 地图由状态更新覆盖，不在此处强设 */ }
+      clearRobotForm();
+      document.getElementById('status').textContent = `机器人 ${name} 注册成功`;
+      setTimeout(() => document.getElementById('status').textContent = '准备就绪', 3000);
+    } else { try { window.printErrorToStatus('注册失败: ' + JSON.stringify(result),'注册'); } catch (_) {} }
+  } catch (err) { console.error('注册机器人失败:', err); try { window.printErrorToStatus('注册机器人失败: ' + (err && err.message ? err.message : String(err)),'注册'); } catch (_) {} document.getElementById('status').textContent = '注册失败: ' + (err && err.message ? err.message : String(err)); }
+}
     async function removeRobot(serial) { if (!confirm('确定要删除这个机器人吗？')) return; try { const resp = await fetch(`${API_BASE_URL}/agvs/${serial}`, { method: 'DELETE' }); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); await loadRobotList(); document.getElementById('status').textContent = '机器人已删除'; setTimeout(() => document.getElementById('status').textContent = '准备就绪', 2000); } catch (err) { console.error('删除机器人失败:', err); try { window.printErrorToStatus('删除机器人失败: ' + (err && err.message ? err.message : String(err)),'删除'); } catch (_) {} } }
 
  function updateRobotList() { const c = document.getElementById('robotListContainer'); if (registeredRobots.length === 0) { c.innerHTML = '<p style="color:#bdc3c7;font-style:italic;">暂无注册的机器人</p>'; return; } c.innerHTML = registeredRobots.map(robot => { const battery = robot.battery || 0; const batteryText = truncateToOneDecimal(Number(battery)).toFixed(1); const pos = robot.currentPosition || robot.initialPosition; const posText = pos ? `当前位置: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}) | 方向: ${(pos.theta || 0).toFixed(2)}` : '位置未知'; const selectedStyle = (selectedRobotId === robot.robot_name) ? 'border-left:4px solid #2ecc71;background:#3b4f63;' : ''; const commText = robot.commConnected ? '连接' : '断开'; const commColor = robot.commConnected ? '#00ff00' : '#ff0000'; const instStatus = robot.instanceStatus || '停止'; const instText = instStatus; const instColor = instStatus === '启动' ? '#00ff00' : '#ff0000'; const mapText = robot.currentMap ? robot.currentMap : '未设置'; const fhText = (typeof robot.forkHeight !== 'undefined' && robot.forkHeight !== null) ? `${truncateToOneDecimal(Number(robot.forkHeight)).toFixed(1)} m` : '-'; return `<div class=\"robot-item\" style=\"${selectedStyle}\" onclick=\"selectRobot('${robot.robot_name}')\"><div class=\"robot-header\"><div class=\"robot-name\">${robot.robot_name}</div></div><div class=\"robot-info\" style=\"word-break:break-all;\">类型: ${robot.type} | IP: ${robot.ip}<br>厂商: ${robot.manufacturer || '未知'} | 地图: ${mapText}<br>${posText}<br> 电量: ${batteryText}% | 叉高: ${fhText}<br><span style=\"color:${commColor}\">通信状态: ${commText}</span> | <span style=\"color:${instColor}\">实例状态: ${instText}</span></div><div class=\"robot-actions\"><button class=\"btn-small btn-danger\" onclick=\"removeRobot('${robot.robot_name}')\">删除</button><button class=\"btn-small btn-config-small\" onclick=\"openRobotConfig('${robot.robot_name}')\">配置</button></div></div>`; }).join(''); }
@@ -3111,19 +3120,15 @@
         }
       });
       // 预填当前仿真设置
-      // 仿真设置全局生效：此处使用当前选中机器人作为请求路径（仅用于读取/提交接口），
-      // 若未选中，则回退为第一个注册的机器人名称。
-      const id = selectedRobotId || (((registeredRobots || [])[0] && (registeredRobots || [])[0].robot_name) || '');
-      if (id) {
-        try {
-          const resp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(id)}/sim/settings`);
-          if (resp && resp.ok) {
-            const data = await resp.json();
-            prefillSimSettings(data);
-          }
-        } catch (e) {
-          try { window.printErrorToStatus('读取当前仿真设置失败: ' + (e && e.message ? e.message : String(e)), '设置'); } catch (_) {}
+      // 仿真设置全局生效：统一从全局接口读取
+      try {
+        const resp = await fetch(`${API_BASE_URL}/sim/settings`);
+        if (resp && resp.ok) {
+          const data = await resp.json();
+          prefillSimSettings(data);
         }
+      } catch (e) {
+        try { window.printErrorToStatus('读取当前仿真设置失败: ' + (e && e.message ? e.message : String(e)), '设置'); } catch (_) {}
       }
     }
     function closeSettingsModal() { document.getElementById('settingsModal').style.display = 'none'; }
@@ -3143,9 +3148,6 @@
     }
     async function saveSimSettings() {
       try {
-        // 仿真设置全局生效：提交时使用当前选中或第一个注册机器人名称作为路径参数
-        const id = selectedRobotId || (((registeredRobots || [])[0] && (registeredRobots || [])[0].robot_name) || '');
-        if (!id) { closeSettingsModal(); return; }
         const patch = {};
         const n = (v) => { const x = Number(v); return isFinite(x) ? x : undefined; };
         const s = (v) => { const x = String(v||'').trim(); return x ? x : undefined; };
@@ -3206,7 +3208,7 @@
           try { window.printErrorToStatus('参数无效: ' + errs.join('; '), '设置'); } catch (_) {}
           return; // 不提交，保持弹窗打开
         }
-        const resp = await fetch(`${API_BASE_URL}/agv/${encodeURIComponent(id)}/sim/settings`, {
+        const resp = await fetch(`${API_BASE_URL}/sim/settings`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch)
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);

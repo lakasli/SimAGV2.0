@@ -327,6 +327,7 @@ async def _start_ws_broadcast():
                     "height_max",
                     "width",
                     "length",
+                    "map_id",
                     "sim_time_scale",
                     "state_frequency",
                     "visualization_frequency",
@@ -439,12 +440,6 @@ async def post_dynamic_config(serial_number: str, body: DynamicConfigUpdate):
                 publisher.publish_init_position(info, rt)
         except Exception as e:
             print(f"Publish initPosition failed: {e}")
-    # 持久化最近运行态快照
-    try:
-        if rt:
-            agv_config_store.update_runtime_snapshot(serial_number, rt)
-    except Exception:
-        pass
     return status
 
 @app.get("/api/agv/{serial_number}/status", response_model=StatusResponse)
@@ -474,11 +469,6 @@ async def move_translate(serial_number: str, body: TranslateRequest):
             publisher.publish_init_position(info, rt)
     except Exception as e:
         print(f"Publish initPosition failed: {e}")
-    # 持久化最近运行态快照
-    try:
-        agv_config_store.update_runtime_snapshot(serial_number, rt)
-    except Exception:
-        pass
     status = agv_manager.get_status(serial_number)
     return status
 
@@ -612,6 +602,140 @@ def get_sim_settings(serial_number: str):
     }
     return result
 
+# 全局仿真设置（热加载）：对所有已注册 AGV 生效
+@app.post("/api/sim/settings")
+def post_sim_settings_global(body: SimSettingsPatch):
+    publisher = getattr(app.state, "mqtt_publisher", None)
+    if not publisher:
+        raise HTTPException(status_code=500, detail="MQTT publisher not available")
+    # 参数范围校验（与按实例接口一致）
+    errors: list[str] = []
+    def add_err(msg: str):
+        errors.append(msg)
+    if body.speed is not None and not (0.0 <= float(body.speed) <= 2.0):
+        add_err("速度(speed)必须在[0,2]范围内")
+    if body.sim_time_scale is not None:
+        v = float(body.sim_time_scale)
+        if not (v > 0.0 and v <= 10.0):
+            add_err("时间缩放(sim_time_scale)必须在(0,10]范围内")
+    if body.state_frequency is not None:
+        v = int(body.state_frequency)
+        if not (v >= 1 and v <= 10):
+            add_err("状态频率(state_frequency)必须为[1,10]的正整数")
+    if body.visualization_frequency is not None:
+        v = int(body.visualization_frequency)
+        if not (v >= 1 and v <= 10):
+            add_err("可视化频率(visualization_frequency)必须为[1,10]的正整数")
+    if body.action_time is not None:
+        v = float(body.action_time)
+        if not (v >= 1.0 and v <= 10.0):
+            add_err("动作时长(action_time)必须在[1,10]范围内")
+    if body.frontend_poll_interval_ms is not None:
+        v = int(body.frontend_poll_interval_ms)
+        if not (v >= 10 and v <= 1000):
+            add_err("前端轮询(frontend_poll_interval_ms)必须为[10,1000]的正整数")
+    if body.battery_default is not None:
+        v = float(body.battery_default)
+        if not (v > 0.0 and v <= 100.0):
+            add_err("默认电量(battery_default)必须在(0,100]范围内")
+    if body.battery_idle_drain_per_min is not None:
+        v = float(body.battery_idle_drain_per_min)
+        if not (v >= 1.0 and v <= 100.0):
+            add_err("空闲耗电(battery_idle_drain_per_min)必须在[1,100]范围内")
+    if body.battery_move_empty_multiplier is not None:
+        v = float(body.battery_move_empty_multiplier)
+        if not (v >= 1.0 and v <= 100.0):
+            add_err("空载耗电系数(battery_move_empty_multiplier)必须在[1,100]范围内")
+    if body.battery_move_loaded_multiplier is not None:
+        v = float(body.battery_move_loaded_multiplier)
+        if not (v >= 1.0 and v <= 100.0):
+            add_err("载重耗电系数(battery_move_loaded_multiplier)必须在[1,100]范围内")
+    if body.battery_charge_per_min is not None:
+        v = float(body.battery_charge_per_min)
+        if not (v >= 1.0 and v <= 100.0):
+            add_err("充电速度(battery_charge_per_min)必须在[1,100]范围内")
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+    try:
+        # 更新运行态的前端轮询覆盖值（若提交了该项）
+        if body.frontend_poll_interval_ms is not None:
+            try:
+                app.state.frontend_poll_interval_ms = int(body.frontend_poll_interval_ms)
+            except Exception:
+                pass
+        # 记录最近一次的全局设置覆盖值（用于前端预填）
+        try:
+            update = {k: v for k, v in body.model_dump().items() if v is not None}
+            app.state.sim_settings_global = update
+        except Exception:
+            pass
+        # 对所有已注册 AGV 发布 simConfig 并持久化到各自配置文件
+        infos = agv_manager.list_agvs()
+        for info in infos:
+            try:
+                publisher.publish_sim_settings(info, body)
+            except Exception as e:
+                # 任一发布失败不阻断其它实例
+                print(f"[SimConfig] publish failed for {info.serial_number}: {e}")
+            try:
+                agv_config_store.update_physical(info.serial_number, body.model_dump(exclude_none=True))
+            except Exception:
+                pass
+        # 同步运行态覆盖映射，保证按实例查询也能看到最新值
+        try:
+            current = getattr(app.state, "sim_settings_by_agv", None)
+            if current is None:
+                app.state.sim_settings_by_agv = {}
+                current = app.state.sim_settings_by_agv
+            for info in infos:
+                prev = current.get(info.serial_number, {})
+                prev.update({k: v for k, v in body.model_dump().items() if v is not None})
+                current[info.serial_number] = prev
+        except Exception:
+            pass
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Publish global sim settings failed: {e}")
+    return {"updated": True, "scope": "global", "count": len(infos)}
+
+# 获取全局仿真设置：合并默认配置与最近一次提交的全局覆盖值
+@app.get("/api/sim/settings")
+def get_sim_settings_global():
+    try:
+        cfg = get_config()
+    except Exception:
+        cfg = None  # type: ignore
+    base = getattr(cfg, "settings", None)
+    ov = getattr(app.state, "sim_settings_global", {})
+    def pick(name: str, default):
+        return ov.get(name, default)
+    # 前端轮询间隔从运行态覆盖值读取
+    fp_default = getattr(base, "frontend_poll_interval_ms", 1000) if base else 1000
+    fp_runtime = getattr(app.state, "frontend_poll_interval_ms", fp_default)
+    result = {
+        "action_time": pick("action_time", getattr(base, "action_time", 1.0) if base else 1.0),
+        "speed": pick("speed", getattr(base, "speed", 1.0) if base else 1.0),
+        # 物理参数（用于前端物理参数弹窗预填与仿真约束）
+        "speed_min": pick("speed_min", getattr(base, "speed_min", 0.01) if base else 0.01),
+        "speed_max": pick("speed_max", getattr(base, "speed_max", 2.0) if base else 2.0),
+        "acceleration_max": pick("acceleration_max", getattr(base, "acceleration_max", 2) if base else 2),
+        "deceleration_max": pick("deceleration_max", getattr(base, "deceleration_max", 2) if base else 2),
+        "height_min": pick("height_min", getattr(base, "height_min", 0.01) if base else 0.01),
+        "height_max": pick("height_max", getattr(base, "height_max", 0.10) if base else 0.10),
+        "width": pick("width", getattr(base, "width", 0.745) if base else 0.745),
+        "length": pick("length", getattr(base, "length", 1.03) if base else 1.03),
+        "state_frequency": pick("state_frequency", getattr(base, "state_frequency", 10) if base else 10),
+        "visualization_frequency": pick("visualization_frequency", getattr(base, "visualization_frequency", 1) if base else 1),
+        "map_id": pick("map_id", getattr(base, "map_id", "default") if base else "default"),
+        "sim_time_scale": pick("sim_time_scale", getattr(base, "sim_time_scale", 1.0) if base else 1.0),
+        "battery_default": pick("battery_default", getattr(base, "battery_default", 100.0) if base else 100.0),
+        "battery_idle_drain_per_min": pick("battery_idle_drain_per_min", getattr(base, "battery_idle_drain_per_min", 1.0) if base else 1.0),
+        "battery_move_empty_multiplier": pick("battery_move_empty_multiplier", getattr(base, "battery_move_empty_multiplier", 1.5) if base else 1.5),
+        "battery_move_loaded_multiplier": pick("battery_move_loaded_multiplier", getattr(base, "battery_move_loaded_multiplier", 2.5) if base else 2.5),
+        "battery_charge_per_min": pick("battery_charge_per_min", getattr(base, "battery_charge_per_min", 10.0) if base else 10.0),
+        "frontend_poll_interval_ms": int(fp_runtime),
+    }
+    return result
+
 @app.post("/api/agv/{serial_number}/move/rotate", response_model=StatusResponse)
 async def move_rotate(serial_number: str, body: RotateRequest):
     rt = await execute_rotation_movement(serial_number, body.dtheta, agv_manager, ws_manager)
@@ -625,11 +749,6 @@ async def move_rotate(serial_number: str, body: RotateRequest):
             publisher.publish_init_position(info, rt)
     except Exception as e:
         print(f"Publish initPosition failed: {e}")
-    # 持久化最近运行态快照
-    try:
-        agv_config_store.update_runtime_snapshot(serial_number, rt)
-    except Exception:
-        pass
     status = agv_manager.get_status(serial_number)
     return status
 
@@ -947,4 +1066,43 @@ def publish_switch_map(serial_number: str, body: SwitchMapRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Publish switchMap failed: {e}")
+    # 在地图切换时立即持久化 map_id（避免频繁持久化坐标）
+    try:
+        from SimVehicleSys.utils.helpers import canonicalize_map_id
+        agv_config_store.update_physical(serial_number, {"map_id": canonicalize_map_id(body.map)})
+    except Exception:
+        pass
     return {"published": True, "serial_number": serial_number}
+
+# 手动触发运行态快照持久化（用于优雅停止前确保坐标保存）
+@app.post("/api/system/persist-runtime")
+def persist_runtime_snapshots():
+    saved = 0
+    try:
+        overrides = getattr(app.state, "sim_settings_by_agv", {})
+    except Exception:
+        overrides = {}
+    for info in agv_manager.list_agvs():
+        try:
+            # 尝试使用后端集中管理的状态（来自 MQTTBridge）
+            status = agv_manager.get_status(info.serial_number)
+            if status:
+                from .schemas import AGVRuntime, Position
+                rt = AGVRuntime(
+                    battery_level=status.battery_level,
+                    current_map=status.current_map,
+                    position=Position(x=status.position.x, y=status.position.y, theta=status.position.theta),
+                    speed_limit=1.0,
+                )
+                agv_config_store.update_runtime_snapshot(info.serial_number, rt)
+                saved += 1
+        except Exception:
+            pass
+        # 同步最近一次仿真设置覆盖（可选）
+        try:
+            patch = overrides.get(info.serial_number, {}) if isinstance(overrides, dict) else {}
+            if patch:
+                agv_config_store.update_physical(info.serial_number, patch)
+        except Exception:
+            pass
+    return {"saved": saved}

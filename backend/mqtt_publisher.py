@@ -126,7 +126,8 @@ class MqttPublisher:
             ],
         }
         try:
-            info_obj = self.client.publish(topic, json.dumps(payload), qos=1, retain=False)
+            # 使用 retain=True，保证后续新连接的仿真实例也能收到并应用初始位置
+            info_obj = self.client.publish(topic, json.dumps(payload), qos=1, retain=True)
             rc = getattr(info_obj, "rc", mqtt.MQTT_ERR_SUCCESS)
             if rc != mqtt.MQTT_ERR_SUCCESS:
                 raise RuntimeError(f"MQTT publish initPosition failed rc={rc}")
@@ -193,7 +194,8 @@ class MqttPublisher:
         topic = f"{base}/simConfig"
         payload = patch if isinstance(patch, dict) else patch.dict(exclude_none=True)
         try:
-            info_obj = self.client.publish(topic, json.dumps(payload), qos=1, retain=False)
+            # 使用 retain=True，保证连接后的实例能获取最近一次仿真设置
+            info_obj = self.client.publish(topic, json.dumps(payload), qos=1, retain=True)
             rc = getattr(info_obj, "rc", mqtt.MQTT_ERR_SUCCESS)
             if rc != mqtt.MQTT_ERR_SUCCESS:
                 raise RuntimeError(f"MQTT publish simConfig failed rc={rc}")

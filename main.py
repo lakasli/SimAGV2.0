@@ -13,9 +13,17 @@ from SimVehicleSys.world_service import WorldModelService
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
+def _windows_creation_flags() -> int:
+    try:
+        if os.name == "nt":
+            return getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    except Exception:
+        return 0
+    return 0
+
 def start_backend() -> subprocess.Popen:
     cmd = [sys.executable, "-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1", "--port", "8000"]
-    return subprocess.Popen(cmd, cwd=str(PROJECT_ROOT))
+    return subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=_windows_creation_flags())
 
 
 def start_mosquitto() -> subprocess.Popen | None:
@@ -25,7 +33,7 @@ def start_mosquitto() -> subprocess.Popen | None:
         return None
     try:
         cmd = [str(exe_path), "-v"]
-        return subprocess.Popen(cmd, cwd=str(exe_path.parent))
+        return subprocess.Popen(cmd, cwd=str(exe_path.parent), creationflags=_windows_creation_flags())
     except Exception as e:
         print(f"启动 Mosquitto 失败: {e}")
         return None
@@ -100,7 +108,7 @@ def start_simulators() -> list[subprocess.Popen]:
     procs: list[subprocess.Popen] = []
     if not agvs:
         cmd = [sys.executable, "-m", "SimVehicleSys.main"]
-        procs.append(subprocess.Popen(cmd, cwd=str(PROJECT_ROOT)))
+        procs.append(subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=_windows_creation_flags()))
         return procs
     for info in agvs:
         serial = str(info.get("serial_number", "")).strip()
@@ -108,7 +116,7 @@ def start_simulators() -> list[subprocess.Popen]:
             continue
         cmd = [sys.executable, "-m", "SimVehicleSys.main", "--serial", serial]
         try:
-            proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT))
+            proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=_windows_creation_flags())
             procs.append(proc)
             print(f"启动仿真实例: {serial}")
         except Exception as e:
@@ -156,6 +164,30 @@ def main() -> None:
             time.sleep(1)
     except KeyboardInterrupt:
         print("Stopping services...")
+        # 在停止前请求后端持久化运行态快照（坐标与地图）
+        # 使用重试与更长超时，提升成功率
+        try:
+            import urllib.request, time as _t
+            import json as _json
+            url = "http://127.0.0.1:8000/api/system/persist-runtime"
+            payload = _json.dumps({}).encode("utf-8")
+            headers = {"Content-Type": "application/json"}
+            attempts = 2
+            last_err = None
+            for i in range(attempts):
+                try:
+                    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+                    with urllib.request.urlopen(req, timeout=5.0) as resp:
+                        print("Persist runtime snapshots:", resp.read().decode("utf-8", errors="ignore"))
+                        last_err = None
+                        break
+                except Exception as _e:
+                    last_err = _e
+                    _t.sleep(0.5)
+            if last_err:
+                print(f"Persist request failed: {last_err}")
+        except Exception as e:
+            print(f"Persist request failed: {e}")
         try:
             for p in simulator_procs:
                 try:

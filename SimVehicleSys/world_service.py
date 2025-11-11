@@ -27,6 +27,8 @@ class WorldModelService:
         self.defaultLength = float(getattr(cfg.settings, "length", 1.03))
         self.defaultWidth = float(getattr(cfg.settings, "width", 0.745))
         self.tickMs = int(tickMs)
+        # 集中服务的时间缩放因子：默认从配置读取，后续通过订阅 simConfig 动态更新
+        self.simTimeScale: float = float(getattr(cfg.settings, "sim_time_scale", 1.0))
         self.client: mqtt.Client | None = None
         self.statesLock = threading.Lock()
         self.statesBySerial: Dict[str, Dict[str, Any]] = {}
@@ -46,6 +48,8 @@ class WorldModelService:
             # 订阅所有设备的 state：uagv/{vdaVersion}/{manufacturer}/{serial}/state
             # 正确的通配符为 3 个 '+': vdaVersion/manufacturer/serial
             self.client.subscribe(f"{self.vdaInterface}/+/+/+/state", qos=1)
+            # 订阅仿真设置更新：用于动态更新集中服务的时间缩放因子
+            self.client.subscribe(f"{self.vdaInterface}/+/+/+/simConfig", qos=1)
         except Exception as e:
             print(f"[WorldModel] MQTT connect/subscribe failed: {e}")
         self._stop = False
@@ -68,6 +72,20 @@ class WorldModelService:
 
     def _onMessage(self, client: mqtt.Client, userdata, msg: mqtt.MQTTMessage) -> None:
         tp = str(get_topic_type(msg.topic))
+        if tp == "simConfig":
+            # 动态接收仿真设置，提取并更新集中服务的时间缩放因子
+            try:
+                import json
+                data = json.loads(msg.payload.decode("utf-8", errors="ignore"))
+            except Exception:
+                return
+            try:
+                v = data.get("sim_time_scale", data.get("simTimeScale"))
+                if v is not None:
+                    self.simTimeScale = float(v)
+            except Exception:
+                pass
+            return
         if tp != "state":
             return
         try:
@@ -83,6 +101,13 @@ class WorldModelService:
 
     def _collisionLoop(self) -> None:
         while not self._stop:
+            # 基于 sim_time_scale 的休眠时间缩放：scale 越大，检测越频繁
+            eff_sleep_s = self.tickMs / 1000.0
+            try:
+                scale = max(0.0001, float(getattr(self, "simTimeScale", 1.0)))
+                eff_sleep_s = (self.tickMs / scale) / 1000.0
+            except Exception:
+                pass
             try:
                 snapshot: List[Tuple[str, Dict[str, Any]]] = []
                 with self.statesLock:
@@ -135,9 +160,9 @@ class WorldModelService:
                         self._stopped_pairs.discard(pair)
                 except Exception:
                     pass
-                time.sleep(self.tickMs / 1000.0)
+                time.sleep(eff_sleep_s)
             except Exception:
-                time.sleep(self.tickMs / 1000.0)
+                time.sleep(eff_sleep_s)
 
     def _issueStopPauseForPair(self, payload1: Dict[str, Any], payload2: Dict[str, Any]) -> None:
         try:

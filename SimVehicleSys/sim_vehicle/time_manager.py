@@ -64,12 +64,6 @@ class SimClock:
                 eff_state_freq = max(1e-6, float(self.config.settings.state_frequency) * scale)
                 eff_vis_freq = max(1e-6, float(self.config.settings.visualization_frequency) * scale)
                 if not self._clock_logged:
-                    try:
-                        self.logger.info(
-                            f"[Clock] tick={base_tick}ms scale={scale:.2f} eff_state_freq={eff_state_freq:.2f} eff_vis_freq={eff_vis_freq:.2f}"
-                        )
-                    except Exception:
-                        pass
                     self._clock_logged = True
                 state_elapsed_ms += base_tick
                 if state_elapsed_ms >= (1000.0 / eff_state_freq):
