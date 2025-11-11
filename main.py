@@ -7,6 +7,8 @@ from pathlib import Path
 import shutil
 import json
 import threading
+import signal
+import re
 
 from SimVehicleSys.world_service import WorldModelService
 
@@ -27,6 +29,19 @@ def start_backend() -> subprocess.Popen:
 
 
 def start_mosquitto() -> subprocess.Popen | None:
+    # 优先在 Linux 使用 PATH 中的 'mosquitto' 可执行文件；Windows 作为回退
+    if os.name != "nt":
+        exe = shutil.which("mosquitto")
+        if not exe:
+            print("Mosquitto 未找到：请安装 mosquitto 并确保其在 PATH 中。")
+            return None
+        try:
+            cmd = [exe, "-v"]
+            return subprocess.Popen(cmd, cwd=str(Path(exe).parent), creationflags=_windows_creation_flags())
+        except Exception as e:
+            print(f"启动 Mosquitto 失败: {e}")
+            return None
+    # Windows 回退路径
     exe_path = Path(r"D:\mosquitto\mosquitto.exe")
     if not exe_path.exists():
         print(f"Mosquitto 未找到: {exe_path}，请安装或检查路径。")
@@ -42,17 +57,46 @@ def start_mosquitto() -> subprocess.Popen | None:
 # 端口清理工具
 
 def find_pids_on_port(port: int) -> list[int]:
+    """跨平台查询占用指定端口的进程 PID 列表。
+
+    - 在 Linux：优先使用 `ss -lntp`，回退到 `lsof`。
+    - 在 Windows：使用 `netstat -ano`。
+    """
     try:
-        result = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, check=False)
         pids: set[int] = set()
-        for line in result.stdout.splitlines():
-            # 仅匹配包含端口的行
-            if f":{port}" in line:
-                parts = line.split()
-                if parts and parts[0].upper() in ("TCP", "UDP"):
-                    pid = parts[-1]
-                    if pid.isdigit():
-                        pids.add(int(pid))
+        if os.name == "nt":
+            result = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, check=False)
+            for line in result.stdout.splitlines():
+                if f":{port}" in line:
+                    parts = line.split()
+                    if parts and parts[0].upper() in ("TCP", "UDP"):
+                        pid = parts[-1]
+                        if pid.isdigit():
+                            pids.add(int(pid))
+            return list(pids)
+        # Linux: ss
+        try:
+            result = subprocess.run(["ss", "-lntp"], capture_output=True, text=True, check=False)
+            for line in result.stdout.splitlines():
+                if f":{port} " in line or f":{port}" in line:
+                    for m in re.finditer(r"pid=(\d+)", line):
+                        try:
+                            pids.add(int(m.group(1)))
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        # Linux 回退：lsof
+        if not pids:
+            try:
+                result = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True, check=False)
+                lines = result.stdout.splitlines()
+                for line in lines[1:]:  # 跳过标题行
+                    cols = line.split()
+                    if len(cols) >= 2 and cols[1].isdigit():
+                        pids.add(int(cols[1]))
+            except Exception:
+                pass
         return list(pids)
     except Exception as e:
         print(f"查询端口 {port} 占用失败: {e}")
@@ -67,7 +111,18 @@ def free_port(port: int) -> None:
     print(f"端口 {port} 被进程占用: {pids}，尝试结束...")
     for pid in pids:
         try:
-            subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False)
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False)
+            else:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    time.sleep(0.2)
+                except Exception:
+                    pass
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except Exception:
+                    pass
         except Exception as e:
             print(f"结束 PID {pid} 失败: {e}")
 
@@ -80,9 +135,27 @@ def clean_necessary_ports() -> None:
 # 新增：进程/端口检查工具
 
 def is_process_running(image_name: str) -> bool:
+    """跨平台进程存在性检查。
+
+    - 在 Linux：使用 `pgrep -x`；接受不带 .exe 的名称。
+    - 在 Windows：使用 `tasklist`。
+    """
     try:
-        res = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {image_name}"], capture_output=True, text=True, check=False)
-        return image_name.lower() in res.stdout.lower()
+        if os.name == "nt":
+            res = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {image_name}"], capture_output=True, text=True, check=False)
+            return image_name.lower() in res.stdout.lower()
+        # Linux
+        names = [image_name]
+        if image_name.endswith(".exe"):
+            names.append(image_name.replace(".exe", ""))
+        for nm in names:
+            try:
+                res = subprocess.run(["pgrep", "-x", nm], capture_output=True, text=True, check=False)
+                if res.returncode == 0 and res.stdout.strip():
+                    return True
+            except Exception:
+                pass
+        return False
     except Exception:
         return False
 
@@ -127,7 +200,8 @@ def start_simulators() -> list[subprocess.Popen]:
 def main() -> None:
     print("检查 Mosquitto 运行状态...")
     mosq_proc = None
-    if is_process_running("mosquitto.exe"):
+    img = "mosquitto.exe" if os.name == "nt" else "mosquitto"
+    if is_process_running(img):
         print("检测到 Mosquitto 已在运行")
     else:
         if is_port_in_use(1883):
