@@ -24,9 +24,10 @@ def create_client(config: Any) -> mqtt.Client:
 
 
 def connect(client: mqtt.Client, config: Any) -> None:
-    host = getattr(config.mqtt_broker, "host", "127.0.0.1")
-    port = int(getattr(config.mqtt_broker, "port", 1884))
-    client.connect(str(host), int(port), keepalive=60)
+    # 严格使用集中配置，不再使用回退默认值
+    host = str(config.mqtt_broker.host)
+    port = int(str(config.mqtt_broker.port))
+    client.connect(host, port, keepalive=60)
 
 
 def publish_json(client: mqtt.Client, topic: str, obj: Any, qos: int = 1, retain: bool = False) -> None:

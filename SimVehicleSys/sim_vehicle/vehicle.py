@@ -88,6 +88,9 @@ class VehicleSimulator:
     nav_first_edge_id: Optional[str] = None
     nav_start_point: Optional[Tuple[float, float]] = None
 
+    # 动作模式："order" 表示订单动作模式；"instant" 表示即时动作模式
+    action_mode: str = "order"
+
     @staticmethod
     def create(config: Config) -> "VehicleSimulator":
         base_topic = generate_vda_mqtt_base_topic(
@@ -338,8 +341,18 @@ class VehicleSimulator:
         publish_json(mqtt_cli, self.visualization_topic, self.visualization, qos=1, retain=False)
 
     def accept_instant_actions(self, instant_action_request: InstantActions) -> None:
+        # 接收即时动作时：清空 actionStates，仅显示本次 instantActions 的动作
         self.instant_actions = instant_action_request
+        try:
+            self.state.action_states.clear()
+        except Exception:
+            self.state.action_states = []
+        try:
+            self.action_mode = "instant"
+        except Exception:
+            setattr(self, "action_mode", "instant")
         for ia in self.instant_actions.actions:
+            # 即时动作不累计，直接加入等待队列
             self.state.action_states.append(ActionState(
                 action_id=ia.action_id,
                 action_status=ActionStatus.Waiting,
@@ -358,7 +371,20 @@ class VehicleSimulator:
         if not self._can_accept_new_order():
             return
         if self.is_vehicle_ready_for_new_order():
-            self.state.action_states.clear()
+            # 新订单（orderId 变化）：清空 actionStates，并切换到订单动作模式
+            try:
+                self.state.action_states.clear()
+            except Exception:
+                self.state.action_states = []
+            try:
+                self.action_mode = "order"
+            except Exception:
+                setattr(self, "action_mode", "order")
+            # 清除即时动作上下文
+            try:
+                self.instant_actions = None
+            except Exception:
+                pass
             self._accept_order(order_request)
         else:
             self._reject_order("There are active order states or edge states")
@@ -367,7 +393,25 @@ class VehicleSimulator:
         if order_request.order_update_id > self.state.order_update_id:
             if not self._can_accept_new_order():
                 return
-            self.state.action_states.clear()
+            # 同一 orderId 的订单更新：在即时动作模式下需要清空；在订单模式下累计 actionStates
+            try:
+                mode = getattr(self, "action_mode", "order")
+            except Exception:
+                mode = "order"
+            if str(mode) == "instant":
+                try:
+                    self.state.action_states.clear()
+                except Exception:
+                    self.state.action_states = []
+            # 切换到订单模式，并清除即时动作上下文
+            try:
+                self.action_mode = "order"
+            except Exception:
+                setattr(self, "action_mode", "order")
+            try:
+                self.instant_actions = None
+            except Exception:
+                pass
             self._accept_order(order_request)
         else:
             self._reject_order("Order update ID is lower than current")
@@ -431,7 +475,6 @@ class VehicleSimulator:
         # 提前标记导航运行占位，避免路径未生成窗口触发订单位姿推进导致起步漂移
         self.nav_running = True
         self.state.driving = True
-        self.state.action_states.clear()
         self.state.node_states.clear()
         self.state.edge_states.clear()
         self._process_order_nodes()
@@ -523,6 +566,12 @@ class VehicleSimulator:
                 self._add_action_state(action)
 
     def _add_action_state(self, action: Action) -> None:
+        # 累计规则：同一 orderId 下 actionStates 可累计；避免重复 actionId
+        try:
+            if any(str(getattr(st, "action_id", "")) == str(getattr(action, "action_id", "")) for st in self.state.action_states):
+                return
+        except Exception:
+            pass
         self.state.action_states.append(ActionState(
             action_id=action.action_id,
             action_type=action.action_type,

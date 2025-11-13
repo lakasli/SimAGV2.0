@@ -21,9 +21,11 @@ class WorldModelService:
 
     def __init__(self, tickMs: int = 100) -> None:
         cfg = get_config()
-        self.host = str(getattr(cfg.mqtt_broker, "host", "127.0.0.1"))
-        self.port = int(getattr(cfg.mqtt_broker, "port", 9527))
-        self.vdaInterface = str(getattr(cfg.mqtt_broker, "vda_interface", "uagv"))
+        # 严格使用集中配置，不再使用读取失败时的回退默认值
+        self.host = str(cfg.mqtt_broker.host)
+        # settings 中 port 以字符串存储，统一转换为 int
+        self.port = int(str(cfg.mqtt_broker.port))
+        self.vdaInterface = str(cfg.mqtt_broker.vda_interface)
         self.defaultLength = float(getattr(cfg.settings, "length", 1.03))
         self.defaultWidth = float(getattr(cfg.settings, "width", 0.745))
         self.tickMs = int(tickMs)

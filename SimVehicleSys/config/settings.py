@@ -91,9 +91,9 @@ def get_config(config_path: Optional[str] = None) -> Config:
         pass
     cfg = Config(
         mqtt_broker=MqttBrokerConfig(
-            host=os.getenv("SIMAGV_MQTT_HOST", "127.0.0.1"),
-            port=os.getenv("SIMAGV_MQTT_PORT", "1884"),
-            vda_interface=os.getenv("SIMAGV_MQTT_INTERFACE", "uagv"),
+            host="192.168.189.206",
+            port="1884",
+            vda_interface="uagv",
         ),
         vehicle=VehicleConfig(
             manufacturer="SEER",

@@ -190,9 +190,21 @@ class AGVStateStore:
                 payload = dict(error_payload) if isinstance(error_payload, dict) else {"raw": error_payload}
             except Exception:
                 payload = {"raw": str(error_payload)}
-            # 构建去重键：优先使用 code，其次 type+reason，再次 type，最后 message
+            # 构建去重键：
+            # - 新格式优先使用 errorType（等价于 code），其次 errorName，再次 errorDescription
+            # - 兼容旧格式：优先使用 code，其次 type+reason，再次 type，最后 message
             def _dedup_key(p: Dict[str, Any]) -> str:
                 try:
+                    # 新格式
+                    if "errorType" in p and p["errorType"] is not None:
+                        return f"code:{str(p['errorType'])}"
+                    en = p.get("errorName")
+                    if en is not None:
+                        return f"name:{str(en)}"
+                    ed = p.get("errorDescription")
+                    if ed is not None:
+                        return f"desc:{str(ed)}"
+                    # 旧格式
                     if "code" in p and p["code"] is not None:
                         return f"code:{str(p['code'])}"
                     t = p.get("type")

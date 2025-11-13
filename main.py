@@ -11,6 +11,7 @@ import signal
 import re
 
 from SimVehicleSys.world_service import WorldModelService
+from SimVehicleSys.config.settings import get_config
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -254,21 +255,23 @@ def main() -> None:
     mosq_proc = None
     img = "mosquitto.exe" if os.name == "nt" else "mosquitto"
 
-    # 根据运动控制配置，将仿真车连接到本机 MQTT: 127.0.0.1:1884
-    mqtt_host = os.getenv("SIMAGV_MQTT_HOST", "127.0.0.1")
-    mqtt_port = os.getenv("SIMAGV_MQTT_PORT", "1884")
+    # 从集中配置读取 MQTT 主机/端口/接口（全局配置来源：SimVehicleSys/config/settings.py）
+    cfg = get_config()
+    mqtt_host = str(cfg.mqtt_broker.host)
+    mqtt_port = str(cfg.mqtt_broker.port)
+    mqtt_iface = str(cfg.mqtt_broker.vda_interface)
 
     # 将选定的 MQTT 主机/端口传播到后端与仿真器
     os.environ["SIMAGV_MQTT_HOST"] = str(mqtt_host)
     os.environ["SIMAGV_MQTT_PORT"] = str(mqtt_port)
-    # 统一接口名称为 uagv（与仿真默认与订阅方一致）；可通过环境变量覆盖
-    os.environ.setdefault("SIMAGV_MQTT_INTERFACE", os.getenv("SIMAGV_MQTT_INTERFACE", "uagv"))
+    # 统一接口名称：直接使用集中配置值
+    os.environ["SIMAGV_MQTT_INTERFACE"] = mqtt_iface
     # 可选：覆盖 manufacturer 与 serial（与运动控制侧一致，若需要统一命名）
     if os.getenv("SIMAGV_MANUFACTURER"):
         os.environ["SIMAGV_MANUFACTURER"] = os.getenv("SIMAGV_MANUFACTURER", "")
     if os.getenv("SIMAGV_SERIAL"):
         os.environ["SIMAGV_SERIAL"] = os.getenv("SIMAGV_SERIAL", "")
-    print(f"MQTT 服务器: {mqtt_host}:{mqtt_port} 接口: {os.getenv('SIMAGV_MQTT_INTERFACE', 'uagv')}")
+    print(f"MQTT 服务器: {mqtt_host}:{mqtt_port} 接口: {mqtt_iface}")
 
     # 后端端口选择：若默认 7000 被占用则回退到下一个可用端口
     env_backend_port = os.getenv("SIMAGV_BACKEND_PORT")

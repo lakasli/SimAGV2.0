@@ -53,13 +53,10 @@ class MqttHandler:
         for t in topics:
             self.client.subscribe(t, qos=1)
         # 额外订阅所有设备的 state，用于多车碰撞检测
-        try:
-            vda = str(self.config.mqtt_broker.vda_interface or "uagv")
-            # uagv/{vdaVersion}/{manufacturer}/{serial}/state
-            # 正确的通配符为 3 个 '+': vdaVersion/manufacturer/serial
-            self.client.subscribe(f"{vda}/+/+/+/state", qos=1)
-        except Exception:
-            pass
+        vda = str(self.config.mqtt_broker.vda_interface)
+        # uagv/{vdaVersion}/{manufacturer}/{serial}/state
+        # 正确的通配符为 3 个 '+': vdaVersion/manufacturer/serial
+        self.client.subscribe(f"{vda}/+/+/+/state", qos=1)
         self.sim.publish_connection(self.client)
         self.sim.publish_factsheet(self.client)
         self._clock.start(self.client)

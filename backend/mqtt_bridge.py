@@ -18,23 +18,18 @@ class MQTTBridge:
         self.loop = loop
         self.agv_manager = agv_manager
         self.client: Optional[mqtt.Client] = None
-        self.host: str = "127.0.0.1"
-        self.port: int = 9527
-        self.vda_interface: str = "uagv"
+        # 初始化占位，真正值在 _load_config 中从集中设置读取
+        self.host: str = ""
+        self.port: int = 0
+        self.vda_interface: str = ""
         self._load_config()
 
     def _load_config(self) -> None:
-        # 改为从 SimVehicleSys.config.settings 加载默认配置
-        try:
-            cfg = get_config()
-            self.host = str(cfg.mqtt_broker.host or self.host)
-            try:
-                self.port = int(str(cfg.mqtt_broker.port or self.port))
-            except Exception:
-                pass
-            self.vda_interface = str(cfg.mqtt_broker.vda_interface or self.vda_interface)
-        except Exception:
-            pass
+        # 从 SimVehicleSys.config.settings 加载集中配置（严格模式）
+        cfg = get_config()
+        self.host = str(cfg.mqtt_broker.host)
+        self.port = int(str(cfg.mqtt_broker.port))
+        self.vda_interface = str(cfg.mqtt_broker.vda_interface)
 
     def start(self) -> None:
         self.client = mqtt.Client(client_id=str(uuid.uuid4()), protocol=mqtt.MQTTv5)

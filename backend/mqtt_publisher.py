@@ -24,26 +24,21 @@ class MqttPublisher:
     def __init__(self, config_path: Path):
         self.config_path = config_path
         self.client: Optional[mqtt.Client] = None
-        self.host: str = "127.0.0.1"
-        self.port: int = 9527
-        self.vda_interface: str = "uagv"
+        # 初始化占位，真正值在 _load_config 中从集中设置读取
+        self.host: str = ""
+        self.port: int = 0
+        self.vda_interface: str = ""
         self.vda_full_version: str = "2.0.0"
         self._load_config()
 
     def _load_config(self) -> None:
-        # 改为从 SimVehicleSys.config.settings 加载默认配置
-        try:
-            cfg = get_config()
-            self.host = str(cfg.mqtt_broker.host or self.host)
-            # cfg.mqtt_broker.port 存储为字符串；转换为 int
-            try:
-                self.port = int(str(cfg.mqtt_broker.port or self.port))
-            except Exception:
-                pass
-            self.vda_interface = str(cfg.mqtt_broker.vda_interface or self.vda_interface)
-            self.vda_full_version = str(cfg.vehicle.vda_full_version or self.vda_full_version)
-        except Exception:
-            pass
+        # 从 SimVehicleSys.config.settings 加载集中配置（严格模式）
+        cfg = get_config()
+        self.host = str(cfg.mqtt_broker.host)
+        # cfg.mqtt_broker.port 存储为字符串；转换为 int
+        self.port = int(str(cfg.mqtt_broker.port))
+        self.vda_interface = str(cfg.mqtt_broker.vda_interface)
+        self.vda_full_version = str(cfg.vehicle.vda_full_version)
 
     def start(self) -> None:
         self.client = mqtt.Client(client_id=str(uuid.uuid4()), protocol=mqtt.MQTTv5)
