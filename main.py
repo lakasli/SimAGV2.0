@@ -15,6 +15,23 @@ from SimVehicleSys.world_service import WorldModelService
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
+def _python_exec() -> list[str]:
+    """Return a cross-platform Python launcher command.
+
+    - On Windows: prefer the `py -3` launcher when available; fallback to `sys.executable`.
+    - On Linux/macOS: use `sys.executable`.
+    """
+    try:
+        if os.name == "nt":
+            launcher = shutil.which("py")
+            if launcher:
+                return [launcher, "-3"]
+            return [sys.executable]
+        return [sys.executable]
+    except Exception:
+        return [sys.executable]
+
+
 def _windows_creation_flags() -> int:
     try:
         if os.name == "nt":
@@ -25,8 +42,7 @@ def _windows_creation_flags() -> int:
 
 def start_backend(port: int) -> subprocess.Popen:
     host = os.getenv("SIMAGV_BACKEND_HOST", "0.0.0.0")
-    cmd = [
-        sys.executable,
+    cmd = _python_exec() + [
         "-m",
         "uvicorn",
         "backend.main:app",
@@ -154,8 +170,8 @@ def free_port(port: int) -> None:
 
 
 def clean_necessary_ports() -> None:
-    # 启动前清理必要端口：MQTT(9527) 与 后端(8000)
-    for port in (9527, 8000):
+    # 启动前清理必要端口：MQTT(9527) 与 后端(7000)
+    for port in (9527, 7000):
         free_port(port)
 
 # 新增：进程/端口检查工具
@@ -212,18 +228,18 @@ def _load_registered_agvs() -> list[dict]:
 
 
 def start_simulators() -> list[subprocess.Popen]:
-    # 根据注册列表启动多个仿真实例（如列表为空，则至少启动一个默认实例）
+    # 根据注册列表启动多个仿真实例
     agvs = _load_registered_agvs()
     procs: list[subprocess.Popen] = []
     if not agvs:
-        cmd = [sys.executable, "-m", "SimVehicleSys.main"]
+        cmd = _python_exec() + ["-m", "SimVehicleSys.main"]
         procs.append(subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=_windows_creation_flags()))
         return procs
     for info in agvs:
         serial = str(info.get("serial_number", "")).strip()
         if not serial:
             continue
-        cmd = [sys.executable, "-m", "SimVehicleSys.main", "--serial", serial]
+        cmd = _python_exec() + ["-m", "SimVehicleSys.main", "--serial", serial]
         try:
             proc = subprocess.Popen(cmd, cwd=str(PROJECT_ROOT), creationflags=_windows_creation_flags())
             procs.append(proc)
@@ -238,38 +254,30 @@ def main() -> None:
     mosq_proc = None
     img = "mosquitto.exe" if os.name == "nt" else "mosquitto"
 
-    # MQTT 端口选择：若默认 1883 被占用，则回退到下一个可用端口并以该端口启动 mosquitto
-    mqtt_port = 1883
-    if is_process_running(img):
-        print("检测到 Mosquitto 已在运行")
-        # 假定运行在默认端口；若默认端口不可用则仍使用 1883 以保持配置一致
-        if is_port_in_use(1883):
-            mqtt_port = 1883
-        else:
-            mqtt_port = 1883
-    else:
-        if is_port_in_use(1883):
-            mqtt_port = find_free_port(1883)
-            print(f"默认端口 1883 已占用，回退到 {mqtt_port}")
-        else:
-            mqtt_port = 1883
-        print(f"启动 MQTT Broker (Mosquitto) 于端口 {mqtt_port}...")
-        mosq_proc = start_mosquitto(mqtt_port)
-        time.sleep(1.0)
+    # 根据运动控制配置，将仿真车连接到本机 MQTT: 127.0.0.1:1884
+    mqtt_host = os.getenv("SIMAGV_MQTT_HOST", "127.0.0.1")
+    mqtt_port = os.getenv("SIMAGV_MQTT_PORT", "1884")
 
-    # 将选定的 MQTT 主机/端口传播到后端与仿真器（环境变量在子进程中自动继承）
-    os.environ["SIMAGV_MQTT_HOST"] = "127.0.0.1"
+    # 将选定的 MQTT 主机/端口传播到后端与仿真器
+    os.environ["SIMAGV_MQTT_HOST"] = str(mqtt_host)
     os.environ["SIMAGV_MQTT_PORT"] = str(mqtt_port)
-    print(f"MQTT 使用端口: {mqtt_port}")
+    # 统一接口名称为 uagv（与仿真默认与订阅方一致）；可通过环境变量覆盖
+    os.environ.setdefault("SIMAGV_MQTT_INTERFACE", os.getenv("SIMAGV_MQTT_INTERFACE", "uagv"))
+    # 可选：覆盖 manufacturer 与 serial（与运动控制侧一致，若需要统一命名）
+    if os.getenv("SIMAGV_MANUFACTURER"):
+        os.environ["SIMAGV_MANUFACTURER"] = os.getenv("SIMAGV_MANUFACTURER", "")
+    if os.getenv("SIMAGV_SERIAL"):
+        os.environ["SIMAGV_SERIAL"] = os.getenv("SIMAGV_SERIAL", "")
+    print(f"MQTT 服务器: {mqtt_host}:{mqtt_port} 接口: {os.getenv('SIMAGV_MQTT_INTERFACE', 'uagv')}")
 
-    # 后端端口选择：若默认 8000 被占用则回退到下一个可用端口
+    # 后端端口选择：若默认 7000 被占用则回退到下一个可用端口
     env_backend_port = os.getenv("SIMAGV_BACKEND_PORT")
-    backend_port = int(env_backend_port) if (env_backend_port and env_backend_port.isdigit()) else 8000
+    backend_port = int(env_backend_port) if (env_backend_port and env_backend_port.isdigit()) else 7000
     if env_backend_port is None and is_port_in_use(backend_port):
         backend_port = find_free_port(backend_port)
-        print(f"默认后端端口 8000 已占用，回退到 {backend_port}")
+        print(f"默认后端端口 7000 已占用，回退到 {backend_port}")
 
-    bind_host = os.getenv("SIMAGV_BACKEND_HOST", "0.0.0.0")
+    bind_host = os.getenv("SIMAGV_BACKEND_HOST", "127.0.0.1")
     print(f"启动后端服务 (Uvicorn) 于 http://{bind_host}:{backend_port} ...")
     backend_proc = start_backend(backend_port)
     time.sleep(1.5)

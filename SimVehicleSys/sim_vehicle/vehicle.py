@@ -146,9 +146,9 @@ class VehicleSimulator:
             position_initialized=False,
             theta=0.0,
             map_id=canonicalize_map_id(config.settings.map_id),
-            deviation_range=None,
-            map_description=None,
-            localization_score=None,
+            deviation_range=0.0,
+            map_description="",
+            localization_score=0.99,
         )
         state = State(
             header_id=0,
@@ -167,13 +167,19 @@ class VehicleSimulator:
             action_states=[],
             information=[],
             loads=[],
-            battery_state=BatteryState(battery_charge=float(config.settings.battery_default), charging=False),
+            battery_state=BatteryState(
+                battery_charge=float(config.settings.battery_default),
+                battery_voltage=50.0,
+                battery_health=100,
+                reach=0.0,
+                charging=False,
+            ),
             safety_state=SafetyState(e_stop=EStop.None_, field_violation=False),
             paused=False,
             new_base_request=False,
             agv_position=agv_position,
             velocity=Velocity(vx=0.0, vy=0.0, omega=0.0),
-            zone_set_id=None,
+            zone_set_id=canonicalize_map_id(config.settings.map_id),
             waiting_for_interaction_zone_release=False,
         )
         return state, agv_position
@@ -197,25 +203,46 @@ class VehicleSimulator:
             action_states=[],
             information=[],
             loads=[],
-            battery_state=BatteryState(battery_charge=float(config.settings.battery_default), charging=False),
+            battery_state=BatteryState(
+                battery_charge=float(config.settings.battery_default),
+                battery_voltage=50.0,
+                battery_health=100,
+                reach=0.0,
+                charging=False,
+            ),
             safety_state=SafetyState(e_stop=EStop.None_, field_violation=False),
             paused=False,
             new_base_request=False,
             agv_position=agv_position,
             velocity=Velocity(vx=0.0, vy=0.0, omega=0.0),
-            zone_set_id=None,
+            zone_set_id=canonicalize_map_id(config.settings.map_id),
             waiting_for_interaction_zone_release=False,
         )
         return vis
 
-    def publish_connection(self, mqtt_cli: mqtt.Client) -> None:
-        payload_broken = self.connection
-        publish_json(mqtt_cli, self.connection_topic, payload_broken, qos=1, retain=False)
-        scale = max(0.0001, float(self.config.settings.sim_time_scale))
-        time.sleep(max(0.01, 1.0 / scale))
+    def publish_connection(self, mqtt_cli: mqtt.Client, initial: bool = True) -> None:
+        """Publish connection status.
+
+        - When `initial` is True: emit a transitional ConnectionBroken then Online.
+        - When `initial` is False: emit periodic Online updates (1 Hz scheduled by clock).
+        """
+        if initial:
+            payload_broken = self.connection
+            publish_json(mqtt_cli, self.connection_topic, payload_broken, qos=1, retain=False)
+            scale = max(0.0001, float(self.config.settings.sim_time_scale))
+            time.sleep(max(0.01, 1.0 / scale))
+            self.connection.header_id += 1
+            self.connection.timestamp = get_timestamp()
+            self.connection.connection_state = ConnectionState.Online
+            publish_json(mqtt_cli, self.connection_topic, self.connection, qos=1, retain=False)
+            return
+        # periodic update: keep Online and refresh header/timestamp
+        try:
+            self.connection.connection_state = ConnectionState.Online
+        except Exception:
+            pass
         self.connection.header_id += 1
         self.connection.timestamp = get_timestamp()
-        self.connection.connection_state = ConnectionState.Online
         publish_json(mqtt_cli, self.connection_topic, self.connection, qos=1, retain=False)
 
     def publish_state(self, mqtt_cli: mqtt.Client) -> None:
@@ -226,6 +253,17 @@ class VehicleSimulator:
             rt = global_store.get_runtime(self.config.vehicle.serial_number)
             # 无错误时为空数组
             self.state.errors = list(getattr(rt, "errors", []))
+            # 清洗 actionDescriptions 为空字符串
+            try:
+                if isinstance(self.state.action_states, list):
+                    for a in self.state.action_states:
+                        try:
+                            a.action_description = ""
+                            a.result_description = ""
+                        except Exception:
+                            pass
+            except Exception:
+                pass
             # 同步地图名称到 agvPosition.mapId
             try:
                 cm = getattr(rt, "current_map", None)
@@ -236,6 +274,29 @@ class VehicleSimulator:
             canonical = canonicalize_map_id(raw_map)
             if self.state.agv_position:
                 self.state.agv_position.map_id = str(canonical)
+                # 强制将 mapDescription 置为空字符串
+                self.state.agv_position.map_description = ""
+                # 默认将定位置信度设置为 0.99
+                self.state.agv_position.localization_score = 0.99
+                # 默认将 deviationRange 设置为 0
+                try:
+                    self.state.agv_position.deviation_range = 0.0
+                except Exception:
+                    pass
+            # 统一填充电池默认字段，确保上报包含期望值
+            try:
+                bs = getattr(self.state, "battery_state", None)
+                if bs is not None:
+                    bs.battery_voltage = 50.0
+                    bs.battery_health = 100
+                    bs.reach = 0.0
+            except Exception:
+                pass
+            # 同步 zoneSetId 与地图（使用规范化后的 mapId）
+            try:
+                self.state.zone_set_id = str(canonical)
+            except Exception:
+                pass
             # 同步电量到集中式运行时，以便统一门控逻辑与状态上报
             try:
                 charge = float(getattr(self.state.battery_state, "battery_charge", 0.0))
@@ -283,8 +344,8 @@ class VehicleSimulator:
                 action_id=ia.action_id,
                 action_status=ActionStatus.Waiting,
                 action_type=ia.action_type,
-                result_description=None,
-                action_description=None,
+                result_description="",
+                action_description="",
             ))
 
     def process_order(self, order_request: Order) -> None:
@@ -465,9 +526,9 @@ class VehicleSimulator:
         self.state.action_states.append(ActionState(
             action_id=action.action_id,
             action_type=action.action_type,
-            action_description=action.action_description,
+            action_description="",
             action_status=ActionStatus.Waiting,
-            result_description=None,
+            result_description="",
         ))
 
     def _reject_order(self, reason: str) -> None:
@@ -576,6 +637,9 @@ class VehicleSimulator:
             position_initialized=True,
             theta=extract_float("theta"),
             map_id=extract_string("mapId"),
+            map_description="",
+            localization_score=0.99,
+            deviation_range=0.0,
         )
         self.state.agv_position = new_pos
         self.state.last_node_id = extract_string("lastNodeId")
@@ -768,13 +832,33 @@ class VehicleSimulator:
             # 更新 VDA5050 state 的位置与地图
             try:
                 if not self.state.agv_position:
-                    self.state.agv_position = AgvPosition(x=float(pos_x or 0.0), y=float(pos_y or 0.0), theta=float(theta or 0.0), position_initialized=True, map_id=str(map_raw))
+                    self.state.agv_position = AgvPosition(x=float(pos_x or 0.0), y=float(pos_y or 0.0), theta=float(theta or 0.0), position_initialized=True, map_id=str(map_raw), map_description="", localization_score=0.99, deviation_range=0.0)
                 else:
                     self.state.agv_position.x = float(pos_x or 0.0)
                     self.state.agv_position.y = float(pos_y or 0.0)
                     self.state.agv_position.theta = float(theta or 0.0)
                     self.state.agv_position.position_initialized = True
                     self.state.agv_position.map_id = str(map_raw)
+                    # 切图时强制 mapDescription 为空字符串
+                    try:
+                        self.state.agv_position.map_description = ""
+                    except Exception:
+                        pass
+                    # 切图时设置定位置信度默认值 0.99
+                    try:
+                        self.state.agv_position.localization_score = 0.99
+                    except Exception:
+                        pass
+                    # 切图时设置 deviationRange 默认值 0
+                    try:
+                        self.state.agv_position.deviation_range = 0.0
+                    except Exception:
+                        pass
+                # 切图时同步 zoneSetId（规范化后的 mapId）
+                try:
+                    self.state.zone_set_id = str(canonicalize_map_id(map_raw))
+                except Exception:
+                    pass
                 # 可视化位置同步
                 self.visualization.agv_position = self.state.agv_position
             except Exception:

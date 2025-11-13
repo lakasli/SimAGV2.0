@@ -48,6 +48,7 @@ class SimClock:
 
     def _loop(self, mqtt_client: Any) -> None:
         state_elapsed_ms = 0.0
+        connection_elapsed_ms = 0.0
         visualization_elapsed_ms = 0.0
         base_tick = max(1, self.tick_ms)
         while not self._stop:
@@ -62,6 +63,8 @@ class SimClock:
                     pass
                 scale = max(0.0001, float(self.config.settings.sim_time_scale))
                 eff_state_freq = max(1e-6, float(self.config.settings.state_frequency) * scale)
+                # 固定连接上报频率为 1Hz（不随 sim_time_scale 缩放）
+                eff_conn_freq = 1.0
                 eff_vis_freq = max(1e-6, float(self.config.settings.visualization_frequency) * scale)
                 if not self._clock_logged:
                     self._clock_logged = True
@@ -69,6 +72,11 @@ class SimClock:
                 if state_elapsed_ms >= (1000.0 / eff_state_freq):
                     state_elapsed_ms = 0.0
                     self.sim.publish_state(mqtt_client)
+                # 每秒上报一次 connection（online）
+                connection_elapsed_ms += base_tick
+                if connection_elapsed_ms >= (1000.0 / eff_conn_freq):
+                    connection_elapsed_ms = 0.0
+                    self.sim.publish_connection(mqtt_client, initial=False)
                 visualization_elapsed_ms += base_tick
                 if visualization_elapsed_ms >= (1000.0 / eff_vis_freq):
                     visualization_elapsed_ms = 0.0

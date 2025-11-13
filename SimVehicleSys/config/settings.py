@@ -91,15 +91,15 @@ def get_config(config_path: Optional[str] = None) -> Config:
         pass
     cfg = Config(
         mqtt_broker=MqttBrokerConfig(
-            host="127.0.0.1",
-            port="9527",
-            vda_interface="uagv",
+            host=os.getenv("SIMAGV_MQTT_HOST", "127.0.0.1"),
+            port=os.getenv("SIMAGV_MQTT_PORT", "1884"),
+            vda_interface=os.getenv("SIMAGV_MQTT_INTERFACE", "uagv"),
         ),
         vehicle=VehicleConfig(
             manufacturer="SEER",
-            serial_number="AMB-01",
+            serial_number="AMB-",
             vda_version="v2",
-            vda_full_version="v2",
+            vda_full_version="2.0.0",
         ),
         settings=Settings(
             action_time=1.0,
@@ -138,6 +138,13 @@ def get_config(config_path: Optional[str] = None) -> Config:
         env_iface = os.getenv("SIMAGV_MQTT_INTERFACE")
         if env_iface:
             cfg.mqtt_broker.vda_interface = str(env_iface)
+        # 车辆身份覆盖：SIMAGV_MANUFACTURER / SIMAGV_SERIAL
+        env_manu = os.getenv("SIMAGV_MANUFACTURER")
+        if env_manu:
+            cfg.vehicle.manufacturer = str(env_manu)
+        env_serial = os.getenv("SIMAGV_SERIAL")
+        if env_serial:
+            cfg.vehicle.serial_number = str(env_serial)
     except Exception:
         # 保守处理：忽略环境读取错误
         pass
