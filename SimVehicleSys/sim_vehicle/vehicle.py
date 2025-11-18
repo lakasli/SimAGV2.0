@@ -273,6 +273,12 @@ class VehicleSimulator:
                     for ns in self.state.node_states:
                         try:
                             ns.node_description = ""
+                            try:
+                                np = getattr(ns, "node_position", None)
+                                if np is not None:
+                                    np.map_description = ""
+                            except Exception:
+                                pass
                             # 默认 rotationAllowed=false（如未显式提供）
                             try:
                                 if getattr(ns, "rotation_allowed", None) is None:
