@@ -98,7 +98,7 @@
       position: fixed;
       left: -400px;
       top: 0;
-      width: 260px;
+      width: 320px;
       height: 100vh;
       background: #2c3e50;
       color: #fff;
@@ -344,7 +344,7 @@
     }
 
     .sidebar-toggle.open {
-      left: 300px
+      left: 360px
     }
 
     #mapCanvas {
@@ -414,6 +414,7 @@
     <div class="sidebar-tabs">
       <button class="tab-button active" onclick="switchTab('register')">注册机器人</button>
       <button class="tab-button" onclick="switchTab('list')">机器人列表</button>
+      <button class="tab-button" onclick="switchTab('equip')">设备列表</button>
     </div>
     <div class="sidebar-content">
       <div class="tab-content active" id="registerTab">
@@ -442,6 +443,11 @@
       <div class="tab-content" id="listTab">
         <div class="robot-list">
           <div id="robotListContainer"></div>
+        </div>
+      </div>
+      <div class="tab-content" id="equipTab">
+        <div class="robot-list">
+          <div id="equipListContainer"></div>
         </div>
       </div>
     </div>
@@ -638,7 +644,7 @@
     let floorNames = [];
     let currentFloorIndex = 0;
 
-  window.onload = function () { initCanvas(); loadMapData(); setupEventListeners(); updateRegisterMapOptions(); Promise.all([loadFrontendConfig(), loadRobotList()]).catch(() => {}); initWebSocket(); startRenderLoop(); setupKeyboardControl(); startCommStatusGuard(); };
+  window.onload = function () { initCanvas(); loadMapData(); setupEventListeners(); updateRegisterMapOptions(); Promise.all([loadFrontendConfig(), loadRobotList(), loadEquipmentList()]).catch(() => {}); initWebSocket(); startRenderLoop(); setupKeyboardControl(); startCommStatusGuard(); };
 
     function initCanvas() { canvas = document.getElementById('mapCanvas'); ctx = canvas.getContext('2d'); resizeCanvas(); window.addEventListener('resize', resizeCanvas); }
     function resizeCanvas() { const c = document.querySelector('.canvas-container'); canvas.width = c.clientWidth; canvas.height = c.clientHeight; if (mapData) { drawMap(); } }
@@ -1857,7 +1863,7 @@
     }
     function fitMapToView() { if (!mapData || !mapData.points || mapData.points.length === 0) return; let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity; mapData.points.forEach(p => { const sx = p.x * 20, sy = p.y * 20; minX = Math.min(minX, sx); minY = Math.min(minY, sy); maxX = Math.max(maxX, sx); maxY = Math.max(maxY, sy); }); const mapW = maxX - minX, mapH = maxY - minY, cx = (minX + maxX) / 2, cy = (minY + maxY) / 2; const pad = 50; const sX = (canvas.width - pad * 2) / mapW; const sY = (canvas.height - pad * 2) / mapH; viewTransform.scale = Math.min(sX, sY, 2); viewTransform.x = canvas.width / 2 - cx * viewTransform.scale; viewTransform.y = canvas.height / 2 + cy * viewTransform.scale; updateZoomDisplay(); }
     function updateZoomDisplay() { document.getElementById('zoomLevel').textContent = Math.round(viewTransform.scale * 100) + '%'; }
-    function drawMap() { if (!mapData) return; ctx.clearRect(0, 0, canvas.width, canvas.height); if (showGrid) drawGrid(); if (mapData.routes) drawRoutes(); if (mapData.points) drawPoints(); if (registeredRobots.length > 0) drawRobots(); }
+    function drawMap() { if (!mapData) return; ctx.clearRect(0, 0, canvas.width, canvas.height); if (showGrid) drawGrid(); if (mapData.routes) drawRoutes(); if (mapData.points) drawPoints(); if (equipments && equipments.length > 0) drawEquipments(); if (registeredRobots.length > 0) drawRobots(); }
     function drawGrid() { ctx.save(); ctx.strokeStyle = '#34495e'; ctx.lineWidth = 1; const g = 50 * viewTransform.scale; const ox = viewTransform.x % g, oy = viewTransform.y % g; for (let x = ox; x < canvas.width; x += g) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); } for (let y = oy; y < canvas.height; y += g) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); } ctx.restore(); }
     function drawPoints() {
       (mapData.points || []).forEach(point => {
@@ -2298,7 +2304,7 @@
     function resetView() { fitMapToView(); drawMap(); }
     function toggleGrid() { showGrid = !showGrid; drawMap(); }
     function toggleSidebar() { const s = document.getElementById('sidebar'), t = document.getElementById('sidebarToggle'), c = document.getElementById('canvasContainer'); sidebarOpen = !sidebarOpen; if (sidebarOpen) { s.classList.add('open'); c.classList.add('sidebar-open'); t.classList.add('open'); t.textContent = '收起'; } else { s.classList.remove('open'); c.classList.remove('sidebar-open'); t.classList.remove('open'); t.textContent = '打开'; } setTimeout(resizeCanvas, 400); }
-    function switchTab(name) { document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active')); document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); if (name === 'register') { document.querySelector('.tab-button[onclick="switchTab(\'register\')"]').classList.add('active'); document.getElementById('registerTab').classList.add('active'); updateRegisterMapOptions(); } else { document.querySelector('.tab-button[onclick="switchTab(\'list\')"]').classList.add('active'); document.getElementById('listTab').classList.add('active'); } }
+    function switchTab(name) { document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active')); document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); if (name === 'register') { document.querySelector('.tab-button[onclick="switchTab(\'register\')"]').classList.add('active'); document.getElementById('registerTab').classList.add('active'); updateRegisterMapOptions(); } else if (name === 'list') { document.querySelector('.tab-button[onclick="switchTab(\'list\')"]').classList.add('active'); document.getElementById('listTab').classList.add('active'); } else { document.querySelector('.tab-button[onclick="switchTab(\'equip\')"]').classList.add('active'); document.getElementById('equipTab').classList.add('active'); loadEquipmentList(); } }
 
     // 机器人管理（适配当前后端）
     async function loadRobotList() { try { const resp = await fetch(`${API_BASE_URL}/agvs`); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); const agvs = await resp.json(); registeredRobots = (agvs || []).map(info => ({ robot_name: info.serial_number, type: info.type, ip: info.IP, manufacturer: info.manufacturer, vda_version: info.vda_version, battery: 100, initialPosition: null, currentPosition: null, currentMap: null, commConnected: false, instanceStatus: '停止', lastUpdateTs: 0, hasPallet: false, forkHeight: 0 })); updateRobotList(); drawMap(); } catch (err) { console.error('加载机器人列表失败:', err); document.getElementById('status').textContent = '加载机器人列表失败: ' + err.message; } }
@@ -2316,6 +2322,17 @@
         sel.disabled = true;
       }
     }
+
+    let equipments = [];
+    async function loadEquipmentList() { try { const resp = await fetch(`${API_BASE_URL}/equipments`); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); equipments = await resp.json(); updateEquipmentList(); } catch (err) { console.error('加载设备列表失败:', err); const el = document.getElementById('status'); if (el) el.textContent = '加载设备列表失败: ' + err.message; } }
+    function updateEquipmentList() { const c = document.getElementById('equipListContainer'); if (!c) return; if (!equipments || equipments.length === 0) { c.innerHTML = '<p style="color:#bdc3c7;font-style:italic;">暂无设备</p>'; return; } c.innerHTML = equipments.map(eq => { const mqtt = eq.mqtt || {}; const title = (eq.name || eq.dir_name || '设备'); const line1 = `类型: ${'SimEquip'} | IP: ${eq.ip || '-'} | 厂商: ${eq.manufacturer || '-'}`; const line2 = `站点: ${eq.site || '-'} | 地图: ${eq.map_id || '-'}`; const line3 = `动作时长: ${typeof eq.action_time !== 'undefined' && eq.action_time !== null ? String(eq.action_time) : '-'} | 触发模式: ${eq.trigger_mode || '-'}`; const line4 = `MQTT: ${mqtt.host || '-'}:${mqtt.port || '-'} (${mqtt.vda_interface || '-'}) | 版本: ${eq.vda_full_version || eq.vda_version || '-'}`; return `<div class=\"robot-item\"><div class=\"robot-header\"><div class=\"robot-name\">${title}</div></div><div class=\"robot-info\" style=\"word-break:break-all;\">${line1}<br>${line2}<br>${line3}<br>${line4}</div></div>`; }).join(''); }
+    function getEquipmentType(eq) { const nm = String(eq?.name || eq?.dir_name || '').toLowerCase(); if (nm.includes('door')) return 'door'; if (nm.includes('elevator')) return 'elevator'; if (nm.includes('light')) return 'light'; if (nm.includes('caller')) return 'caller'; return 'device'; }
+    function findPointByNameOrId(name) { if (!mapData || !Array.isArray(mapData.points)) return null; const key = String(name || '').trim().toLowerCase(); if (!key) return null; for (const p of mapData.points) { const nm = String(p.name || '').trim().toLowerCase(); const id = String(p.id || '').trim().toLowerCase(); if ((nm && nm === key) || (id && id === key)) return p; } for (const p of mapData.points) { const nm = String(p.name || '').toLowerCase(); if (key && nm && nm.includes(key)) return p; } return null; }
+    function findRouteByIdOrDesc(key) { if (!mapData || !Array.isArray(mapData.routes)) return null; const k = String(key || '').trim().toLowerCase(); if (!k) return null; for (const r of mapData.routes) { const id = String(r.id ?? `${r.from}->${r.to}`).trim().toLowerCase(); const desc = String(r.desc || '').trim().toLowerCase(); if (id === k || (desc && desc === k)) return r; } for (const r of mapData.routes) { const id = String(r.id ?? `${r.from}->${r.to}`).toLowerCase(); const desc = String(r.desc || '').toLowerCase(); if ((id && id.includes(k)) || (desc && desc.includes(k))) return r; } return null; }
+    function routeMidPoint(route) { const pmap = {}; (mapData.points || []).forEach(p => { pmap[String(p.id)] = p; }); const fp = pmap[String(route.from)]; const tp = pmap[String(route.to)]; if (!fp || !tp) return null; if (route.type === 'bezier3' && route.c1 && route.c2) { const p0 = { x: fp.x, y: fp.y }; const p1 = { x: route.c1.x, y: route.c1.y }; const p2 = { x: route.c2.x, y: route.c2.y }; const p3 = { x: tp.x, y: tp.y }; const pt = bezierPoint(p0, p1, p2, p3, 0.5); return pt; } return { x: (fp.x + tp.x) / 2, y: (fp.y + tp.y) / 2 }; }
+    function computeEquipmentAnchor(eq) { const floor = extractFloorFromMapId(eq?.map_id); const currentFloorName = floorNames[currentFloorIndex] || null; if (floor && currentFloorName && String(floor).trim().toLowerCase() !== String(currentFloorName).trim().toLowerCase()) return null; const site = String(eq?.site || '').trim(); if (site) { const p = findPointByNameOrId(site); if (p) return { x: Number(p.x), y: Number(p.y) }; const r = findRouteByIdOrDesc(site); if (r) { const mid = routeMidPoint(r); if (mid) return mid; } } const r0 = (mapData.routes || [])[0]; if (r0) { const mid = routeMidPoint(r0); if (mid) return mid; } const p0 = (mapData.points || [])[0]; if (p0) return { x: Number(p0.x), y: Number(p0.y) }; return null; }
+    function drawEquipmentIcon(x, y, type) { ctx.save(); const sp = worldToScreen(x, y); if (sp.x < -50 || sp.x > canvas.width + 50 || sp.y < -50 || sp.y > canvas.height + 50) { ctx.restore(); return; } ctx.translate(sp.x, sp.y); const s = Math.max(0.6, Math.min(2.2, viewTransform.scale)); ctx.scale(s, s); if (type === 'door') { ctx.fillStyle = '#7f8c8d'; ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 2; ctx.fillRect(-16, -20, 12, 40); ctx.fillRect(4, -20, 12, 40); ctx.strokeRect(-16, -20, 12, 40); ctx.strokeRect(4, -20, 12, 40); } else if (type === 'elevator') { ctx.fillStyle = '#34495e'; ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 2; ctx.fillRect(-18, -18, 36, 36); ctx.strokeRect(-18, -18, 36, 36); ctx.fillStyle = '#ecf0f1'; ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(-8, 0); ctx.lineTo(8, 0); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(0, 12); ctx.lineTo(-8, 0); ctx.lineTo(8, 0); ctx.closePath(); ctx.fill(); } else if (type === 'light') { ctx.fillStyle = '#f1c40f'; ctx.strokeStyle = '#d35400'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -6, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#f39c12'; ctx.fillRect(-6, 4, 12, 8); for (let i = 0; i < 6; i++) { const ang = (Math.PI * 2 / 6) * i; const rx = Math.cos(ang) * 20; const ry = Math.sin(ang) * 20; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(rx, ry - 6); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2; ctx.stroke(); } } else if (type === 'caller') { ctx.fillStyle = '#e74c3c'; ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.fillStyle = '#ecf0f1'; ctx.fillRect(-2, -6, 4, 8); ctx.beginPath(); ctx.arc(0, 8, 2, 0, Math.PI * 2); ctx.fill(); } else { ctx.fillStyle = '#3498db'; ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 2; ctx.fillRect(-14, -14, 28, 28); ctx.strokeRect(-14, -14, 28, 28); } ctx.restore(); }
+    function drawEquipments() { for (const eq of (equipments || [])) { const anchor = computeEquipmentAnchor(eq); if (!anchor) continue; const tp = getEquipmentType(eq); drawEquipmentIcon(anchor.x, anchor.y, tp); } }
 
     async function updateRegisterMapOptions() {
       const sel = document.getElementById('registerMapSelect');
@@ -2420,7 +2437,7 @@
 }
     async function removeRobot(serial) { if (!confirm('确定要删除这个机器人吗？')) return; try { const resp = await fetch(`${API_BASE_URL}/agvs/${serial}`, { method: 'DELETE' }); if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`); await loadRobotList(); document.getElementById('status').textContent = '机器人已删除'; setTimeout(() => document.getElementById('status').textContent = '准备就绪', 2000); } catch (err) { console.error('删除机器人失败:', err); try { window.printErrorToStatus('删除机器人失败: ' + (err && err.message ? err.message : String(err)),'删除'); } catch (_) {} } }
 
- function updateRobotList() { const c = document.getElementById('robotListContainer'); if (registeredRobots.length === 0) { c.innerHTML = '<p style="color:#bdc3c7;font-style:italic;">暂无注册的机器人</p>'; return; } c.innerHTML = registeredRobots.map(robot => { const battery = robot.battery || 0; const batteryText = truncateToOneDecimal(Number(battery)).toFixed(1); const pos = robot.currentPosition || robot.initialPosition; const posText = pos ? `当前位置: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}) | 方向: ${(pos.theta || 0).toFixed(2)}` : '位置未知'; const selectedStyle = (selectedRobotId === robot.robot_name) ? 'border-left:4px solid #2ecc71;background:#3b4f63;' : ''; const commText = robot.commConnected ? '连接' : '断开'; const commColor = robot.commConnected ? '#00ff00' : '#ff0000'; const instStatus = robot.instanceStatus || '停止'; const instText = instStatus; const instColor = instStatus === '启动' ? '#00ff00' : '#ff0000'; const mapText = robot.currentMap ? robot.currentMap : '未设置'; const fhText = (typeof robot.forkHeight !== 'undefined' && robot.forkHeight !== null) ? `${truncateToOneDecimal(Number(robot.forkHeight)).toFixed(1)} m` : '-'; return `<div class=\"robot-item\" style=\"${selectedStyle}\" onclick=\"selectRobot('${robot.robot_name}')\"><div class=\"robot-header\"><div class=\"robot-name\">${robot.robot_name}</div></div><div class=\"robot-info\" style=\"word-break:break-all;\">类型: ${robot.type} | IP: ${robot.ip}<br>厂商: ${robot.manufacturer || '未知'} | 地图: ${mapText}<br>${posText}<br> 电量: ${batteryText}% | 叉高: ${fhText}<br><span style=\"color:${commColor}\">通信状态: ${commText}</span> | <span style=\"color:${instColor}\">实例状态: ${instText}</span></div><div class=\"robot-actions\"><button class=\"btn-small btn-danger\" onclick=\"removeRobot('${robot.robot_name}')\">删除</button><button class=\"btn-small btn-config-small\" onclick=\"openRobotConfig('${robot.robot_name}')\">配置</button></div></div>`; }).join(''); }
+ function updateRobotList() { const c = document.getElementById('robotListContainer'); if (registeredRobots.length === 0) { c.innerHTML = '<p style="color:#bdc3c7;font-style:italic;">暂无注册的机器人</p>'; return; } c.innerHTML = registeredRobots.map(robot => { const battery = robot.battery || 0; const batteryText = truncateToOneDecimal(Number(battery)).toFixed(1); const pos = robot.currentPosition || robot.initialPosition; const posText = pos ? `当前位置: (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}) | 方向: ${(pos.theta || 0).toFixed(2)}` : '位置未知'; const selectedStyle = (selectedRobotId === robot.robot_name) ? 'border-left:4px solid #2ecc71;background:#3b4f63;' : ''; const commText = robot.commConnected ? '连接' : '断开'; const commColor = robot.commConnected ? '#00ff00' : '#ff0000'; const instStatus = robot.instanceStatus || '停止'; const instText = instStatus; const instColor = instStatus === '启动' ? '#00ff00' : '#ff0000'; const mapText = robot.currentMap ? robot.currentMap : '未设置'; const fhText = (typeof robot.forkHeight !== 'undefined' && robot.forkHeight !== null) ? `${truncateToOneDecimal(Number(robot.forkHeight)).toFixed(1)} m` : '-'; return `<div class=\"robot-item\" style=\"${selectedStyle}\" onclick=\"selectRobot('${robot.robot_name}')\"><div class=\"robot-header\"><div class=\"robot-name\">${robot.robot_name}</div></div><div class=\"robot-info\" style=\"word-break:break-all;\">类型: ${robot.type} | IP: ${robot.ip} | 厂商: ${robot.manufacturer || '未知'} | 地图: ${mapText}<br>${posText} | 叉高: ${fhText}<br><span style=\"color:${commColor}\">电量: ${batteryText}%</span> | <span style=\"color:${commColor}\">通信状态: ${commText}</span> | <span style=\"color:${instColor}\">实例状态: ${instText}</span></div><div class=\"robot-actions\"><button class=\"btn-small btn-danger\" onclick=\"removeRobot('${robot.robot_name}')\">删除</button><button class=\"btn-small btn-config-small\" onclick=\"openRobotConfig('${robot.robot_name}')\">配置</button></div></div>`; }).join(''); }
 
     // 配置模态框（实例卡片配置菜单）
     let currentConfigRobotId = null;

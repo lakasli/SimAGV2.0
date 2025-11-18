@@ -24,6 +24,7 @@ from .mqtt_publisher import MqttPublisher
 import json
 from SimVehicleSys.protocol.vda_2_0_0.order import Order as VDAOrder
 from .agv_config_store import AgvConfigStore
+import shutil
 
 project_root = Path(__file__).resolve().parents[1]
 app = FastAPI(title="SimAGV Backend", version="0.1.0")
@@ -47,8 +48,18 @@ agv_storage = project_root / "backend" / "data" / "registered_agvs.json"
 agv_manager = AGVManager(agv_storage)
 ws_manager = WebSocketManager()
 sim_manager = SimulatorProcessManager(project_root)
-agv_config_dir = project_root / "backend" / "data" / "agv_configs"
+agv_config_dir = project_root / "SimVehicleSys" / "agv_configs"
 agv_config_store = AgvConfigStore(agv_config_dir)
+try:
+    old_agv_config_dir = project_root / "backend" / "data" / "agv_configs"
+    if old_agv_config_dir.exists():
+        for p in old_agv_config_dir.iterdir():
+            if p.is_file() and p.suffix.lower() == ".json":
+                dst = agv_config_dir / p.name
+                if not dst.exists():
+                    shutil.copy2(p, dst)
+except Exception:
+    pass
 
 # Static mounts: frontend and maps
 frontend_dir = project_root / "frontend"
@@ -61,6 +72,46 @@ if maps_dir.exists():
 if shelf_dir.exists():
     # 公开托盘/货架模型静态文件
     app.mount("/shelf", StaticFiles(directory=str(shelf_dir)), name="shelf")
+
+@app.get("/api/equipments")
+def list_equipments() -> List[dict]:
+    equipments_dir = project_root / "SimEquipment"
+    items: List[dict] = []
+    try:
+        if equipments_dir.exists():
+            for p in equipments_dir.iterdir():
+                try:
+                    if not p.is_dir():
+                        continue
+                    cfg_fp = p / "config.json"
+                    if not cfg_fp.exists():
+                        continue
+                    data = json.loads(cfg_fp.read_text(encoding="utf-8")) or {}
+                    mqtt = data.get("mqtt", {}) or {}
+                    items.append({
+                        "name": data.get("name"),
+                        "manufacturer": data.get("manufacturer"),
+                        "serial_number": data.get("serial_number"),
+                        "vda_version": data.get("vda_version"),
+                        "vda_full_version": data.get("vda_full_version"),
+                        "ip": data.get("ip"),
+                        "site": data.get("site"),
+                        "map_id": data.get("map_id"),
+                        "state_frequency": data.get("state_frequency"),
+                        "action_time": data.get("action_time"),
+                        "trigger_mode": data.get("trigger_mode"),
+                        "mqtt": {
+                            "host": mqtt.get("host"),
+                            "port": mqtt.get("port"),
+                            "vda_interface": mqtt.get("vda_interface"),
+                        },
+                        "dir_name": p.name,
+                    })
+                except Exception:
+                    pass
+    except Exception:
+        items = []
+    return items
 
 @app.get("/api/maps")
 def list_maps() -> List[str]:

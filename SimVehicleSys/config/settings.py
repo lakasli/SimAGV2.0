@@ -92,7 +92,7 @@ def get_config(config_path: Optional[str] = None) -> Config:
     cfg = Config(
         mqtt_broker=MqttBrokerConfig(
             host="127.0.0.1",
-            port="1884",
+            port="1883",
             vda_interface="uagv",
         ),
         vehicle=VehicleConfig(

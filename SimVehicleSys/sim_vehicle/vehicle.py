@@ -267,6 +267,25 @@ class VehicleSimulator:
                             pass
             except Exception:
                 pass
+            # 规范化节点/边描述字段为空字符串
+            try:
+                if isinstance(self.state.node_states, list):
+                    for ns in self.state.node_states:
+                        try:
+                            ns.node_description = ""
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            try:
+                if isinstance(self.state.edge_states, list):
+                    for es in self.state.edge_states:
+                        try:
+                            es.edge_description = ""
+                        except Exception:
+                            pass
+            except Exception:
+                pass
             # 同步地图名称到 agvPosition.mapId
             try:
                 cm = getattr(rt, "current_map", None)

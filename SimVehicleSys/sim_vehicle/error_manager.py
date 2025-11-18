@@ -23,10 +23,11 @@ class ErrorMeta:
     severity: ErrorSeverity
     category: str
     message: str
-    # 新字段：用于构造符合 state.json 的 errorName（可选）
-    error_name: Optional[str] = None
+    # 保持原有位置参数顺序以兼容既有初始化：hint -> recoverable
     hint: Optional[str] = None
     recoverable: bool = True
+    # 新增的可选字段，置于末尾，建议以关键字方式传入
+    error_name: Optional[str] = None
 
 
 ERRORS: Dict[int, ErrorMeta] = {
