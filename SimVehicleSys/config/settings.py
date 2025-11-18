@@ -91,7 +91,7 @@ def get_config(config_path: Optional[str] = None) -> Config:
         pass
     cfg = Config(
         mqtt_broker=MqttBrokerConfig(
-            host="192.168.189.206",
+            host="127.0.0.1",
             port="1884",
             vda_interface="uagv",
         ),
