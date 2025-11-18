@@ -273,6 +273,12 @@ class VehicleSimulator:
                     for ns in self.state.node_states:
                         try:
                             ns.node_description = ""
+                            # 默认 rotationAllowed=false（如未显式提供）
+                            try:
+                                if getattr(ns, "rotation_allowed", None) is None:
+                                    ns.rotation_allowed = False
+                            except Exception:
+                                pass
                         except Exception:
                             pass
             except Exception:
@@ -282,6 +288,12 @@ class VehicleSimulator:
                     for es in self.state.edge_states:
                         try:
                             es.edge_description = ""
+                            # 默认 rotationAllowed=false（如未显式提供）
+                            try:
+                                if getattr(es, "rotation_allowed", None) is None:
+                                    es.rotation_allowed = False
+                            except Exception:
+                                pass
                         except Exception:
                             pass
             except Exception:

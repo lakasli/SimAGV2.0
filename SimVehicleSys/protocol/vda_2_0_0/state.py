@@ -57,6 +57,7 @@ class NodeState:
     released: bool
     node_description: Optional[str] = None
     node_position: Optional[NodePosition] = None
+    rotation_allowed: Optional[bool] = None
 
 
 @dataclass
