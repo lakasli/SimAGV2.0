@@ -153,8 +153,8 @@ async def execute_points_movement(
         dy = ey - sy
         dist = math.hypot(dx, dy)
         k = max(0.2, min(dist * 0.4, 2.0))
-        P1 = (sx + k * math.sin(stheta), sy + k * math.cos(stheta))
-        P2 = (ex - k * math.sin(etheta), ey - k * math.cos(etheta))
+        P1 = (sx + k * math.sin(stheta), sy - k * math.cos(stheta))
+        P2 = (ex - k * math.sin(etheta), ey + k * math.cos(etheta))
         return P0, P1, P2, P3
 
     def _bezier_point(P0, P1, P2, P3, t: float) -> Tuple[float, float]:
@@ -171,7 +171,7 @@ async def execute_points_movement(
         vy = 3 * (
             (u**2) * (P1[1] - P0[1]) + 2 * u * t * (P2[1] - P1[1]) + (t**2) * (P3[1] - P2[1])
         )
-        return math.atan2(vx, vy)
+        return math.atan2(vx, -vy)
 
     for p in points:
         tx = float(p.get("x", 0.0))
@@ -180,7 +180,7 @@ async def execute_points_movement(
 
         sx, sy, current_theta = _get_current_pose()
         if "theta" not in p:
-            target_theta = math.atan2(tx - sx, ty - sy)
+            target_theta = math.atan2(tx - sx, -(ty - sy))
         angle_diff = _normalize_angle(target_theta - current_theta)
         
         # 旋转：遵循允许旋转与最大旋转速度、角度/距离偏差阈值

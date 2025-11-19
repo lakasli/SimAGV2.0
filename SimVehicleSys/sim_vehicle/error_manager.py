@@ -30,12 +30,10 @@ class ErrorMeta:
     error_name: Optional[str] = None
 
 
-ERRORS: Dict[int, ErrorMeta] = {
-    # 电池与电源
-    50401: ErrorMeta(50401, ErrorSeverity.FATAL, "battery", "battery too low and shutdown", "机器人电量过低自动关机", False),
-    52503: ErrorMeta(52503, ErrorSeverity.FATAL, "battery", "battery is too low to move", "电池电量低于模型配置值", False),
-    54211: ErrorMeta(54211, ErrorSeverity.WARNING, "battery", "low battery", "电量低", True),
+SUPPRESSED_CODES = {50401, 52503, 54211}
 
+
+ERRORS: Dict[int, ErrorMeta] = {
     # 路径规划
     52700: ErrorMeta(52700, ErrorSeverity.FATAL, "path", "can not find a feasible path", "找不到可通行的路径", False, error_name="noRouteError"),
     52701: ErrorMeta(52701, ErrorSeverity.FATAL, "path", "can not find target id", "找不到目标点", False, error_name="missingNodeError"),
@@ -152,6 +150,8 @@ def _context_to_references(context: Optional[Dict[str, Any]]) -> List[Dict[str, 
 
 
 def emit_error(code: int, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    if code in SUPPRESSED_CODES:
+        return {}
     meta = get_error_meta(code)
     # 构造符合 state.json 的错误结构
     payload = {

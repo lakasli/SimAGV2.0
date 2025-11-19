@@ -151,10 +151,7 @@ class BatteryManager:
                 try:
                     serial = self.sim.config.vehicle.serial_number
                     ctx = {"serial_number": serial, "battery_charge": round(charge, 2)}
-                    if charge <= 10.0:
-                        emit_error(52503, ctx)  # battery is too low to move
-                    elif charge <= 30.0:
-                        emit_error(54211, ctx)  # low battery
+                    pass
                 except Exception:
                     pass
             except Exception as e:

@@ -174,9 +174,9 @@ def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.05) -> Optio
         theta = float(getattr(pos, "theta", 0.0) or 0.0)
         px = float(getattr(pos, "x", 0.0) or 0.0)
         py = float(getattr(pos, "y", 0.0) or 0.0)
-        # 将几何中心沿车头方向平移 centerForwardOffsetM 米
+        # 将几何中心沿车头方向（以 0 弧度为 Y−）平移 centerForwardOffsetM 米
         px_f = px + centerForwardOffsetM * math.sin(theta)
-        py_f = py + centerForwardOffsetM * math.cos(theta)
+        py_f = py - centerForwardOffsetM * math.cos(theta)
         base_poly = compute_agv_base_polygon(base_length, base_width, (px_f, py_f, theta))
         base_rect = compute_outer_bounding_rect(base_poly)
 
@@ -265,7 +265,6 @@ def _getShelfFootprintFromStatePayload(state_payload: Dict[str, Any]) -> Optiona
 
 def computeSafetyRectForStatePayload(state_payload: Dict[str, Any], length_default: float = 1.03, width_default: float = 0.745, safeFactor: float = 1.05) -> Optional[Tuple[float, float, float, float]]:
     """基于 VDA5050 state JSON(payload) 计算安全包围盒，支持 1.05 放大与托盘尺寸融合。
-    朝向取值优先使用 `theta`，若缺失则回退到 `orientation`，与系统约定保持一致（0 度为 +Y 方向）。
     """
     try:
         agv = state_payload.get("agv_position", state_payload.get("agvPosition", {})) or {}
@@ -275,9 +274,9 @@ def computeSafetyRectForStatePayload(state_payload: Dict[str, Any], length_defau
         if raw_theta is None:
             raw_theta = agv.get("orientation", 0.0)
         theta = float(raw_theta or 0.0)
-        # 将几何中心沿车头方向平移 centerForwardOffsetM 米
+        # 将几何中心沿车头方向（以 0 弧度为 Y−）平移 centerForwardOffsetM 米
         px_f = px + centerForwardOffsetM * math.sin(theta)
-        py_f = py + centerForwardOffsetM * math.cos(theta)
+        py_f = py - centerForwardOffsetM * math.cos(theta)
         base_poly = compute_agv_base_polygon(float(length_default or 1.03), float(width_default or 0.745), (px_f, py_f, theta))
         base_rect = compute_outer_bounding_rect(base_poly)
         shelf_fp = _getShelfFootprintFromStatePayload(state_payload)

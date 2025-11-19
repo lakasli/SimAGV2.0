@@ -2112,7 +2112,7 @@
     function drawRobotIcon(x, y, rotationDeg, robot) {
       ctx.save();
       ctx.translate(x, y);
-      ctx.rotate(rotationDeg);
+      ctx.rotate(Math.PI - rotationDeg);
       const s = Math.max(0.5, Math.min(2, viewTransform.scale));
       ctx.scale(s, s);
 
@@ -2131,7 +2131,7 @@
       ctx.fill();
       ctx.stroke();
 
-      // 朝向箭头（指向前方：局部坐标 -Y）
+      // 朝向箭头（指向前方：局部坐标 -Y，与 0rad 一致）
       ctx.fillStyle = '#FF6B6B';
       ctx.strokeStyle = '#D63031';
       ctx.beginPath();
@@ -2253,7 +2253,7 @@
       // 绘制“朝向一致”的旋转矩形（中心前移偏移量）
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(thetaRad);
+      ctx.rotate(Math.PI - thetaRad);
       // 将几何中心沿车头方向（局部 -Y）平移 CENTER_FORWARD_OFFSET_M 米
       try {
         const offsetPx = (Number(window.CENTER_FORWARD_OFFSET_M) || 0) * meterScale * viewTransform.scale;
@@ -3048,7 +3048,7 @@
       const pos = robot?.currentPosition || robot?.initialPosition || { x: 0, y: 0, theta: 0 };
       const heading = (pos.theta ?? pos.orientation ?? 0);
       const dx = -step * Math.sin(heading);
-      const dy = -step * Math.cos(heading);
+      const dy = step * Math.cos(heading);
       try {
         const resp = await fetch(`${API_BASE_URL}/agv/${id}/move/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dx, dy, movement_state: 'backward' }) });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
@@ -3061,7 +3061,7 @@
       const pos = robot?.currentPosition || robot?.initialPosition || { x: 0, y: 0, theta: 0 };
       const heading = (pos.theta ?? pos.orientation ?? 0);
       const dx = step * Math.sin(heading);
-      const dy = step * Math.cos(heading);
+      const dy = -step * Math.cos(heading);
       try {
         const resp = await fetch(`${API_BASE_URL}/agv/${id}/move/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dx, dy, movement_state: 'forward' }) });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);

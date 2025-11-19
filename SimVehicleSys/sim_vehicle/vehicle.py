@@ -1339,9 +1339,8 @@ class VehicleSimulator:
                 self.state.driving = False
                 # 保持导航状态以便恢复后继续，但不移动
                 try:
-                    # 使用统一错误代码上报，并由错误存储做去重
-                    from .error_manager import emit_error
-                    emit_error(54211, {"serial_number": self.config.vehicle.serial_number, "message": "Battery is zero; navigation paused"})
+                    # 不再上报低电量相关错误，直接暂停即可
+                    pass
                 except Exception:
                     pass
                 return
