@@ -454,30 +454,40 @@ class VehicleSimulator:
             self._reject_order("Order update ID is lower than current")
 
     def _can_accept_new_order(self) -> bool:
-        # 若存在已释放的节点，要求车辆已到达“最新”释放节点（按最大 sequence_id 判断）
         released_nodes = [n for n in self.state.node_states if n.released]
         if released_nodes:
             try:
                 latest = max(released_nodes, key=lambda n: int(n.sequence_id))
             except Exception:
                 latest = released_nodes[-1]
-            if self.state.last_node_sequence_id != latest.sequence_id:
+            try:
+                last_seq = int(getattr(self.state, "last_node_sequence_id", 0) or 0)
+            except Exception:
+                last_seq = 0
+            try:
+                latest_seq = int(getattr(latest, "sequence_id", 0) or 0)
+            except Exception:
+                latest_seq = 0
+            try:
+                last_id = str(self.state.last_node_id or "")
+            except Exception:
+                last_id = ""
+            try:
+                latest_id = str(getattr(latest, "node_id", "") or "")
+            except Exception:
+                latest_id = ""
+            if last_seq < latest_seq:
                 try:
-                    last_id = str(self.state.last_node_id or "")
+                    released_ids = {str(getattr(n, "node_id", "") or "") for n in released_nodes}
                 except Exception:
-                    last_id = ""
-                try:
-                    latest_id = str(getattr(latest, "node_id", "") or "")
-                except Exception:
-                    latest_id = ""
-                if last_id and latest_id and last_id == latest_id:
-                    pass
-                else:
+                    released_ids = set()
+                if not (last_id and ((last_id == latest_id) or (last_id in released_ids))):
                     self._reject_order("Vehicle has not arrived at the latest released node")
                     return False
-            if not self._is_vehicle_close_to_last_released_node():
-                self._reject_order("Vehicle is not close enough to last released node")
-                return False
+            if last_id and latest_id and last_id == latest_id and last_seq == latest_seq:
+                if not self._is_vehicle_close_to_last_released_node():
+                    self._reject_order("Vehicle is not close enough to last released node")
+                    return False
         return True
 
     def _is_vehicle_close_to_last_released_node(self) -> bool:
@@ -1386,10 +1396,26 @@ class VehicleSimulator:
                             ns = next((n for n in self.state.node_states if str(n.node_id) == str(match_key)), None)
                             if ns:
                                 self.state.last_node_sequence_id = ns.sequence_id
+                            else:
+                                try:
+                                    rels = [n for n in self.state.node_states if n.released]
+                                    if rels:
+                                        try:
+                                            self.state.last_node_sequence_id = max(rels, key=lambda n: int(n.sequence_id)).sequence_id
+                                        except Exception:
+                                            self.state.last_node_sequence_id = rels[-1].sequence_id
+                                except Exception:
+                                    pass
                         except Exception:
                             pass
                     except Exception:
                         self.state.last_node_id = str(target_id)
+                try:
+                    seq_anchor = int(getattr(self.state, "last_node_sequence_id", 0) or 0)
+                    if seq_anchor:
+                        self._prune_states_from_sequence(seq_anchor)
+                except Exception:
+                    pass
             except Exception:
                 pass
             return
@@ -1576,8 +1602,24 @@ class VehicleSimulator:
                         ns = next((n for n in self.state.node_states if str(n.node_id) == str(match_key)), None)
                         if ns:
                             self.state.last_node_sequence_id = ns.sequence_id
+                        else:
+                            try:
+                                rels = [n for n in self.state.node_states if n.released]
+                                if rels:
+                                    try:
+                                        self.state.last_node_sequence_id = max(rels, key=lambda n: int(n.sequence_id)).sequence_id
+                                    except Exception:
+                                        self.state.last_node_sequence_id = rels[-1].sequence_id
+                            except Exception:
+                                pass
                     except Exception:
                         pass
+                try:
+                    seq_anchor = int(getattr(self.state, "last_node_sequence_id", 0) or 0)
+                    if seq_anchor:
+                        self._prune_states_from_sequence(seq_anchor)
+                except Exception:
+                    pass
             except Exception:
                 pass
         else:
@@ -1815,26 +1857,43 @@ class VehicleSimulator:
         self._prune_states_from_sequence(next_seq)
 
     def _prune_states_from_sequence(self, seq: int) -> None:
-        """按 sequenceId 裁剪 node_states 与 edge_states：保留 >= seq 的项。"""
         try:
-            self.state.node_states = [ns for ns in (self.state.node_states or []) if int(getattr(ns, "sequence_id", 0) or 0) >= int(seq)]
+            seq_val = int(seq)
+        except Exception:
+            seq_val = int(seq or 0)
+        try:
+            self.state.node_states = [ns for ns in (self.state.node_states or []) if int(getattr(ns, "sequence_id", 0) or 0) >= seq_val]
         except Exception:
             pass
         try:
             anchor = str(getattr(self.state, "last_node_id", "") or "")
             if not anchor:
-                try:
-                    m = next((n for n in (self.state.node_states or []) if int(getattr(n, "sequence_id", 0) or 0) == int(seq)), None)
-                    anchor = str(getattr(m, "node_id", "") or "")
-                except Exception:
-                    anchor = ""
+                m = next((n for n in (self.state.node_states or []) if int(getattr(n, "sequence_id", 0) or 0) == seq_val), None)
+                anchor = str(getattr(m, "node_id", "") or "") if m else ""
+            original_edges = list(self.state.edge_states or [])
+            filtered = list(original_edges)
             if anchor:
-                def _starts_from(eid: str) -> bool:
-                    s = str(eid or "")
-                    return s.startswith(f"{anchor}-") or s.startswith(f"{anchor}->")
-                self.state.edge_states = [es for es in (self.state.edge_states or []) if _starts_from(str(getattr(es, "edge_id", "") or ""))]
-            else:
-                self.state.edge_states = list(self.state.edge_states or [])
+                prefixed = [es for es in original_edges if str(getattr(es, "edge_id", "") or "").startswith(f"{anchor}-") or str(getattr(es, "edge_id", "") or "").startswith(f"{anchor}->")]
+                if prefixed:
+                    filtered = prefixed
+                else:
+                    order_edges = list(getattr(getattr(self, "order", None), "edges", []) or [])
+                    allowed_ids = set()
+                    for e in order_edges:
+                        s = str(getattr(e, "start_node_id", "") or "")
+                        t = str(getattr(e, "end_node_id", "") or "")
+                        eid = str(getattr(e, "edge_id", "") or "")
+                        if s == anchor:
+                            if eid:
+                                allowed_ids.add(eid)
+                            if s and t:
+                                allowed_ids.add(f"{s}->{t}")
+                                allowed_ids.add(f"{s}-{t}")
+                    if allowed_ids:
+                        filtered = [es for es in original_edges if str(getattr(es, "edge_id", "") or "") in allowed_ids]
+                    if not filtered:
+                        filtered = [es for es in original_edges if int(getattr(es, "sequence_id", 0) or 0) >= seq_val]
+            self.state.edge_states = filtered
         except Exception:
             pass
 

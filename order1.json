@@ -1,0 +1,75 @@
+{
+  "version": "2.0.0",
+  "headerId": 240,
+  "timestamp": "2025-11-19T11:57:57.339Z",
+  "manufacturer": "SEER",
+  "serialNumber": "AMB-01",
+  "edges": [
+    {
+      "edgeId": "LM72-LM79",
+      "sequenceId": 165,
+      "startNodeId": "LM72",
+      "endNodeId": "LM79",
+      "actions": [],
+      "released": true
+    },
+    {
+      "edgeId": "LM79-LM373",
+      "sequenceId": 166,
+      "startNodeId": "LM79",
+      "endNodeId": "LM373",
+      "actions": [],
+      "released": true
+    },
+    {
+      "edgeId": "LM373-LM303",
+      "sequenceId": 167,
+      "startNodeId": "LM373",
+      "endNodeId": "LM303",
+      "actions": [],
+      "released": true
+    },
+    {
+      "edgeId": "LM303-LM304",
+      "sequenceId": 168,
+      "startNodeId": "LM303",
+      "endNodeId": "LM304",
+      "actions": [],
+      "released": false
+    }
+  ],
+  "nodes": [
+    {
+      "nodeId": "LM72",
+      "sequenceId": 208,
+      "actions": [],
+      "released": true
+    },
+    {
+      "nodeId": "LM79",
+      "sequenceId": 209,
+      "actions": [],
+      "released": true
+    },
+    {
+      "nodeId": "LM373",
+      "sequenceId": 210,
+      "actions": [],
+      "released": true
+    },
+    {
+      "nodeId": "LM303",
+      "sequenceId": 211,
+      "actions": [],
+      "released": true
+    },
+    {
+      "nodeId": "LM304",
+      "sequenceId": 212,
+      "actions": [],
+      "released": false
+    }
+  ],
+  "orderId": "AUTO176355347033100008511300",
+  "orderUpdateId": 241
+}

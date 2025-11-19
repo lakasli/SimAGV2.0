@@ -1,0 +1,61 @@
+{
+  "version": "2.0.0",
+  "headerId": 241,
+  "timestamp": "2025-11-19T11:58:01.335Z",
+  "manufacturer": "SEER",
+  "serialNumber": "AMB-01",
+  "edges": [
+    {
+      "edgeId": "LM303-LM304",
+      "sequenceId": 169,
+      "startNodeId": "LM303",
+      "endNodeId": "LM304",
+      "actions": [],
+      "released": true
+    },
+    {
+      "edgeId": "LM304-LM305",
+      "sequenceId": 170,
+      "startNodeId": "LM304",
+      "endNodeId": "LM305",
+      "actions": [],
+      "released": true
+    },
+    {
+      "edgeId": "LM305-PP619",
+      "sequenceId": 171,
+      "startNodeId": "LM305",
+      "endNodeId": "PP619",
+      "actions": [],
+      "released": true
+    }
+  ],
+  "nodes": [
+    {
+      "nodeId": "LM303",
+      "sequenceId": 211,
+      "actions": [],
+      "released": true
+    },
+    {
+      "nodeId": "LM304",
+      "sequenceId": 212,
+      "actions": [],
+      "released": true
+    },
+    {
+      "nodeId": "LM305",
+      "sequenceId": 213,
+      "actions": [],
+      "released": true
+    },
+    {
+      "nodeId": "PP619",
+      "sequenceId": 214,
+      "actions": [],
+      "released": true
+    }
+  ],
+  "orderId": "AUTO176355347033100008511300",
+  "orderUpdateId": 242
+}

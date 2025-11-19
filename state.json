@@ -1,0 +1,142 @@
+{
+  "headerId": 938,
+  "timestamp": "2025-11-19T11:58:21.393Z",
+  "version": "2.0.0",
+  "manufacturer": "SEER",
+  "serialNumber": "AMB-01",
+  "driving": false,
+  "operatingMode": "AUTOMATIC",
+  "nodeStates": [
+    {
+      "nodeId": "LM72",
+      "sequenceId": 208,
+      "released": true,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    },
+    {
+      "nodeId": "LM79",
+      "sequenceId": 209,
+      "released": true,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    },
+    {
+      "nodeId": "LM373",
+      "sequenceId": 210,
+      "released": true,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    },
+    {
+      "nodeId": "LM303",
+      "sequenceId": 211,
+      "released": true,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    },
+    {
+      "nodeId": "LM304",
+      "sequenceId": 212,
+      "released": false,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    }
+  ],
+  "edgeStates": [
+    {
+      "edgeId": "LM72-LM79",
+      "sequenceId": 165,
+      "released": true,
+      "edgeDescription": "",
+      "trajectory": null,
+      "maxSpeed": null,
+      "rotationAllowed": false,
+      "maxRotationSpeed": null,
+      "maxHeight": null,
+      "minHeight": null
+    },
+    {
+      "edgeId": "LM79-LM373",
+      "sequenceId": 166,
+      "released": true,
+      "edgeDescription": "",
+      "trajectory": null,
+      "maxSpeed": null,
+      "rotationAllowed": false,
+      "maxRotationSpeed": null,
+      "maxHeight": null,
+      "minHeight": null
+    },
+    {
+      "edgeId": "LM373-LM303",
+      "sequenceId": 167,
+      "released": true,
+      "edgeDescription": "",
+      "trajectory": null,
+      "maxSpeed": null,
+      "rotationAllowed": false,
+      "maxRotationSpeed": null,
+      "maxHeight": null,
+      "minHeight": null
+    },
+    {
+      "edgeId": "LM303-LM304",
+      "sequenceId": 168,
+      "released": false,
+      "edgeDescription": "",
+      "trajectory": null,
+      "maxSpeed": null,
+      "rotationAllowed": false,
+      "maxRotationSpeed": null,
+      "maxHeight": null,
+      "minHeight": null
+    }
+  ],
+  "lastNodeId": "LM303",
+  "orderId": "AUTO176355347033100008511300",
+  "orderUpdateId": 241,
+  "lastNodeSequenceId": 211,
+  "actionStates": [],
+  "information": [],
+  "loads": [],
+  "batteryState": {
+    "batteryCharge": 98.16064387162523,
+    "batteryVoltage": 50,
+    "batteryHealth": 100,
+    "charging": false,
+    "reach": 0
+  },
+  "safetyState": {
+    "eStop": "NONE",
+    "fieldViolation": false
+  },
+  "paused": false,
+  "newBaseRequest": false,
+  "agvPosition": {
+    "x": -1.198,
+    "y": -14.171237092279425,
+    "theta": 1.5707963267948966,
+    "mapId": "test1",
+    "mapDescription": "",
+    "positionInitialized": true,
+    "localizationScore": 0.99,
+    "deviationRange": 0
+  },
+  "velocity": {
+    "vx": 0,
+    "vy": 0,
+    "omega": 0
+  },
+  "zoneSetId": "test1",
+  "waitingForInteractionZoneRelease": false,
+  "forkState": {
+    "forkHeight": 0
+  },
+  "errors": []
+}

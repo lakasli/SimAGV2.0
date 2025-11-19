@@ -965,7 +965,7 @@
         const dx = sx - sp.x;
         const dy = sy - sp.y;
         const ang = (pos.theta ?? pos.orientation ?? 0);
-        const cosA = Math.cos(-ang), sinA = Math.sin(-ang);
+        const cosA = Math.cos(ang + Math.PI / 2), sinA = Math.sin(ang + Math.PI / 2);
         const lx = dx * cosA - dy * sinA;
         const ly = dx * sinA + dy * cosA;
         const s = Math.max(0.5, Math.min(2, viewTransform.scale));
@@ -2112,32 +2112,32 @@
     function drawRobotIcon(x, y, rotationDeg, robot) {
       ctx.save();
       ctx.translate(x, y);
-      ctx.rotate(rotationDeg);
+      ctx.rotate(-rotationDeg - Math.PI / 2);
       const s = Math.max(0.5, Math.min(2, viewTransform.scale));
       ctx.scale(s, s);
 
-      // 机器人身体（24x24）：保持整体前向为局部 +X
+      // 机器人身体（24x24）
       ctx.fillStyle = '#4A90E2';
       ctx.strokeStyle = '#2E5C8A';
       ctx.lineWidth = 1;
       ctx.fillRect(-12, -12, 24, 24);
       ctx.strokeRect(-12, -12, 24, 24);
 
-      // 前方半圆盖（局部 +X 方向）
+      // 顶部半圆盖
       ctx.fillStyle = '#6BB6FF';
       ctx.beginPath();
-      ctx.arc(12, 0, 12, -Math.PI/2, Math.PI/2, false);
+      ctx.arc(0, -12, 12, 0, Math.PI, true);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
-      // 朝向箭头（指向前方：局部坐标 +X）
+      // 朝向箭头（指向前方：局部坐标 -Y）
       ctx.fillStyle = '#FF6B6B';
       ctx.strokeStyle = '#D63031';
       ctx.beginPath();
-      ctx.moveTo(22, 0);
-      ctx.lineTo(14, -4);
-      ctx.lineTo(14, 4);
+      ctx.moveTo(0, -22);
+      ctx.lineTo(-4, -14);
+      ctx.lineTo(4, -14);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
@@ -2170,21 +2170,21 @@
         ctx.fillStyle = '#8B5E3C'; // 木质托盘色
         ctx.strokeStyle = '#5D3A1A';
         ctx.lineWidth = 1;
-      // 矩形托盘：长度沿局部 +X，宽度沿局部 +Y（与新前向一致）
-      ctx.fillRect(-palletL / 2 + slide, -palletW / 2, palletL, palletW);
-      ctx.strokeRect(-palletL / 2 + slide, -palletW / 2, palletL, palletW);
+        // 矩形托盘：与机器人正方体身体居中重合
+        ctx.fillRect(-palletW / 2, -palletL / 2 + slide, palletW, palletL);
+        ctx.strokeRect(-palletW / 2, -palletL / 2 + slide, palletW, palletL);
         // 简单栈板纹理线
         ctx.strokeStyle = '#704A2B';
         for (let i = 1; i <= 2; i++) {
-          const x = -palletL / 2 + slide + (i * palletL / 3);
+          const y = -palletL / 2 + slide + (i * palletL / 3);
           ctx.beginPath();
-          ctx.moveTo(x, -palletW / 2 + 2);
-          ctx.lineTo(x, palletW / 2 - 2);
+          ctx.moveTo(-palletW / 2 + 2, y);
+          ctx.lineTo(palletW / 2 - 2, y);
           ctx.stroke();
         }
         ctx.restore();
       }
-      // 叉高指示：在机器人右侧（局部 +Y）绘制竖直高度条，并标注数值
+      // 叉高指示：在机器人右侧绘制竖直高度条，并标注数值
       try {
         const fhDisplay = Number(robot && robot._forkBarDisplayHeight);
         const fhRaw = Number(robot && robot.forkHeight);
@@ -2196,14 +2196,14 @@
           ctx.fillStyle = '#f1c40f';
           ctx.strokeStyle = '#f39c12';
           ctx.lineWidth = 1;
-      // 竖条位于机器人前方（局部 +X），自身体前缘向上延伸
-      ctx.fillRect(-10, 14, barH, 3);
-      ctx.strokeRect(-10, 14, barH, 3);
+          // 竖条位于机器人身体右侧（局部坐标 +X 方向），自身体顶部向上延伸
+          ctx.fillRect(16, 8 - barH, 3, barH);
+          ctx.strokeRect(16, 8 - barH, 3, barH);
           if (viewTransform.scale > 0.8) {
             ctx.fillStyle = '#ecf0f1';
             ctx.font = '6px Arial';
             ctx.textAlign = 'left';
-            ctx.fillText(`${truncateToOneDecimal(fh).toFixed(1)}m`, -10 + barH + 2, 18);
+            ctx.fillText(`${truncateToOneDecimal(fh).toFixed(1)}m`, 11, 8 - barH - 2);
           }
           ctx.restore();
         }
@@ -2253,11 +2253,11 @@
       // 绘制“朝向一致”的旋转矩形（中心前移偏移量）
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(thetaRad);
-      // 将几何中心沿车头方向（局部 +X）平移 CENTER_FORWARD_OFFSET_M 米
+      ctx.rotate(-thetaRad - Math.PI / 2);
+      // 将几何中心沿车头方向（局部 -Y）平移 CENTER_FORWARD_OFFSET_M 米
       try {
         const offsetPx = (Number(window.CENTER_FORWARD_OFFSET_M) || 0) * meterScale * viewTransform.scale;
-        if (offsetPx) ctx.translate(offsetPx, 0);
+        if (offsetPx) ctx.translate(0, -offsetPx);
       } catch (_) {}
       const isCollision = !!(robot && robot._collisionActive);
       const fillColor = isCollision ? '#e74c3c' : '#3498db';
@@ -3047,7 +3047,7 @@
       const robot = registeredRobots.find(r => r.robot_name === id);
       const pos = robot?.currentPosition || robot?.initialPosition || { x: 0, y: 0, theta: 0 };
       const heading = (pos.theta ?? pos.orientation ?? 0);
-      const dx = -step * Math.cos(heading);
+      const dx = step * Math.cos(heading);
       const dy = step * Math.sin(heading);
       try {
         const resp = await fetch(`${API_BASE_URL}/agv/${id}/move/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dx, dy, movement_state: 'backward' }) });
@@ -3060,7 +3060,7 @@
       const robot = registeredRobots.find(r => r.robot_name === id);
       const pos = robot?.currentPosition || robot?.initialPosition || { x: 0, y: 0, theta: 0 };
       const heading = (pos.theta ?? pos.orientation ?? 0);
-      const dx = step * Math.cos(heading);
+      const dx = -step * Math.cos(heading);
       const dy = -step * Math.sin(heading);
       try {
         const resp = await fetch(`${API_BASE_URL}/agv/${id}/move/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dx, dy, movement_state: 'forward' }) });
@@ -3293,3 +3293,4 @@
  </body>
 
 </html>
+

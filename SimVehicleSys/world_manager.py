@@ -175,7 +175,7 @@ def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.05) -> Optio
         px = float(getattr(pos, "x", 0.0) or 0.0)
         py = float(getattr(pos, "y", 0.0) or 0.0)
         # 将几何中心沿车头方向平移 centerForwardOffsetM 米
-        px_f = px + centerForwardOffsetM * math.cos(theta)
+        px_f = px - centerForwardOffsetM * math.cos(theta)
         py_f = py - centerForwardOffsetM * math.sin(theta)
         base_poly = compute_agv_base_polygon(base_length, base_width, (px_f, py_f, theta))
         base_rect = compute_outer_bounding_rect(base_poly)
@@ -277,7 +277,7 @@ def computeSafetyRectForStatePayload(state_payload: Dict[str, Any], length_defau
         theta = float(raw_theta or 0.0)
         # 将几何中心沿车头方向平移 centerForwardOffsetM 米
         px_f = px + centerForwardOffsetM * math.cos(theta)
-        py_f = py - centerForwardOffsetM * math.sin(theta)
+        py_f = py + centerForwardOffsetM * math.sin(theta)
         base_poly = compute_agv_base_polygon(float(length_default or 1.03), float(width_default or 0.745), (px_f, py_f, theta))
         base_rect = compute_outer_bounding_rect(base_poly)
         shelf_fp = _getShelfFootprintFromStatePayload(state_payload)
