@@ -60,7 +60,7 @@ class AGVStateStore:
                         dx = new_x - old_x
                         dy = new_y - old_y
                         if abs(dx) > 1e-9 or abs(dy) > 1e-9:
-                            movement_dir = math.atan2(dx, -dy)
+                            movement_dir = math.atan2(-dy, dx)
                             target_heading = movement_dir if rt.movement_state == "forward" else _normalize_angle(movement_dir + math.pi)
                             try:
                                 scale = max(0.0001, float(get_config().settings.sim_time_scale))
@@ -119,7 +119,7 @@ class AGVStateStore:
             rt.position.y += dy
             try:
                 if abs(dx) > 1e-9 or abs(dy) > 1e-9:
-                    movement_dir = math.atan2(dx, -dy)
+                    movement_dir = math.atan2(-dy, dx)
                     if rt.movement_state == "forward":
                         target_heading = movement_dir
                     else:

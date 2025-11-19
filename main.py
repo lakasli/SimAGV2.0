@@ -171,8 +171,8 @@ def free_port(port: int) -> None:
 
 
 def clean_necessary_ports() -> None:
-    # 启动前清理必要端口：MQTT(9527) 与 后端(7071)
-    for port in (9527, 7071):
+    # 启动前清理必要端口：MQTT(9527) 与 后端(7000)
+    for port in (9527, 7000):
         free_port(port)
 
 # 新增：进程/端口检查工具
@@ -273,12 +273,12 @@ def main() -> None:
         os.environ["SIMAGV_SERIAL"] = os.getenv("SIMAGV_SERIAL", "")
     print(f"MQTT 服务器: {mqtt_host}:{mqtt_port} 接口: {mqtt_iface}")
 
-    # 后端端口选择：若默认 7071 被占用则回退到下一个可用端口
+    # 后端端口选择：若默认 7000 被占用则回退到下一个可用端口
     env_backend_port = os.getenv("SIMAGV_BACKEND_PORT")
-    backend_port = int(env_backend_port) if (env_backend_port and env_backend_port.isdigit()) else 7071
+    backend_port = int(env_backend_port) if (env_backend_port and env_backend_port.isdigit()) else 7000
     if env_backend_port is None and is_port_in_use(backend_port):
         backend_port = find_free_port(backend_port)
-        print(f"默认后端端口 7071 已占用，回退到 {backend_port}")
+        print(f"默认后端端口 7000 已占用，回退到 {backend_port}")
 
     bind_host = os.getenv("SIMAGV_BACKEND_HOST", "127.0.0.1")
     print(f"启动后端服务 (Uvicorn) 于 http://{bind_host}:{backend_port} ...")

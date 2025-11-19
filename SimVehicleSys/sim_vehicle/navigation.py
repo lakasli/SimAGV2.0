@@ -209,7 +209,7 @@ def route_polyline(route: List[str], stations: List[dict], paths: List[dict], st
                 dx = x - prev_x
                 dy = y - prev_y
                 if abs(dx) > 1e-9 or abs(dy) > 1e-9:
-                    angle = math.atan2(dx, -dy)
+                    angle = math.atan2(-dy, dx)
                     last_angle = angle
             pts.append({"x": x, "y": y, "theta": angle, "edgeId": edge_id})
             prev_x, prev_y = x, y
@@ -368,8 +368,7 @@ def trajectory_polyline(
             t = i / steps
             x = sx + t * (ex - sx)
             y = sy + t * (ey - sy)
-            # 默认沿线切线为朝向（以 Y− 为 0 度定义）
-            th = math.atan2(ex - sx, -(ey - sy))
+            th = math.atan2(-(ey - sy), (ex - sx))
             if orientation is not None:
                 th = float(orientation)
             th = _apply_dir_theta(th)
@@ -387,9 +386,9 @@ def trajectory_polyline(
             if prev_x is not None and prev_y is not None:
                 dx = bx - prev_x
                 dy = by - prev_y
-                th = math.atan2(dx, -dy)
+                th = math.atan2(-dy, dx)
             else:
-                th = math.atan2(ex - sx, -(ey - sy))
+                th = math.atan2(-(ey - sy), (ex - sx))
             if orientation is not None:
                 th = float(orientation)
             th = _apply_dir_theta(th)

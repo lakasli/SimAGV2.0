@@ -22,17 +22,17 @@ SimAGV2.0 是一个跨平台（Linux/Windows）的多车 AGV 仿真系统，基�
   - `python3 ./main.py`
 - 该脚本将：
   - 检查并启动 `Mosquitto`（端口 `9527`）。
-  - 启动后端服务（Uvicorn，`http://127.0.0.1:7071`）。
+  - 启动后端服务（Uvicorn，`http://127.0.0.1:7000`）。
   - 启动世界模型服务线程（碰撞与安全管理）。
   - 根据 `backend\data\registered_agvs.json` 启动一个或多个仿真实例。
 - 打开浏览器访问：
-  - `http://127.0.0.1:7071/`（后端直接返回 `frontend/index.html`）
+  - `http://127.0.0.1:7000/`（后端直接返回 `frontend/index.html`）
 
 ## 手动启动各组件（按需组合）
 - 启动 MQTT Broker：
   - `mosquitto -v`
 - 启动后端服务（Uvicorn）：
-  - `python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 7071`
+  - `python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 7000`
 - 启动单台仿真车（可指定序列号）：
   - `python3 -m SimVehicleSys.main --serial AMB-01`
 - 启动多台仿真车的方式：
@@ -40,29 +40,29 @@ SimAGV2.0 是一个跨平台（Linux/Windows）的多车 AGV 仿真系统，基�
   - 通过一键脚本 `python3 ./main.py` 或后端注册接口自动拉起仿真实例。
 
 ## 前端启动
-- 推荐通过后端访问：`http://127.0.0.1:7071/`（已挂载 `frontend/`，静态资源位于 `/static`）。
+- 推荐通过后端访问：`http://127.0.0.1:7000/`（已挂载 `frontend/`，静态资源位于 `/static`）。
 - 如果需要独立静态服务（调试用途）：
   - 在 `frontend` 目录运行：`python3 -m http.server 8080`
   - 访问：`http://127.0.0.1:8080`
-  - 注意：独立静态服务与后端跨域时，前端接口地址需指向后端 `http://127.0.0.1:7071`。
+  - 注意：独立静态服务与后端跨域时，前端接口地址需指向后端 `http://127.0.0.1:7000`。
 
 ## 常用接口与示例（curl）
 - 查看地图列表：
-  - `curl http://127.0.0.1:7071/api/maps`
-  - `curl http://127.0.0.1:7071/api/maps/VehicleMap`
+  - `curl http://127.0.0.1:7000/api/maps`
+  - `curl http://127.0.0.1:7000/api/maps/VehicleMap`
 - 注册 AGV（将同时尝试启动对应仿真实例）：
-  - `curl -X POST -H "Content-Type: application/json" -d '{"agvs":[{"serial_number":"AMB-03","manufacturer":"SEER","type":"AGV","vda_version":"v2","IP":"192.168.9.3"}]}' http://127.0.0.1:7071/api/agvs/register`
+  - `curl -X POST -H "Content-Type: application/json" -d '{"agvs":[{"serial_number":"AMB-03","manufacturer":"SEER","type":"AGV","vda_version":"v2","IP":"192.168.9.3"}]}' http://127.0.0.1:7000/api/agvs/register`
 - 更新运行态配置（例如初始位置/地图/限速）：
-  - `curl -X POST -H "Content-Type: application/json" -d '{"position":{"x":1.0,"y":2.0,"theta":0.0},"current_map":"testmap.scene","speed_limit":1.5}' http://127.0.0.1:7071/api/agv/AMB-01/config/dynamic`
+  - `curl -X POST -H "Content-Type: application/json" -d '{"position":{"x":1.0,"y":2.0,"theta":0.0},"current_map":"testmap.scene","speed_limit":1.5}' http://127.0.0.1:7000/api/agv/AMB-01/config/dynamic`
 - 平移控制（单位：米）：
-  - `curl -X POST -H "Content-Type: application/json" -d '{"dx":1.0,"dy":0.0}' http://127.0.0.1:7071/api/agv/AMB-01/move/translate`
+  - `curl -X POST -H "Content-Type: application/json" -d '{"dx":1.0,"dy":0.0}' http://127.0.0.1:7000/api/agv/AMB-01/move/translate`
 - 旋转控制（`dtheta` 为弧度，例：`1.5708`≈90°）：
-  - `curl -X POST -H "Content-Type: application/json" -d '{"dtheta":1.5708}' http://127.0.0.1:7071/api/agv/AMB-01/move/rotate`
+  - `curl -X POST -H "Content-Type: application/json" -d '{"dtheta":1.5708}' http://127.0.0.1:7000/api/agv/AMB-01/move/rotate`
 - WebSocket（前端状态推送）：
-  - `ws://127.0.0.1:7071/ws`
+  - `ws://127.0.0.1:7000/ws`
 
 ## 端口与主题约定
-- 后端：`http://127.0.0.1:7071`
+- 后端：`http://127.0.0.1:7000`
 - MQTT Broker：`127.0.0.1:9527`
 - VDA MQTT 基础主题：`uagv/{vda_version}/{manufacturer}/{serial_number}`
   - 示例：`uagv/v2/SEER/AMB-01/state`
@@ -80,7 +80,7 @@ SimAGV2.0/
 
 ## 常见问题
 - Mosquitto 未找到：在 Linux 下请确保 `mosquitto` 已安装并在 PATH 中（端口 9527）。
-- 端口占用：一键脚本会尝试释放 `7071/9527`；若仍失败，请手动关闭占用进程后重试。
+- 端口占用：一键脚本会尝试释放 `7000/9527`；若仍失败，请手动关闭占用进程后重试。
 - 前端无法打开：确认后端已运行且首页 `GET /` 能返回 `frontend/index.html`；也可直接访问静态目录 `/static`。
 - 多车未启动：确认 `backend\data\registered_agvs.json` 已包含目标序列号，或通过注册接口提交后重试。
 

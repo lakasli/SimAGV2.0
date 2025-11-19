@@ -462,8 +462,19 @@ class VehicleSimulator:
             except Exception:
                 latest = released_nodes[-1]
             if self.state.last_node_sequence_id != latest.sequence_id:
-                self._reject_order("Vehicle has not arrived at the latest released node")
-                return False
+                try:
+                    last_id = str(self.state.last_node_id or "")
+                except Exception:
+                    last_id = ""
+                try:
+                    latest_id = str(getattr(latest, "node_id", "") or "")
+                except Exception:
+                    latest_id = ""
+                if last_id and latest_id and last_id == latest_id:
+                    pass
+                else:
+                    self._reject_order("Vehicle has not arrived at the latest released node")
+                    return False
             if not self._is_vehicle_close_to_last_released_node():
                 self._reject_order("Vehicle is not close enough to last released node")
                 return False
@@ -1810,7 +1821,20 @@ class VehicleSimulator:
         except Exception:
             pass
         try:
-            self.state.edge_states = [es for es in (self.state.edge_states or []) if int(getattr(es, "sequence_id", 0) or 0) >= int(seq)]
+            anchor = str(getattr(self.state, "last_node_id", "") or "")
+            if not anchor:
+                try:
+                    m = next((n for n in (self.state.node_states or []) if int(getattr(n, "sequence_id", 0) or 0) == int(seq)), None)
+                    anchor = str(getattr(m, "node_id", "") or "")
+                except Exception:
+                    anchor = ""
+            if anchor:
+                def _starts_from(eid: str) -> bool:
+                    s = str(eid or "")
+                    return s.startswith(f"{anchor}-") or s.startswith(f"{anchor}->")
+                self.state.edge_states = [es for es in (self.state.edge_states or []) if _starts_from(str(getattr(es, "edge_id", "") or ""))]
+            else:
+                self.state.edge_states = list(self.state.edge_states or [])
         except Exception:
             pass
 
