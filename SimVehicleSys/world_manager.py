@@ -21,7 +21,7 @@ def check_collision(vehicles: Iterable[Any]) -> bool:
     rects: List[Tuple[float, float, float, float]] = []
     for v in vehicles:
         try:
-            rect = computeSafetyRectForVehicle(v, safeFactor=1.05)
+            rect = computeSafetyRectForVehicle(v, safeFactor=1.1)
             if rect:
                 rects.append(rect)
         except Exception:
@@ -150,7 +150,7 @@ def scaleRect(rect: Tuple[float, float, float, float], factor: float) -> Tuple[f
     return (xmin - dx, ymin - dy, xmax + dx, ymax + dy)
 
 
-def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.05) -> Optional[Tuple[float, float, float, float]]:
+def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.1) -> Optional[Tuple[float, float, float, float]]:
     """计算车辆的安全包围盒（考虑托盘尺寸），并按 safeFactor 扩大。
 
     尺寸来源：优先使用运行时配置 config.settings 的 length/width；否则采用默认值。
@@ -174,9 +174,9 @@ def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.05) -> Optio
         theta = float(getattr(pos, "theta", 0.0) or 0.0)
         px = float(getattr(pos, "x", 0.0) or 0.0)
         py = float(getattr(pos, "y", 0.0) or 0.0)
-        # 将几何中心沿车头方向平移 centerForwardOffsetM 米
-        px_f = px - centerForwardOffsetM * math.cos(theta)
-        py_f = py - centerForwardOffsetM * math.sin(theta)
+        # 将几何中心沿车头方向平移 centerForwardOffsetM 米（前向向量=(sin(theta), cos(theta))）
+        px_f = px + centerForwardOffsetM * math.sin(theta)
+        py_f = py + centerForwardOffsetM * math.cos(theta)
         base_poly = compute_agv_base_polygon(base_length, base_width, (px_f, py_f, theta))
         base_rect = compute_outer_bounding_rect(base_poly)
 
@@ -194,7 +194,7 @@ def computeSafetyRectForVehicle(vehicle: Any, safeFactor: float = 1.05) -> Optio
                 ymax = max(base_rect[3], shelf_rect[3])
                 base_rect = (xmin, ymin, xmax, ymax)
 
-        # 安全范围：按 1.05 倍扩大（如需额外常量安全距，可叠加 expand）
+        # 安全范围：按 1.1 倍扩大（如需额外常量安全距，可叠加 expand）
         safe_rect = scaleRect(base_rect, max(1.0, float(safeFactor)))
         return safe_rect
     except Exception:
@@ -263,8 +263,8 @@ def _getShelfFootprintFromStatePayload(state_payload: Dict[str, Any]) -> Optiona
     return None
 
 
-def computeSafetyRectForStatePayload(state_payload: Dict[str, Any], length_default: float = 1.03, width_default: float = 0.745, safeFactor: float = 1.05) -> Optional[Tuple[float, float, float, float]]:
-    """基于 VDA5050 state JSON(payload) 计算安全包围盒，支持 1.05 放大与托盘尺寸融合。
+def computeSafetyRectForStatePayload(state_payload: Dict[str, Any], length_default: float = 1.03, width_default: float = 0.745, safeFactor: float = 1.1) -> Optional[Tuple[float, float, float, float]]:
+    """基于 VDA5050 state JSON(payload) 计算安全包围盒，支持 1.1 放大与托盘尺寸融合。
     朝向取值优先使用 `theta`，若缺失则回退到 `orientation`，与系统约定保持一致（0 度为 +Y 方向）。
     """
     try:
@@ -275,9 +275,9 @@ def computeSafetyRectForStatePayload(state_payload: Dict[str, Any], length_defau
         if raw_theta is None:
             raw_theta = agv.get("orientation", 0.0)
         theta = float(raw_theta or 0.0)
-        # 将几何中心沿车头方向平移 centerForwardOffsetM 米
-        px_f = px + centerForwardOffsetM * math.cos(theta)
-        py_f = py + centerForwardOffsetM * math.sin(theta)
+        # 将几何中心沿车头方向平移 centerForwardOffsetM 米（前向向量=(sin(theta), cos(theta))）
+        px_f = px + centerForwardOffsetM * math.sin(theta)
+        py_f = py + centerForwardOffsetM * math.cos(theta)
         base_poly = compute_agv_base_polygon(float(length_default or 1.03), float(width_default or 0.745), (px_f, py_f, theta))
         base_rect = compute_outer_bounding_rect(base_poly)
         shelf_fp = _getShelfFootprintFromStatePayload(state_payload)
@@ -297,6 +297,89 @@ def computeSafetyRectForStatePayload(state_payload: Dict[str, Any], length_defau
         return None
 
 
+def compute_front_point(length: float, pose: tuple[float, float, float]) -> tuple[float, float]:
+    x, y, theta = pose
+    hl = float(length) / 2.0
+    return (x + hl * math.sin(theta), y + hl * math.cos(theta))
+
+
+def rect_intersects_front_sector(origin: tuple[float, float], heading_theta: float, rect: Tuple[float, float, float, float], fov_deg: float = 70.0, radius: float = 0.8) -> bool:
+    ox, oy = origin
+    xmin, ymin, xmax, ymax = rect
+    r = float(radius)
+    h = float(heading_theta)
+    half_rad = math.radians(float(fov_deg) / 2.0)
+    def in_sector(px: float, py: float) -> bool:
+        vx = px - ox
+        vy = py - oy
+        d = math.hypot(vx, vy)
+        if d > r:
+            return False
+        fx = math.sin(h)
+        fy = math.cos(h)
+        dot = vx * fx + vy * fy
+        if d <= 1e-9:
+            return True
+        cos_a = max(-1.0, min(1.0, dot / d))
+        return cos_a >= math.cos(half_rad)
+    if in_sector(xmin, ymin) or in_sector(xmax, ymin) or in_sector(xmax, ymax) or in_sector(xmin, ymax):
+        return True
+    cx = (xmin + xmax) / 2.0
+    cy = (ymin + ymax) / 2.0
+    if in_sector(cx, cy):
+        return True
+    nx = min(max(ox, xmin), xmax)
+    ny = min(max(oy, ymin), ymax)
+    if in_sector(nx, ny):
+        return True
+    return False
+
+
+def computeBodyRectForStatePayload(state_payload: Dict[str, Any], length_default: float = 1.03, width_default: float = 0.745) -> Optional[Tuple[float, float, float, float]]:
+    try:
+        agv = state_payload.get("agv_position", state_payload.get("agvPosition", {})) or {}
+        px = float(agv.get("x", 0.0) or 0.0)
+        py = float(agv.get("y", 0.0) or 0.0)
+        raw_theta = agv.get("theta", None)
+        if raw_theta is None:
+            raw_theta = agv.get("orientation", 0.0)
+        theta = float(raw_theta or 0.0)
+        px_f = px + centerForwardOffsetM * math.sin(theta)
+        py_f = py + centerForwardOffsetM * math.cos(theta)
+        base_poly = compute_agv_base_polygon(float(length_default or 1.03), float(width_default or 0.745), (px_f, py_f, theta))
+        base_rect = compute_outer_bounding_rect(base_poly)
+        return base_rect
+    except Exception:
+        return None
+
+
+def computeBodyRectForVehicle(vehicle: Any) -> Optional[Tuple[float, float, float, float]]:
+    try:
+        st = getattr(vehicle, "state", None)
+        pos = getattr(st, "agv_position", None)
+        if not pos:
+            return None
+        base_length = 1.03
+        base_width = 0.745
+        try:
+            s_cfg = getattr(getattr(vehicle, "config", None), "settings", None)
+            if s_cfg is not None:
+                base_length = float(getattr(s_cfg, "length", base_length))
+                base_width = float(getattr(s_cfg, "width", base_width))
+        except Exception:
+            pass
+        theta = float(getattr(pos, "theta", 0.0) or 0.0)
+        px = float(getattr(pos, "x", 0.0) or 0.0)
+        py = float(getattr(pos, "y", 0.0) or 0.0)
+        px_f = px + centerForwardOffsetM * math.sin(theta)
+        py_f = py + centerForwardOffsetM * math.cos(theta)
+        base_poly = compute_agv_base_polygon(base_length, base_width, (px_f, py_f, theta))
+        base_rect = compute_outer_bounding_rect(base_poly)
+        return base_rect
+    except Exception:
+        return None
+
+
 class CollisionService:
     """
     碰撞检测服务骨架：周期性检测车辆外包络矩形重叠，并触发紧急停止与错误上报。
@@ -307,7 +390,7 @@ class CollisionService:
     def __init__(self, vehicles: Iterable[Any], tick_ms: int = 100, safety_margin: float = 0.1) -> None:
         self.vehicles = list(vehicles)
         self.tick_ms = int(tick_ms)
-        # safety_margin 保留为常量扩张（可选）；主要安全范围由 1.05 倍缩放确定
+        # safety_margin 保留为常量扩张（可选）；主要安全范围由 1.1 倍缩放确定
         self.safety_margin = float(safety_margin)
         self._stop = False
         # 记录因碰撞而触发的暂停序列号集合，用于恢复判断
@@ -344,37 +427,65 @@ class CollisionService:
     def detect_and_emit(self) -> None:
         rects: List[Tuple[float, float, float, float]] = []
         owners: List[Any] = []
+        poses: List[Tuple[float, float, float]] = []
+        lengths: List[float] = []
         for v in self.vehicles:
             try:
-                safe_rect = computeSafetyRectForVehicle(v, safeFactor=1.05)
+                safe_rect = computeSafetyRectForVehicle(v, safeFactor=1.1)
                 if safe_rect is None:
                     continue
-                # 如配置了常量安全边距，则叠加扩展（保证更保守）
                 if self.safety_margin > 0.0:
                     xmin, ymin, xmax, ymax = safe_rect
-                    # 以常量方式扩张
                     safe_rect = (xmin - self.safety_margin, ymin - self.safety_margin, xmax + self.safety_margin, ymax + self.safety_margin)
                 rects.append(safe_rect)
                 owners.append(v)
+                st = getattr(v, "state", None)
+                pos = getattr(st, "agv_position", None)
+                if pos is not None:
+                    x = float(getattr(pos, "x", 0.0) or 0.0)
+                    y = float(getattr(pos, "y", 0.0) or 0.0)
+                    th = float(getattr(pos, "theta", 0.0) or 0.0)
+                    poses.append((x, y, th))
+                else:
+                    poses.append((0.0, 0.0, 0.0))
+                try:
+                    s_cfg = getattr(getattr(v, "config", None), "settings", None)
+                    l_def = float(getattr(s_cfg, "length", self.length_default)) if s_cfg is not None else self.length_default
+                except Exception:
+                    l_def = self.length_default
+                lengths.append(l_def)
             except Exception:
                 pass
         overlapped_serials: set[str] = set()
         for i in range(len(rects)):
-            for j in range(i + 1, len(rects)):
-                if rects_overlap(rects[i], rects[j]):
+            # 计算 i 的车头雷达扇面
+            ori = compute_front_point(lengths[i], poses[i])
+            hth = poses[i][2]
+            for j in range(len(rects)):
+                if i == j:
+                    continue
+                if rect_intersects_front_sector(ori, hth, rects[j], fov_deg=70.0, radius=0.8):
                     self.issue_emergency_stop(owners[i])
-                    self.issue_emergency_stop(owners[j])
-                    self.push_collision_error(owners[i], owners[j])
-                    # 记录发生重叠的车辆序列号
                     try:
                         s1 = str(getattr(getattr(getattr(owners[i], "config", None), "vehicle", None), "serial_number", "") or "")
-                        s2 = str(getattr(getattr(getattr(owners[j], "config", None), "vehicle", None), "serial_number", "") or "")
                         if s1:
                             overlapped_serials.add(s1)
-                        if s2:
-                            overlapped_serials.add(s2)
                     except Exception:
                         pass
+        # 无重叠的车辆：清理集中状态中的碰撞错误，避免在无碰撞情况下持续上报
+        try:
+            for v in list(self.vehicles):
+                try:
+                    serial = str(getattr(getattr(getattr(v, "config", None), "vehicle", None), "serial_number", "") or "")
+                except Exception:
+                    serial = ""
+                if serial and (serial not in overlapped_serials):
+                    try:
+                        global_store.clear_collision_errors(serial)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         # 更新碰撞暂停集合
         try:
             self._collision_paused_serials |= overlapped_serials
@@ -389,6 +500,10 @@ class CollisionService:
                         serial = str(getattr(getattr(getattr(v, "config", None), "vehicle", None), "serial_number", "") or "")
                         if serial and serial in to_resume:
                             self.issue_resume(v)
+                            try:
+                                global_store.clear_collision_errors(serial)
+                            except Exception:
+                                pass
                     except Exception:
                         pass
                 # 从集合中移除已恢复的序列号
@@ -428,22 +543,5 @@ class CollisionService:
                         st.driving = False
             except Exception:
                 pass
-        except Exception:
-            pass
-    def push_collision_error(self, v1: Any, v2: Any) -> None:
-        try:
-            serial = getattr(getattr(v1, "config", None), "vehicle", None).serial_number
-            rt = global_store.get_runtime(serial)
-            # 错误码参考：docs/SimAGV错误代码.md 行 27（54231, Warning, Caution: robot is blocked）
-            payload = {
-                "code": 54231,
-                "level": "Warning",
-                "type": "Navigation",
-                "reason": "CollisionOverlapSafety",
-                "message": "Caution: robot is blocked",
-                "with": getattr(getattr(v2, "config", None), "vehicle", None).serial_number,
-                "descriptionCN": "注意机器人被阻挡",
-            }
-            global_store.set_error(serial, payload)
         except Exception:
             pass

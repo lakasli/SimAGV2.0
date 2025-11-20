@@ -1,61 +1,61 @@
 {
   "version": "2.0.0",
-  "headerId": 241,
-  "timestamp": "2025-11-19T11:58:01.335Z",
+  "headerId": 33,
+  "timestamp": "2025-11-20T03:56:02.328Z",
   "manufacturer": "SEER",
   "serialNumber": "AMB-01",
   "edges": [
     {
-      "edgeId": "LM303-LM304",
-      "sequenceId": 169,
-      "startNodeId": "LM303",
-      "endNodeId": "LM304",
+      "edgeId": "LM334-LM252",
+      "sequenceId": 128,
+      "startNodeId": "LM334",
+      "endNodeId": "LM252",
       "actions": [],
       "released": true
     },
     {
-      "edgeId": "LM304-LM305",
-      "sequenceId": 170,
-      "startNodeId": "LM304",
-      "endNodeId": "LM305",
+      "edgeId": "LM252-LM163",
+      "sequenceId": 129,
+      "startNodeId": "LM252",
+      "endNodeId": "LM163",
       "actions": [],
       "released": true
     },
     {
-      "edgeId": "LM305-PP619",
-      "sequenceId": 171,
-      "startNodeId": "LM305",
-      "endNodeId": "PP619",
+      "edgeId": "LM163-LM136",
+      "sequenceId": 130,
+      "startNodeId": "LM163",
+      "endNodeId": "LM136",
       "actions": [],
-      "released": true
+      "released": false
     }
   ],
   "nodes": [
     {
-      "nodeId": "LM303",
-      "sequenceId": 211,
+      "nodeId": "LM334",
+      "sequenceId": 155,
       "actions": [],
       "released": true
     },
     {
-      "nodeId": "LM304",
-      "sequenceId": 212,
+      "nodeId": "LM252",
+      "sequenceId": 156,
       "actions": [],
       "released": true
     },
     {
-      "nodeId": "LM305",
-      "sequenceId": 213,
+      "nodeId": "LM163",
+      "sequenceId": 157,
       "actions": [],
       "released": true
     },
     {
-      "nodeId": "PP619",
-      "sequenceId": 214,
+      "nodeId": "LM136",
+      "sequenceId": 158,
       "actions": [],
-      "released": true
+      "released": false
     }
   ],
-  "orderId": "AUTO176355347033100008511300",
-  "orderUpdateId": 242
+  "orderId": "AUTO176361093932900005879351",
+  "orderUpdateId": 803
 }

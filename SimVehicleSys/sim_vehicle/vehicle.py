@@ -256,6 +256,54 @@ class VehicleSimulator:
             rt = global_store.get_runtime(self.config.vehicle.serial_number)
             # 无错误时为空数组
             self.state.errors = list(getattr(rt, "errors", []))
+            try:
+                normalized: list[dict] = []
+                for e in list(self.state.errors or []):
+                    try:
+                        et = None
+                        if isinstance(e, dict):
+                            if e.get("errorType") is not None:
+                                et = e.get("errorType")
+                            elif e.get("code") is not None:
+                                et = e.get("code")
+                            elif e.get("type") is not None:
+                                et = e.get("type")
+                        lvl = None
+                        if isinstance(e, dict):
+                            lvl = e.get("errorLevel")
+                        name = None
+                        if isinstance(e, dict):
+                            name = e.get("errorName") or e.get("type")
+                        desc = None
+                        if isinstance(e, dict):
+                            desc = e.get("errorDescription") or e.get("message") or e.get("reason")
+                        ref = None
+                        if isinstance(e, dict):
+                            ref = e.get("errorReference")
+                            if ref is None:
+                                ref = e.get("errorReferences")
+                        item = {
+                            "errorType": "" if et is None else str(et),
+                            "errorLevel": str(lvl) if lvl is not None else "WARNING",
+                            "errorName": "" if name is None else str(name),
+                            "errorDescription": "" if desc is None else str(desc),
+                            "errorReference": ref if ref is not None else [],
+                        }
+                        normalized.append(item)
+                    except Exception:
+                        try:
+                            normalized.append({
+                                "errorType": "",
+                                "errorLevel": "WARNING",
+                                "errorName": "",
+                                "errorDescription": str(e),
+                                "errorReference": [],
+                            })
+                        except Exception:
+                            pass
+                self.state.errors = normalized
+            except Exception:
+                pass
             # 清洗 actionDescriptions 为空字符串
             try:
                 if isinstance(self.state.action_states, list):
@@ -449,7 +497,14 @@ class VehicleSimulator:
                 self.instant_actions = None
             except Exception:
                 pass
-            self._accept_order(order_request)
+            try:
+                cur_id = str(self.state.order_id or "")
+            except Exception:
+                cur_id = ""
+            if cur_id and str(order_request.order_id or "") == cur_id:
+                self._merge_order_update(order_request)
+            else:
+                self._accept_order(order_request)
         else:
             self._reject_order("Order update ID is lower than current")
 
@@ -562,20 +617,12 @@ class VehicleSimulator:
         try:
             if self.order and self.order.nodes:
                 ordered_nodes = sorted(list(self.order.nodes), key=lambda n: int(n.sequence_id))
-                # 若存在锁点（released=false），导航仅至第一个锁点的前一个站点
                 cutoff_idx = None
                 for i, n in enumerate(ordered_nodes):
                     if not bool(getattr(n, "released", True)):
                         cutoff_idx = max(0, i - 1)
                         break
-                if cutoff_idx is None:
-                    route_node_ids = [str(n.node_id) for n in ordered_nodes]
-                else:
-                    # 至少保留两个节点用于路径规划（起点->目标），否则抛错提示不可规划
-                    if cutoff_idx < 1:
-                        raise ValueError("Route locked at the first target; cannot plan navigation towards a locked first node")
-                    route_node_ids = [str(ordered_nodes[j].node_id) for j in range(cutoff_idx + 1)]
-                # 为路径规划选择有效的地图：优先 AGV 当前地图；失败时回退到首节点的 mapId；仍失败则回退到配置默认
+                candidates = ordered_nodes if cutoff_idx is None else ordered_nodes[:cutoff_idx + 1]
                 map_name = self.state.agv_position.map_id if self.state.agv_position else None
                 try:
                     _ = resolve_scene_path(map_name)
@@ -586,11 +633,334 @@ class VehicleSimulator:
                         map_name = fallback_map or self.config.settings.map_id
                     except Exception:
                         map_name = self.config.settings.map_id
+                vp = self.state.agv_position
+                anchor_seq = None
+                anchor_id = None
+                if vp:
+                    try:
+                        fp = resolve_scene_path(map_name)
+                    except Exception:
+                        fp = None
+                    best_d = None
+                    for n in candidates:
+                        if not bool(getattr(n, "released", True)):
+                            continue
+                        nx = None
+                        ny = None
+                        np = getattr(n, "node_position", None)
+                        if np is not None:
+                            try:
+                                nx = float(getattr(np, "x", None))
+                                ny = float(getattr(np, "y", None))
+                            except Exception:
+                                nx = None
+                                ny = None
+                        if (nx is None or ny is None) and fp is not None:
+                            try:
+                                pos = find_station_position(fp, str(getattr(n, "node_id", "") or ""))
+                                if pos is not None:
+                                    nx = float(pos[0])
+                                    ny = float(pos[1])
+                            except Exception:
+                                nx = None
+                                ny = None
+                        if nx is None or ny is None:
+                            continue
+                        try:
+                            d = (float(vp.x) - nx) ** 2 + (float(vp.y) - ny) ** 2
+                        except Exception:
+                            d = None
+                        if d is None:
+                            continue
+                        if (best_d is None) or (d < best_d):
+                            best_d = d
+                            anchor_seq = int(getattr(n, "sequence_id", 0) or 0)
+                            anchor_id = str(getattr(n, "node_id", "") or "")
+                if anchor_seq is not None and anchor_id:
+                    try:
+                        self.state.last_node_sequence_id = int(anchor_seq)
+                    except Exception:
+                        self.state.last_node_sequence_id = int(anchor_seq)
+                    try:
+                        self.state.last_node_id = str(anchor_id)
+                    except Exception:
+                        self.state.last_node_id = str(anchor_id)
+                route_node_ids = []
+                try:
+                    anchor = int(getattr(self.state, "last_node_sequence_id", 0) or 0)
+                except Exception:
+                    anchor = 0
+                start_found = False
+                for n in ordered_nodes:
+                    s = int(getattr(n, "sequence_id", 0) or 0)
+                    rid = str(getattr(n, "node_id", "") or "")
+                    if not rid:
+                        continue
+                    if not start_found:
+                        if s >= anchor:
+                            route_node_ids.append(rid)
+                            start_found = True
+                        continue
+                    if not bool(getattr(n, "released", True)):
+                        break
+                    route_node_ids.append(rid)
+                if len(route_node_ids) < 2:
+                    ids_all = [str(getattr(n, "node_id", "") or "") for n in ordered_nodes]
+                    if len(ids_all) >= 2:
+                        route_node_ids = ids_all
                 self.start_path_navigation_by_nodes(route_node_ids, map_name)
+                try:
+                    seq_anchor = int(getattr(self.state, "last_node_sequence_id", 0) or 0)
+                except Exception:
+                    seq_anchor = 0
+                if seq_anchor:
+                    try:
+                        self._prune_states_from_sequence(seq_anchor)
+                    except Exception:
+                        pass
         except Exception as e:
             print(f"order path navigation failed: {e}")
-            # 路径生成失败时回退导航标记，避免长时间处于运行态
             self.nav_running = False
+
+    def _merge_order_update(self, order_update: Order) -> None:
+        try:
+            self.order_id = order_update.order_id
+        except Exception:
+            pass
+        self.state.order_update_id = order_update.order_update_id
+        if not self.order:
+            self._accept_order(order_update)
+            return
+        try:
+            existing_nodes = {str(n.node_id): n for n in list(self.order.nodes or [])}
+        except Exception:
+            existing_nodes = {}
+        for n in list(order_update.nodes or []):
+            key = str(getattr(n, "node_id", "") or "")
+            if not key:
+                continue
+            prev = existing_nodes.get(key)
+            if prev is None:
+                existing_nodes[key] = n
+            else:
+                try:
+                    prev.released = bool(n.released)
+                except Exception:
+                    pass
+                try:
+                    seq_new = int(getattr(n, "sequence_id", getattr(prev, "sequence_id", 0)) or 0)
+                    prev.sequence_id = seq_new
+                except Exception:
+                    pass
+        try:
+            merged_nodes = sorted(list(existing_nodes.values()), key=lambda x: int(getattr(x, "sequence_id", 0) or 0))
+        except Exception:
+            merged_nodes = list(existing_nodes.values())
+        self.order.nodes = merged_nodes
+        try:
+            existing_edges = {}
+            for e in list(self.order.edges or []):
+                s = str(getattr(e, "start_node_id", "") or "")
+                t = str(getattr(e, "end_node_id", "") or "")
+                eid = str(getattr(e, "edge_id", "") or (f"{s}->{t}" if s and t else ""))
+                if eid:
+                    existing_edges[eid] = e
+            for e in list(order_update.edges or []):
+                s = str(getattr(e, "start_node_id", "") or "")
+                t = str(getattr(e, "end_node_id", "") or "")
+                eid = str(getattr(e, "edge_id", "") or (f"{s}->{t}" if s and t else ""))
+                if not eid:
+                    continue
+                prev = existing_edges.get(eid)
+                if prev is None:
+                    existing_edges[eid] = e
+                else:
+                    try:
+                        prev.released = bool(e.released)
+                    except Exception:
+                        pass
+                    try:
+                        prev.sequence_id = int(getattr(e, "sequence_id", getattr(prev, "sequence_id", 0)) or getattr(prev, "sequence_id", 0))
+                    except Exception:
+                        pass
+                    try:
+                        prev.max_speed = getattr(e, "max_speed", getattr(prev, "max_speed", None))
+                    except Exception:
+                        pass
+                    try:
+                        prev.rotation_allowed = getattr(e, "rotation_allowed", getattr(prev, "rotation_allowed", None))
+                    except Exception:
+                        pass
+                    try:
+                        prev.max_rotation_speed = getattr(e, "max_rotation_speed", getattr(prev, "max_rotation_speed", None))
+                    except Exception:
+                        pass
+                    try:
+                        prev.max_height = getattr(e, "max_height", getattr(prev, "max_height", None))
+                        prev.min_height = getattr(e, "min_height", getattr(prev, "min_height", None))
+                    except Exception:
+                        pass
+        except Exception:
+            existing_edges = {}
+        try:
+            merged_edges = sorted(list(existing_edges.values()), key=lambda x: int(getattr(x, "sequence_id", 0) or 0))
+        except Exception:
+            merged_edges = list(existing_edges.values())
+        self.order.edges = merged_edges
+        try:
+            by_id = {str(getattr(ns, "node_id", "") or ""): ns for ns in list(self.state.node_states or [])}
+        except Exception:
+            by_id = {}
+        for n in merged_nodes:
+            nid = str(getattr(n, "node_id", "") or "")
+            if not nid:
+                continue
+            st = by_id.get(nid)
+            if st is None:
+                try:
+                    self.state.node_states.append(NodeState(
+                        node_id=n.node_id,
+                        sequence_id=n.sequence_id,
+                        released=n.released,
+                        node_description=n.node_description,
+                        node_position=n.node_position,
+                    ))
+                except Exception:
+                    pass
+            else:
+                try:
+                    st.released = bool(n.released)
+                    st.sequence_id = int(getattr(n, "sequence_id", st.sequence_id) or st.sequence_id)
+                    st.node_description = getattr(n, "node_description", st.node_description)
+                    st.node_position = getattr(n, "node_position", st.node_position)
+                except Exception:
+                    pass
+        try:
+            by_eid = {}
+            for es in list(self.state.edge_states or []):
+                _id = str(getattr(es, "edge_id", "") or "")
+                if _id:
+                    by_eid[_id] = es
+                    try:
+                        if "->" in _id:
+                            parts = _id.split("->", 2)
+                            if len(parts) == 2:
+                                by_eid[f"{parts[0]}-{parts[1]}"] = es
+                        elif "-" in _id:
+                            parts = _id.split("-", 2)
+                            if len(parts) == 2:
+                                by_eid[f"{parts[0]}->{parts[1]}"] = es
+                    except Exception:
+                        pass
+        except Exception:
+            by_eid = {}
+        for e in merged_edges:
+            s = str(getattr(e, "start_node_id", "") or "")
+            t = str(getattr(e, "end_node_id", "") or "")
+            eid = str(getattr(e, "edge_id", "") or (f"{s}->{t}" if s and t else ""))
+            if not eid:
+                continue
+            st = by_eid.get(eid)
+            if st is None and s and t:
+                try:
+                    st = by_eid.get(f"{s}->{t}") or by_eid.get(f"{s}-{t}")
+                except Exception:
+                    st = None
+            if st is None:
+                try:
+                    self.state.edge_states.append(EdgeState(
+                        edge_id=eid,
+                        sequence_id=e.sequence_id,
+                        released=e.released,
+                        edge_description=e.edge_description,
+                        trajectory=e.trajectory,
+                        max_speed=e.max_speed,
+                        rotation_allowed=e.rotation_allowed,
+                        max_rotation_speed=e.max_rotation_speed,
+                        max_height=e.max_height,
+                        min_height=e.min_height,
+                    ))
+                except Exception:
+                    pass
+            else:
+                try:
+                    st.released = bool(e.released)
+                    st.sequence_id = int(getattr(e, "sequence_id", st.sequence_id) or st.sequence_id)
+                    st.edge_description = getattr(e, "edge_description", st.edge_description)
+                    st.trajectory = getattr(e, "trajectory", st.trajectory)
+                    st.max_speed = getattr(e, "max_speed", st.max_speed)
+                    st.rotation_allowed = getattr(e, "rotation_allowed", st.rotation_allowed)
+                    st.max_rotation_speed = getattr(e, "max_rotation_speed", st.max_rotation_speed)
+                    st.max_height = getattr(e, "max_height", st.max_height)
+                    st.min_height = getattr(e, "min_height", st.min_height)
+                except Exception:
+                    pass
+        try:
+            self.state.edge_states = sorted(list(self.state.edge_states or []), key=lambda x: int(getattr(x, "sequence_id", 0) or 0))
+            self.nav_edge_speed_caps = {}
+            for e in list(self.order.edges or []):
+                ms = getattr(e, "max_speed", None)
+                if ms is None:
+                    continue
+                s = str(getattr(e, "start_node_id", "") or "")
+                t = str(getattr(e, "end_node_id", "") or "")
+                eid = str(getattr(e, "edge_id", "") or (f"{s}-{t}" if s and t else ""))
+                if s and t:
+                    self.nav_edge_speed_caps[f"{s}->{t}"] = float(ms)
+                    self.nav_edge_speed_caps[f"{s}-{t}"] = float(ms)
+                if eid:
+                    self.nav_edge_speed_caps[eid] = float(ms)
+        except Exception:
+            self.nav_edge_speed_caps = None
+        try:
+            ordered_nodes = sorted(list(self.order.nodes or []), key=lambda n: int(getattr(n, "sequence_id", 0) or 0))
+        except Exception:
+            ordered_nodes = list(self.order.nodes or [])
+        route_node_ids = []
+        try:
+            anchor_seq = int(getattr(self.state, "last_node_sequence_id", 0) or 0)
+        except Exception:
+            anchor_seq = 0
+        start_found = False
+        for n in ordered_nodes:
+            s = int(getattr(n, "sequence_id", 0) or 0)
+            rid = str(getattr(n, "node_id", "") or "")
+            if not rid:
+                continue
+            if not start_found:
+                if s >= anchor_seq:
+                    route_node_ids.append(rid)
+                    start_found = True
+                continue
+            if not bool(getattr(n, "released", True)):
+                break
+            route_node_ids.append(rid)
+        if len(route_node_ids) < 2:
+            try:
+                ids_all = [str(getattr(n, "node_id", "") or "") for n in ordered_nodes]
+            except Exception:
+                ids_all = []
+            if len(ids_all) >= 2:
+                route_node_ids = ids_all
+        map_name = self.state.agv_position.map_id if self.state.agv_position else None
+        try:
+            _ = resolve_scene_path(map_name)
+        except Exception:
+            try:
+                first_np = ordered_nodes[0].node_position if ordered_nodes and ordered_nodes[0] else None
+                fallback_map = getattr(first_np, "map_id", None) if first_np else None
+                map_name = fallback_map or self.config.settings.map_id
+            except Exception:
+                map_name = self.config.settings.map_id
+        try:
+            self.start_path_navigation_by_nodes(route_node_ids, map_name)
+        except Exception:
+            pass
+        try:
+            last_seq = int(getattr(self.state, "last_node_sequence_id", 0) or 0)
+            self.state.node_states = [ns for ns in (self.state.node_states or []) if int(getattr(ns, "sequence_id", 0) or 0) >= last_seq]
+        except Exception:
+            pass
 
     def _process_order_nodes(self) -> None:
         for node in list(self.order.nodes):
@@ -1252,7 +1622,7 @@ class VehicleSimulator:
         scale = max(0.0001, float(self.config.settings.sim_time_scale))
         dt = max(1e-3, float(getattr(self, "_last_delta_seconds", 0.05)))
         # 使用节点允许的 XY 偏差作为到站阈值
-        xy_eps = 0.1
+        xy_eps = 0.15
         try:
             if np and getattr(np, "allowed_deviation_xy", None) is not None:
                 xy_eps = float(np.allowed_deviation_xy)  # type: ignore[attr-defined]
@@ -1279,7 +1649,7 @@ class VehicleSimulator:
                 capped_speed = min(capped_speed, float(getattr(prev_edge, "max_speed")))
         except Exception:
             pass
-        should_arrive = distance < (float(capped_speed) * scale * dt) + xy_eps
+        should_arrive = distance <= max(xy_eps, (float(capped_speed) * scale * dt))
         next_node_id = next_node.node_id
         next_node_seq = next_node.sequence_id
         applyTranslateStepInSim(self, float(updated_x), float(updated_y))
@@ -1308,18 +1678,15 @@ class VehicleSimulator:
                 self.state.node_states.pop(0)
             if self.state.edge_states:
                 self.state.edge_states.pop(0)
-            # 使用地图 points.name 作为 lastNodeId（若可解析）
             try:
-                map_name = self.nav_map_name or (self.state.agv_position.map_id if self.state.agv_position else None)
-                if map_name:
-                    fp = resolve_scene_path(map_name)
-                    label = find_point_name_by_id(fp, str(next_node_id))
-                    self.state.last_node_id = label or str(next_node_id)
-                else:
-                    self.state.last_node_id = str(next_node_id)
+                self.state.last_node_id = str(next_node_id)
             except Exception:
                 self.state.last_node_id = str(next_node_id)
             self.state.last_node_sequence_id = next_node_seq
+            try:
+                self._prune_states_from_sequence(int(next_node_seq))
+            except Exception:
+                pass
 
     def _get_next_node(self) -> Optional[NodeState]:
         last_idx = 0
@@ -1383,16 +1750,10 @@ class VehicleSimulator:
             try:
                 target_id = self.nav_target_station
                 if target_id:
-                    # 导航结束时优先将 lastNodeId 设为站点名称（如可解析）；并用解析后的名称更新序列号
                     try:
-                        map_name = self.nav_map_name or (self.state.agv_position.map_id if self.state.agv_position else None)
-                        label = None
-                        if map_name:
-                            fp = resolve_scene_path(map_name)
-                            label = find_point_name_by_id(fp, str(target_id))
-                        self.state.last_node_id = label or str(target_id)
+                        self.state.last_node_id = str(target_id)
                         try:
-                            match_key = label or str(target_id)
+                            match_key = str(target_id)
                             ns = next((n for n in self.state.node_states if str(n.node_id) == str(match_key)), None)
                             if ns:
                                 self.state.last_node_sequence_id = ns.sequence_id
@@ -1586,19 +1947,12 @@ class VehicleSimulator:
             try:
                 target_id = self.nav_target_station
                 if target_id:
-                    # 完成导航时也将 lastNodeId 设为站点名称（如可解析）
                     try:
-                        map_name = self.nav_map_name or (self.state.agv_position.map_id if self.state.agv_position else None)
-                        if map_name:
-                            fp = resolve_scene_path(map_name)
-                            label = find_point_name_by_id(fp, str(target_id))
-                            self.state.last_node_id = label or str(target_id)
-                        else:
-                            self.state.last_node_id = str(target_id)
+                        self.state.last_node_id = str(target_id)
                     except Exception:
                         self.state.last_node_id = str(target_id)
                     try:
-                        match_key = label or str(target_id)
+                        match_key = str(target_id)
                         ns = next((n for n in self.state.node_states if str(n.node_id) == str(match_key)), None)
                         if ns:
                             self.state.last_node_sequence_id = ns.sequence_id
@@ -1768,7 +2122,6 @@ class VehicleSimulator:
         self.nav_map_name = map_name
 
     def _detect_arrival_and_prune_states(self) -> None:
-        """导航过程中检测是否接近下一个订单节点，并进行状态裁剪。"""
         if not self.order or not self.state or not self.state.agv_position:
             return
         try:
@@ -1778,12 +2131,11 @@ class VehicleSimulator:
         if not ordered_nodes:
             return
         cur_seq = int(self.state.last_node_sequence_id or 0)
-        next_node = None
-        # 仅考虑当前导航路由中的节点，并跳过锁定（released=false）的节点
         try:
             route_ids = set(self.nav_route_node_ids or [])
         except Exception:
             route_ids = set(self.nav_route_node_ids or [])
+        candidates = []
         for n in ordered_nodes:
             try:
                 s = int(getattr(n, "sequence_id", 0) or 0)
@@ -1791,69 +2143,67 @@ class VehicleSimulator:
                 s = 0
             if s <= cur_seq:
                 continue
-            # 若存在路由约束，则仅在路由节点集合内进行到站检测
             nid = str(getattr(n, "node_id", "") or "")
             if route_ids and nid not in route_ids:
                 continue
-            # 锁点不参与到站推进，等待后续订单解锁
             try:
                 if not bool(getattr(n, "released", True)):
-                    # 命中锁点则直接停止到站检测（不向后跳过锁点）
-                    next_node = None
                     break
             except Exception:
                 pass
-            next_node = n
-            break
-        if not next_node:
+            candidates.append(n)
+        if not candidates:
             return
-        next_node_id = str(getattr(next_node, "node_id", "") or "")
-        if not next_node_id:
-            return
-        # 站点位置解析
-        pos = None
-        fp = None
-        pos = None
+        pick_node = None
         try:
             map_name = self.nav_map_name or (self.state.agv_position.map_id if self.state.agv_position else None)
             fp = resolve_scene_path(map_name)
-            pos = find_station_position(fp, next_node_id)
         except Exception:
-            # 回退到节点自身的地图（nodePosition.mapId），提高首单成功率
+            fp = None
+        for n in candidates:
+            nid = str(getattr(n, "node_id", "") or "")
+            if not nid:
+                continue
+            pos = None
             try:
-                np_next = getattr(next_node, "node_position", None)
-                fallback_map = getattr(np_next, "map_id", None) if np_next else None
-                if fallback_map:
-                    fp = resolve_scene_path(fallback_map)
-                    pos = find_station_position(fp, next_node_id)
+                if fp is not None:
+                    pos = find_station_position(fp, nid)
             except Exception:
                 pos = None
-        if not pos:
+            if not pos:
+                try:
+                    np_next = getattr(n, "node_position", None)
+                    fallback_map = getattr(np_next, "map_id", None) if np_next else None
+                    if fallback_map:
+                        fp2 = resolve_scene_path(fallback_map)
+                        pos = find_station_position(fp2, nid)
+                except Exception:
+                    pos = None
+            if not pos:
+                continue
+            arrive_threshold = 0.1
+            try:
+                np_next = getattr(n, "node_position", None)
+                if np_next and getattr(np_next, "allowed_deviation_xy", None) is not None:
+                    arrive_threshold = float(getattr(np_next, "allowed_deviation_xy"))
+            except Exception:
+                pass
+            dx = float(self.state.agv_position.x) - float(pos[0])
+            dy = float(self.state.agv_position.y) - float(pos[1])
+            if dx * dx + dy * dy <= arrive_threshold * arrive_threshold:
+                pick_node = n
+                break
+        if not pick_node:
             return
-        # 距离阈值判定（find_station位置返回 (x, y) 元组），支持节点允许偏差
-        arrive_threshold = 0.02
         try:
-            np_next = getattr(next_node, "node_position", None)
-            if np_next and getattr(np_next, "allowed_deviation_xy", None) is not None:
-                arrive_threshold = float(getattr(np_next, "allowed_deviation_xy"))
+            self.state.last_node_id = str(getattr(pick_node, "node_id", "") or "")
         except Exception:
-            pass
-        dx = float(self.state.agv_position.x) - float(pos[0])
-        dy = float(self.state.agv_position.y) - float(pos[1])
-        if dx * dx + dy * dy > arrive_threshold * arrive_threshold:
-            return
-        # 到站：优先用地图 points.name 作为 lastNodeId（如可解析），否则回退为节点 ID
+            self.state.last_node_id = str(getattr(pick_node, "node_id", "") or "")
         try:
-            label = find_point_name_by_id(fp, str(next_node_id)) if fp else None
-            self.state.last_node_id = label or str(next_node_id)
-        except Exception:
-            self.state.last_node_id = str(next_node_id)
-        try:
-            next_seq = int(getattr(next_node, "sequence_id", 0) or 0)
+            next_seq = int(getattr(pick_node, "sequence_id", 0) or 0)
         except Exception:
             next_seq = cur_seq
         self.state.last_node_sequence_id = next_seq
-        # 状态裁剪：保留当前及之后，删除之前已完成的节点与边
         self._prune_states_from_sequence(next_seq)
 
     def _prune_states_from_sequence(self, seq: int) -> None:
@@ -1866,33 +2216,38 @@ class VehicleSimulator:
         except Exception:
             pass
         try:
-            anchor = str(getattr(self.state, "last_node_id", "") or "")
-            if not anchor:
-                m = next((n for n in (self.state.node_states or []) if int(getattr(n, "sequence_id", 0) or 0) == seq_val), None)
-                anchor = str(getattr(m, "node_id", "") or "") if m else ""
             original_edges = list(self.state.edge_states or [])
-            filtered = list(original_edges)
-            if anchor:
-                prefixed = [es for es in original_edges if str(getattr(es, "edge_id", "") or "").startswith(f"{anchor}-") or str(getattr(es, "edge_id", "") or "").startswith(f"{anchor}->")]
-                if prefixed:
-                    filtered = prefixed
-                else:
-                    order_edges = list(getattr(getattr(self, "order", None), "edges", []) or [])
-                    allowed_ids = set()
-                    for e in order_edges:
-                        s = str(getattr(e, "start_node_id", "") or "")
-                        t = str(getattr(e, "end_node_id", "") or "")
+            order_edges = list(getattr(getattr(self, "order", None), "edges", []) or [])
+            node_seq_map = {}
+            try:
+                node_seq_map = {str(getattr(n, "node_id", "") or ""): int(getattr(n, "sequence_id", 0) or 0) for n in list(getattr(getattr(self, "order", None), "nodes", []) or [])}
+            except Exception:
+                node_seq_map = {}
+            allowed_ids = set()
+            try:
+                for e in order_edges:
+                    s = str(getattr(e, "start_node_id", "") or "")
+                    t = str(getattr(e, "end_node_id", "") or "")
+                    end_seq = node_seq_map.get(t, None)
+                    if end_seq is None:
+                        try:
+                            end_seq = int(getattr(e, "sequence_id", 0) or 0)
+                        except Exception:
+                            end_seq = None
+                    if end_seq is not None and int(end_seq) > seq_val:
                         eid = str(getattr(e, "edge_id", "") or "")
-                        if s == anchor:
-                            if eid:
-                                allowed_ids.add(eid)
-                            if s and t:
-                                allowed_ids.add(f"{s}->{t}")
-                                allowed_ids.add(f"{s}-{t}")
-                    if allowed_ids:
-                        filtered = [es for es in original_edges if str(getattr(es, "edge_id", "") or "") in allowed_ids]
-                    if not filtered:
-                        filtered = [es for es in original_edges if int(getattr(es, "sequence_id", 0) or 0) >= seq_val]
+                        if eid:
+                            allowed_ids.add(eid)
+                        if s and t:
+                            allowed_ids.add(f"{s}->{t}")
+                            allowed_ids.add(f"{s}-{t}")
+            except Exception:
+                allowed_ids = set()
+            filtered = None
+            if allowed_ids:
+                filtered = [es for es in original_edges if str(getattr(es, "edge_id", "") or "") in allowed_ids]
+            if filtered is None or not filtered:
+                filtered = [es for es in original_edges if int(getattr(es, "sequence_id", 0) or 0) > seq_val]
             self.state.edge_states = filtered
         except Exception:
             pass

@@ -235,7 +235,7 @@ def _validate_order(sim_vehicle: Any, order: Order) -> None:
         if not n.node_position.map_id:
             n.node_position.map_id = current_map
 
-    # 严格校验：订单中的 nodePosition.mapId 必须与仿真车当前加载的地图一致
+    # 兼容校验：若节点 mapId 与当前地图不同，允许以当前地图为准进行解析（不拒单）
     try:
         cfg = getattr(sim_vehicle, "config", None)
         settings = getattr(cfg, "settings", None)
@@ -247,20 +247,15 @@ def _validate_order(sim_vehicle: Any, order: Order) -> None:
         np = getattr(n, "node_position", None)
         if np is None:
             continue
-        node_map_name = canonicalize_map_id(getattr(np, "map_id", None))
+        try:
+            node_map_name = canonicalize_map_id(getattr(np, "map_id", None))
+        except Exception:
+            node_map_name = expected_map_name
         if node_map_name != expected_map_name:
-            # 上报错误 90012 并拒绝执行订单
             try:
-                serial = str(getattr(getattr(getattr(sim_vehicle, "config", None), "vehicle", None), "serial_number", "") or "")
-                emit_error(90012, {
-                    "serial_number": serial,
-                    "expected_map": expected_map_name,
-                    "provided_map": node_map_name,
-                    "node_id": str(getattr(n, "node_id", "") or ""),
-                })
+                np.map_id = expected_map_name
             except Exception:
                 pass
-            raise ValueError("order's nodePosition not in map")
 
     # 补充协议约束的骨架校验与规范化
     _enforce_node_actions_blocking_hard(order)

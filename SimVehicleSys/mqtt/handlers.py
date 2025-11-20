@@ -1,6 +1,7 @@
 from __future__ import annotations
 import threading
 import time
+import math
 from typing import List
 
 import paho.mqtt.client as mqtt
@@ -19,6 +20,8 @@ from SimVehicleSys.world_manager import (
     computeSafetyRectForVehicle,
     computeSafetyRectForStatePayload,
     rects_overlap,
+    rect_intersects_front_sector,
+    computeBodyRectForStatePayload,
 )
 from SimVehicleSys.sim_vehicle.state_manager import global_store
 
@@ -305,45 +308,66 @@ class MqttHandler:
             except Exception:
                 pass
             try:
-                # 自身安全包围盒
-                my_rect = None
+                my_safe_rect = None
                 try:
-                    my_rect = computeSafetyRectForVehicle(self.sim, safeFactor=1.05)
+                    my_safe_rect = computeSafetyRectForVehicle(self.sim, safeFactor=1.1)
                 except Exception:
-                    my_rect = None
-                if my_rect is None:
+                    my_safe_rect = None
+                if my_safe_rect is None:
                     time.sleep(eff_sleep_s)
                     continue
                 # 拷贝对等状态快照，避免长锁
                 with self._peer_states_lock:
                     peers = list(self._peer_states.items())
                 any_overlap = False
+                any_block = False
+                try:
+                    my_pos = getattr(self.sim.state, "agv_position", None)
+                    my_theta = float(getattr(my_pos, "theta", 0.0) or 0.0) if my_pos else 0.0
+                    my_length = float(getattr(self.config.settings, "length", 1.03))
+                    origin_x = float(getattr(my_pos, "x", 0.0) or 0.0) if my_pos else 0.0
+                    origin_y = float(getattr(my_pos, "y", 0.0) or 0.0) if my_pos else 0.0
+                    my_front_origin = (
+                        origin_x + (my_length / 2.0) * math.sin(my_theta),
+                        origin_y + (my_length / 2.0) * math.cos(my_theta),
+                    )
+                except Exception:
+                    my_theta = 0.0
+                    my_front_origin = (0.0, 0.0)
                 for peer_serial, peer_state in peers:
                     try:
-                        peer_rect = computeSafetyRectForStatePayload(peer_state, length_default=length_default, width_default=width_default, safeFactor=1.05)
-                        if not peer_rect:
+                        peer_safe_rect = computeSafetyRectForStatePayload(peer_state, length_default=length_default, width_default=width_default, safeFactor=1.1)
+                        if not peer_safe_rect:
                             continue
-                        if rects_overlap(my_rect, peer_rect):
+                        if rects_overlap(my_safe_rect, peer_safe_rect):
                             any_overlap = True
-                            # 触发本机急停与错误上报（54231）
                             try:
                                 st = getattr(self.sim, "state", None)
                                 if st:
                                     st.driving = False
                                 setattr(self.sim, "nav_paused", True)
-                                # 标记由碰撞导致的暂停，用于后续自动恢复
+                                self._collision_paused = True
+                            except Exception:
+                                pass
+                        peer_body_rect = computeBodyRectForStatePayload(peer_state, length_default=length_default, width_default=width_default)
+                        if peer_body_rect and rect_intersects_front_sector(my_front_origin, my_theta, peer_body_rect, fov_deg=70.0, radius=0.8):
+                            any_block = True
+                            try:
+                                st = getattr(self.sim, "state", None)
+                                if st:
+                                    st.driving = False
+                                setattr(self.sim, "nav_paused", True)
                                 self._collision_paused = True
                             except Exception:
                                 pass
                             try:
                                 payload_err = {
-                                    "code": 54231,
-                                    "level": "Warning",
-                                    "type": "Navigation",
-                                    "reason": "CollisionOverlapSafety",
-                                    "message": "Caution: robot is blocked",
+                                    "errorType": 54231,
+                                    "errorLevel": "Warning",
+                                    "errorName": "robotBlocked",
+                                    "errorDescription": "Caution: robot is blocked",
                                     "with": peer_serial,
-                                    "descriptionCN": "注意机器人被阻挡",
+                                    "reason": "FrontLidarBlockedBody",
                                 }
                                 my_serial = str(self.config.vehicle.serial_number)
                                 global_store.set_error(my_serial, payload_err)
@@ -351,22 +375,28 @@ class MqttHandler:
                                 pass
                     except Exception:
                         pass
-                # 恢复逻辑：若此前因碰撞暂停且当前不存在任何重叠，则恢复为可行驶/可接单
+                # 恢复逻辑：当当前不存在任何重叠时，恢复并清理碰撞错误
                 try:
-                    if self._collision_paused and not any_overlap:
-                        # 清除暂停标记，仅恢复由碰撞导致的暂停
-                        self._collision_paused = False
+                    if not any_overlap and not any_block:
+                        # 若此前由碰撞触发过暂停，则解除暂停并按导航状态恢复 driving
+                        if self._collision_paused:
+                            self._collision_paused = False
+                            try:
+                                self.sim.nav_paused = False
+                                self.sim.state.paused = False
+                            except Exception:
+                                pass
+                            try:
+                                if getattr(self.sim, "nav_running", False):
+                                    self.sim.state.driving = True
+                                else:
+                                    self.sim.state.driving = False
+                            except Exception:
+                                pass
+                        # 无论是否曾标记暂停，只要当前无重叠都清理 54231 等碰撞错误
                         try:
-                            self.sim.nav_paused = False
-                            self.sim.state.paused = False
-                        except Exception:
-                            pass
-                        # 若导航仍在运行，则恢复 driving；否则保持 driving=False，但此时可接单
-                        try:
-                            if getattr(self.sim, "nav_running", False):
-                                self.sim.state.driving = True
-                            else:
-                                self.sim.state.driving = False
+                            my_serial = str(self.config.vehicle.serial_number)
+                            global_store.clear_collision_errors(my_serial)
                         except Exception:
                             pass
                 except Exception:

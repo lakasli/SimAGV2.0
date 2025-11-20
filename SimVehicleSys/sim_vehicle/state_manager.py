@@ -248,6 +248,33 @@ class AGVStateStore:
                     rt.errors = rt.errors[-20:]  # type: ignore[attr-defined]
             except Exception:
                 pass
+
+    def clear_collision_errors(self, serial: str) -> Optional[AGVRuntime]:
+        with self._lock:
+            rt = self._ensure_runtime(serial)
+            try:
+                errs = getattr(rt, "errors", None)
+                if errs:
+                    def _is_collision(e: Dict[str, Any]) -> bool:
+                        try:
+                            if e.get("errorType") is not None and str(e.get("errorType")) == "54231":
+                                return True
+                            if e.get("code") is not None and str(e.get("code")) == "54231":
+                                return True
+                            if str(e.get("errorName", "")).lower() == "robotblocked":
+                                return True
+                            if str(e.get("reason", "")) == "CollisionOverlapSafety":
+                                return True
+                            desc = e.get("errorDescription") or e.get("message") or e.get("reason")
+                            if desc and ("robot is blocked" in str(desc).lower()):
+                                return True
+                        except Exception:
+                            return False
+                        return False
+                    rt.errors = [e for e in errs if not _is_collision(e)]  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            return rt
             rt.last_update = datetime.utcnow()
             return rt
 

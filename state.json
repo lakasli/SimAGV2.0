@@ -1,47 +1,95 @@
 {
-  "headerId": 938,
-  "timestamp": "2025-11-19T11:58:21.393Z",
+  "headerId": 4707,
+  "timestamp": "2025-11-20T03:25:35.538Z",
   "version": "2.0.0",
   "manufacturer": "SEER",
   "serialNumber": "AMB-01",
-  "driving": false,
+  "driving": true,
   "operatingMode": "AUTOMATIC",
   "nodeStates": [
     {
-      "nodeId": "LM72",
-      "sequenceId": 208,
+      "nodeId": "AP554",
+      "sequenceId": 103,
       "released": true,
       "nodeDescription": "",
       "nodePosition": null,
       "rotationAllowed": false
     },
     {
-      "nodeId": "LM79",
-      "sequenceId": 209,
+      "nodeId": "LM632",
+      "sequenceId": 104,
       "released": true,
       "nodeDescription": "",
       "nodePosition": null,
       "rotationAllowed": false
     },
     {
-      "nodeId": "LM373",
-      "sequenceId": 210,
+      "nodeId": "LM549",
+      "sequenceId": 105,
       "released": true,
       "nodeDescription": "",
       "nodePosition": null,
       "rotationAllowed": false
     },
     {
-      "nodeId": "LM303",
-      "sequenceId": 211,
+      "nodeId": "LM548",
+      "sequenceId": 106,
       "released": true,
       "nodeDescription": "",
       "nodePosition": null,
       "rotationAllowed": false
     },
     {
-      "nodeId": "LM304",
-      "sequenceId": 212,
+      "nodeId": "LM547",
+      "sequenceId": 107,
+      "released": true,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    },
+    {
+      "nodeId": "LM546",
+      "sequenceId": 108,
+      "released": true,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    },
+    {
+      "nodeId": "LM545",
+      "sequenceId": 109,
+      "released": true,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    },
+    {
+      "nodeId": "LM533",
+      "sequenceId": 110,
+      "released": true,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    },
+    {
+      "nodeId": "LM532",
+      "sequenceId": 111,
+      "released": true,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    },
+    {
+      "nodeId": "LM334",
+      "sequenceId": 112,
+      "released": true,
+      "nodeDescription": "",
+      "nodePosition": null,
+      "rotationAllowed": false
+    },
+    {
+      "nodeId": "LM252",
+      "sequenceId": 113,
       "released": false,
       "nodeDescription": "",
       "nodePosition": null,
@@ -50,8 +98,8 @@
   ],
   "edgeStates": [
     {
-      "edgeId": "LM72-LM79",
-      "sequenceId": 165,
+      "edgeId": "AP554-LM632",
+      "sequenceId": 82,
       "released": true,
       "edgeDescription": "",
       "trajectory": null,
@@ -62,8 +110,8 @@
       "minHeight": null
     },
     {
-      "edgeId": "LM79-LM373",
-      "sequenceId": 166,
+      "edgeId": "LM632-LM549",
+      "sequenceId": 83,
       "released": true,
       "edgeDescription": "",
       "trajectory": null,
@@ -74,8 +122,8 @@
       "minHeight": null
     },
     {
-      "edgeId": "LM373-LM303",
-      "sequenceId": 167,
+      "edgeId": "LM549-LM548",
+      "sequenceId": 84,
       "released": true,
       "edgeDescription": "",
       "trajectory": null,
@@ -86,8 +134,80 @@
       "minHeight": null
     },
     {
-      "edgeId": "LM303-LM304",
-      "sequenceId": 168,
+      "edgeId": "LM548-LM547",
+      "sequenceId": 85,
+      "released": true,
+      "edgeDescription": "",
+      "trajectory": null,
+      "maxSpeed": null,
+      "rotationAllowed": false,
+      "maxRotationSpeed": null,
+      "maxHeight": null,
+      "minHeight": null
+    },
+    {
+      "edgeId": "LM547-LM546",
+      "sequenceId": 86,
+      "released": true,
+      "edgeDescription": "",
+      "trajectory": null,
+      "maxSpeed": null,
+      "rotationAllowed": false,
+      "maxRotationSpeed": null,
+      "maxHeight": null,
+      "minHeight": null
+    },
+    {
+      "edgeId": "LM546-LM545",
+      "sequenceId": 88,
+      "released": true,
+      "edgeDescription": "",
+      "trajectory": null,
+      "maxSpeed": null,
+      "rotationAllowed": false,
+      "maxRotationSpeed": null,
+      "maxHeight": null,
+      "minHeight": null
+    },
+    {
+      "edgeId": "LM545-LM533",
+      "sequenceId": 89,
+      "released": true,
+      "edgeDescription": "",
+      "trajectory": null,
+      "maxSpeed": null,
+      "rotationAllowed": false,
+      "maxRotationSpeed": null,
+      "maxHeight": null,
+      "minHeight": null
+    },
+    {
+      "edgeId": "LM533-LM532",
+      "sequenceId": 91,
+      "released": true,
+      "edgeDescription": "",
+      "trajectory": null,
+      "maxSpeed": null,
+      "rotationAllowed": false,
+      "maxRotationSpeed": null,
+      "maxHeight": null,
+      "minHeight": null
+    },
+    {
+      "edgeId": "LM532-LM334",
+      "sequenceId": 92,
+      "released": true,
+      "edgeDescription": "",
+      "trajectory": null,
+      "maxSpeed": null,
+      "rotationAllowed": false,
+      "maxRotationSpeed": null,
+      "maxHeight": null,
+      "minHeight": null
+    },
+    {
+      "edgeId": "LM334-LM252",
+      "sequenceId": 93,
       "released": false,
       "edgeDescription": "",
       "trajectory": null,
@@ -98,15 +218,15 @@
       "minHeight": null
     }
   ],
-  "lastNodeId": "LM303",
-  "orderId": "AUTO176355347033100008511300",
-  "orderUpdateId": 241,
-  "lastNodeSequenceId": 211,
+  "lastNodeId": "AP554",
+  "orderId": "AUTO176360912134000006505350",
+  "orderUpdateId": 793,
+  "lastNodeSequenceId": 25,
   "actionStates": [],
   "information": [],
   "loads": [],
   "batteryState": {
-    "batteryCharge": 98.16064387162523,
+    "batteryCharge": 87.8480454027655,
     "batteryVoltage": 50,
     "batteryHealth": 100,
     "charging": false,
@@ -119,9 +239,9 @@
   "paused": false,
   "newBaseRequest": false,
   "agvPosition": {
-    "x": -1.198,
-    "y": -14.171237092279425,
-    "theta": 1.5707963267948966,
+    "x": -1.118827693487653,
+    "y": -32.68333369952765,
+    "theta": 0.0035398082238908835,
     "mapId": "test1",
     "mapDescription": "",
     "positionInitialized": true,
@@ -129,8 +249,8 @@
     "deviationRange": 0
   },
   "velocity": {
-    "vx": 0,
-    "vy": 0,
+    "vx": 0.08473895129340643,
+    "vy": -0.852468244706368,
     "omega": 0
   },
   "zoneSetId": "test1",
