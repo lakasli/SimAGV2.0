@@ -47,8 +47,14 @@ def _parse_actions(arr: Optional[Iterable[JsonDict]]) -> List[Action]:
     if not arr:
         return actions
     for a in arr:
+        atype_raw = str(_get(a, "actionType", default=""))
+        at_l = atype_raw.strip().lower()
+        if at_l in ("pick", "jackload"):
+            atype_raw = "pick"
+        elif at_l in ("drop", "jackunload"):
+            atype_raw = "drop"
         actions.append(Action(
-            action_type=str(_get(a, "actionType", default="")),
+            action_type=atype_raw,
             action_id=str(_get(a, "actionId", default="")),
             blocking_type=_to_blocking_type(_get(a, "blockingType", default=None)),
             action_description=_get(a, "actionDescription", default=None),

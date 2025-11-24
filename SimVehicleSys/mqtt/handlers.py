@@ -16,13 +16,6 @@ from SimVehicleSys.sim_vehicle.time_manager import SimClock
 from SimVehicleSys.protocol.vda_2_0_0.order import Order
 from SimVehicleSys.protocol.vda_2_0_0.instant_actions import InstantActions
 from SimVehicleSys.protocol.vda_2_0_0.action import Action, ActionParameter, BlockingType
-from SimVehicleSys.world_manager import (
-    computeSafetyRectForVehicle,
-    computeSafetyRectForStatePayload,
-    rects_overlap,
-    rect_intersects_front_sector,
-    computeBodyRectForStatePayload,
-)
 from SimVehicleSys.sim_vehicle.state_manager import global_store
 
 
@@ -34,14 +27,8 @@ class MqttHandler:
         self.client.on_message = self._on_message
         self._battery_manager = BatteryManager(self.sim, self.config)
         self._clock = SimClock(self.sim, self.config, self._battery_manager, tick_ms=50)
-        # 对等状态缓存：接收其他 AGV 的 MQTT state
-        self._peer_states_lock = threading.Lock()
-        self._peer_states: dict[str, dict] = {}
-        # 碰撞检测线程控制
-        self._collision_thread: threading.Thread | None = None
-        self._collision_stop = False
-        # 由本地碰撞检测触发的暂停标记，仅用于恢复判定，避免干扰其它暂停来源
-        self._collision_paused: bool = False
+        self._collision_subscriber = None
+        
 
     def start(self) -> None:
         connect(self.client, self.config)
@@ -55,19 +42,14 @@ class MqttHandler:
         topics = [f"{base}/order", f"{base}/instantActions", f"{base}/simConfig"]
         for t in topics:
             self.client.subscribe(t, qos=1)
-        # 额外订阅所有设备的 state，用于多车碰撞检测
-        vda = str(self.config.mqtt_broker.vda_interface)
-        # uagv/{vdaVersion}/{manufacturer}/{serial}/state
-        # 正确的通配符为 3 个 '+': vdaVersion/manufacturer/serial
-        self.client.subscribe(f"{vda}/+/+/+/state", qos=1)
         self.sim.publish_connection(self.client)
         self.sim.publish_factsheet(self.client)
         self._clock.start(self.client)
-        # 启动后台碰撞检测循环
         try:
-            self._start_collision_loop()
+            self._start_collision_subscriber()
         except Exception:
             pass
+        
 
     def _publish_loop(self) -> None:
         tick_ms = 50
@@ -77,7 +59,7 @@ class MqttHandler:
             self.sim.update_state()
             scale = max(0.0001, float(self.config.settings.sim_time_scale))
             eff_state_freq = max(1e-6, float(self.config.settings.state_frequency) * scale)
-            eff_vis_freq = max(1e-6, float(self.config.settings.visualization_frequency) * scale)
+            eff_vis_freq = eff_state_freq
             state_elapsed_ms += tick_ms
             if state_elapsed_ms >= (1000.0 / eff_state_freq):
                 state_elapsed_ms = 0.0
@@ -87,6 +69,90 @@ class MqttHandler:
                 visualization_elapsed_ms = 0.0
                 self.sim.publish_visualization(self.client)
             time.sleep(tick_ms / 1000.0)
+
+    # --- Collision subscriber ---
+    def _start_collision_subscriber(self) -> None:
+        import threading
+        import paho.mqtt.client as mqtt
+        import uuid
+        import math
+        cfg = self.config
+        vda = str(cfg.mqtt_broker.vda_interface)
+        ver = str(cfg.vehicle.vda_version)
+        manu = str(cfg.vehicle.manufacturer)
+        self_serial = str(cfg.vehicle.serial_number)
+        topic = f"{vda}/{ver}/+/+/state"
+        cli = mqtt.Client(client_id=str(uuid.uuid4()), protocol=mqtt.MQTTv5)
+        cli.reconnect_delay_set(min_delay=1, max_delay=10)
+        cli.connect(str(cfg.mqtt_broker.host), int(str(cfg.mqtt_broker.port)), keepalive=60)
+
+        def _on_msg(client: mqtt.Client, userdata, msg: mqtt.MQTTMessage):
+            try:
+                payload = msg.payload.decode("utf-8", errors="ignore")
+                import json
+                data = json.loads(payload)
+            except Exception:
+                return
+            try:
+                parts = msg.topic.split("/")
+                sn = parts[-2] if len(parts) >= 2 else ""
+            except Exception:
+                sn = ""
+            if sn == self_serial:
+                return
+            try:
+                ap = data.get("agvPosition") or data.get("agv_position") or {}
+                x = float(ap.get("x", 0.0))
+                y = float(ap.get("y", 0.0))
+                theta = float(ap.get("theta", 0.0))
+                mp = str(ap.get("mapId", ap.get("map_id", cfg.settings.map_id)))
+            except Exception:
+                return
+            try:
+                loads = data.get("loads") or []
+                max_l = 0.0
+                max_w = 0.0
+                for ld in (loads or []):
+                    try:
+                        dim = ld.get("loadDimensions") or ld.get("load_dimensions") or {}
+                        ll = float(dim.get("length", 0.0)) if dim is not None else 0.0
+                        ww = float(dim.get("width", 0.0)) if dim is not None else 0.0
+                        max_l = max(max_l, ll)
+                        max_w = max(max_w, ww)
+                    except Exception:
+                        pass
+            except Exception:
+                max_l = 0.0
+                max_w = 0.0
+            try:
+                try:
+                    from SimVehicleSys.sim_vehicle.vehicle import VehicleSimulator
+                    w = float(getattr(getattr(self.sim, "config", None).settings, "width", cfg.settings.width))
+                    l = float(getattr(getattr(self.sim, "config", None).settings, "length", cfg.settings.length))
+                    off = float(getattr(getattr(self.sim, "config", None).settings, "center_forward_offset_m", cfg.settings.center_forward_offset_m))
+                except Exception:
+                    w = float(cfg.settings.width)
+                    l = float(cfg.settings.length)
+                    off = float(cfg.settings.center_forward_offset_m)
+                s_len = 1.1 * max(l, max_l)
+                s_wid = 1.1 * max(w, max_w)
+                cx = x - math.cos(theta) * off
+                cy = y - math.sin(theta) * off
+                env = {"center": {"x": cx, "y": cy}, "length": s_len, "width": s_wid, "theta": theta, "mapId": mp}
+                try:
+                    if not hasattr(self.sim, "_neighbors") or self.sim._neighbors is None:
+                        self.sim._neighbors = {}
+                    self.sim._neighbors[str(sn)] = env
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        cli.on_message = _on_msg
+        cli.subscribe(topic, qos=1)
+        t = threading.Thread(target=cli.loop_forever, daemon=True)
+        t.start()
+        self._collision_subscriber = cli
 
     def _parse_instant_actions(self, data: dict) -> InstantActions:
         def g(d, snake, camel, default=None):
@@ -267,140 +333,6 @@ class MqttHandler:
                 self._apply_settings_update(data)
             except Exception as e:
                 print(f"Error applying simConfig: {e}")
-        elif topic_type == "state":
-            # 吸收其他设备的状态（排除自身），用于碰撞检测
-            try:
-                serial = str(data.get("serial_number", data.get("serialNumber", "")) or "")
-                if serial and serial != str(self.config.vehicle.serial_number):
-                    with self._peer_states_lock:
-                        self._peer_states[serial] = data
-            except Exception:
-                pass
         else:
             print(f"Unknown topic type: {topic_type}")
 
-    # --- Collision monitoring ---
-    def _start_collision_loop(self) -> None:
-        if self._collision_thread and self._collision_thread.is_alive():
-            return
-        self._collision_stop = False
-        self._collision_thread = threading.Thread(target=self._collision_loop, daemon=True)
-        self._collision_thread.start()
-
-    def _stop_collision_loop(self) -> None:
-        self._collision_stop = True
-
-    def _collision_loop(self) -> None:
-        # 基础碰撞检测步长（毫秒）；实际休眠时间将按 sim_time_scale 缩放
-        base_tick_ms = 100
-        # 默认底盘尺寸：支持运行时覆盖
-        try:
-            length_default = float(getattr(self.config.settings, "length", 1.03))
-            width_default = float(getattr(self.config.settings, "width", 0.745))
-        except Exception:
-            length_default, width_default = 1.03, 0.745
-        while not self._collision_stop:
-            # 计算基于时间缩放的有效睡眠秒数：scale 越大，检测越频繁
-            eff_sleep_s = base_tick_ms / 1000.0
-            try:
-                scale = max(0.0001, float(getattr(self.config.settings, "sim_time_scale", 1.0)))
-                eff_sleep_s = (base_tick_ms / scale) / 1000.0
-            except Exception:
-                pass
-            try:
-                my_safe_rect = None
-                try:
-                    my_safe_rect = computeSafetyRectForVehicle(self.sim, safeFactor=1.1)
-                except Exception:
-                    my_safe_rect = None
-                if my_safe_rect is None:
-                    time.sleep(eff_sleep_s)
-                    continue
-                # 拷贝对等状态快照，避免长锁
-                with self._peer_states_lock:
-                    peers = list(self._peer_states.items())
-                any_overlap = False
-                any_block = False
-                try:
-                    my_pos = getattr(self.sim.state, "agv_position", None)
-                    my_theta = float(getattr(my_pos, "theta", 0.0) or 0.0) if my_pos else 0.0
-                    my_length = float(getattr(self.config.settings, "length", 1.03))
-                    origin_x = float(getattr(my_pos, "x", 0.0) or 0.0) if my_pos else 0.0
-                    origin_y = float(getattr(my_pos, "y", 0.0) or 0.0) if my_pos else 0.0
-                    my_front_origin = (
-                        origin_x + (my_length / 2.0) * math.sin(my_theta),
-                        origin_y + (my_length / 2.0) * math.cos(my_theta),
-                    )
-                except Exception:
-                    my_theta = 0.0
-                    my_front_origin = (0.0, 0.0)
-                for peer_serial, peer_state in peers:
-                    try:
-                        peer_safe_rect = computeSafetyRectForStatePayload(peer_state, length_default=length_default, width_default=width_default, safeFactor=1.1)
-                        if not peer_safe_rect:
-                            continue
-                        if rects_overlap(my_safe_rect, peer_safe_rect):
-                            any_overlap = True
-                            try:
-                                st = getattr(self.sim, "state", None)
-                                if st:
-                                    st.driving = False
-                                setattr(self.sim, "nav_paused", True)
-                                self._collision_paused = True
-                            except Exception:
-                                pass
-                        peer_body_rect = computeBodyRectForStatePayload(peer_state, length_default=length_default, width_default=width_default)
-                        if peer_body_rect and rect_intersects_front_sector(my_front_origin, my_theta, peer_body_rect, fov_deg=70.0, radius=0.8):
-                            any_block = True
-                            try:
-                                st = getattr(self.sim, "state", None)
-                                if st:
-                                    st.driving = False
-                                setattr(self.sim, "nav_paused", True)
-                                self._collision_paused = True
-                            except Exception:
-                                pass
-                            try:
-                                payload_err = {
-                                    "errorType": 54231,
-                                    "errorLevel": "Warning",
-                                    "errorName": "robotBlocked",
-                                    "errorDescription": "Caution: robot is blocked",
-                                    "with": peer_serial,
-                                    "reason": "FrontLidarBlockedBody",
-                                }
-                                my_serial = str(self.config.vehicle.serial_number)
-                                global_store.set_error(my_serial, payload_err)
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
-                # 恢复逻辑：当当前不存在任何重叠时，恢复并清理碰撞错误
-                try:
-                    if not any_overlap and not any_block:
-                        # 若此前由碰撞触发过暂停，则解除暂停并按导航状态恢复 driving
-                        if self._collision_paused:
-                            self._collision_paused = False
-                            try:
-                                self.sim.nav_paused = False
-                                self.sim.state.paused = False
-                            except Exception:
-                                pass
-                            try:
-                                if getattr(self.sim, "nav_running", False):
-                                    self.sim.state.driving = True
-                                else:
-                                    self.sim.state.driving = False
-                            except Exception:
-                                pass
-                        # 无论是否曾标记暂停，只要当前无重叠都清理 54231 等碰撞错误
-                        try:
-                            my_serial = str(self.config.vehicle.serial_number)
-                            global_store.clear_collision_errors(my_serial)
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-            except Exception:
-                pass
-            time.sleep(eff_sleep_s)

@@ -1,12 +1,5 @@
 [
   {
-    "serial_number": "AMB-02",
-    "manufacturer": "SEER",
-    "type": "AGV",
-    "vda_version": "v2",
-    "IP": "192.168.9.2"
-  },
-  {
     "serial_number": "AMB-01",
     "manufacturer": "SEER",
     "type": "AGV",
@@ -14,10 +7,10 @@
     "IP": "192.168.9.1"
   },
   {
-    "serial_number": "AMB-03",
+    "serial_number": "AMB-02",
     "manufacturer": "SEER",
     "type": "AGV",
     "vda_version": "v2",
-    "IP": "192.168.9.3"
+    "IP": "192.168.9.2"
   }
 ]

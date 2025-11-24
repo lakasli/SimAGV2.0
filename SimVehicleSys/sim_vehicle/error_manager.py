@@ -13,8 +13,8 @@ logger = setup_logger()
 
 
 class ErrorSeverity(Enum):
-    WARNING = "Warning"
-    FATAL = "Fatal"
+    WARNING = "WARNING"
+    FATAL = "FATAL"
 
 
 @dataclass

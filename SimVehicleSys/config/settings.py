@@ -92,7 +92,7 @@ def get_config(config_path: Optional[str] = None) -> Config:
     cfg = Config(
         mqtt_broker=MqttBrokerConfig(
             host="127.0.0.1",
-            port="1884",
+            port="1883",
             vda_interface="uagv",
         ),
         vehicle=VehicleConfig(
@@ -123,7 +123,7 @@ def get_config(config_path: Optional[str] = None) -> Config:
             battery_move_loaded_multiplier=2.5,
             battery_charge_per_min=10.0,
             frontend_poll_interval_ms=1000,
-            center_forward_offset_m=0.1,
+            center_forward_offset_m=0.1885,
         ),
     )
 

@@ -400,7 +400,3 @@ def expand_rect(rect: tuple[float, float, float, float], margin: float) -> tuple
     x1, y1, x2, y2 = rect
     m = float(margin)
     return (x1 - m, y1 - m, x2 + m, y2 + m)
-
-def rects_overlap(r1: tuple[float, float, float, float], r2: tuple[float, float, float, float]) -> bool:
-    """快速二维矩形重叠检测。"""
-    return not (r1[2] < r2[0] or r2[2] < r1[0] or r1[3] < r2[1] or r2[3] < r1[1])

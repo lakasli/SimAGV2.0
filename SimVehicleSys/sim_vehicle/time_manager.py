@@ -63,9 +63,8 @@ class SimClock:
                     pass
                 scale = max(0.0001, float(self.config.settings.sim_time_scale))
                 eff_state_freq = max(1e-6, float(self.config.settings.state_frequency) * scale)
-                # 固定连接上报频率为 1Hz（不随 sim_time_scale 缩放）
                 eff_conn_freq = 1.0
-                eff_vis_freq = max(1e-6, float(self.config.settings.visualization_frequency) * scale)
+                eff_vis_freq = eff_state_freq
                 if not self._clock_logged:
                     self._clock_logged = True
                 state_elapsed_ms += base_tick

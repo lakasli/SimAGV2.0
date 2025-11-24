@@ -1,7 +1,7 @@
 from __future__ import annotations
 import time
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Optional, List, Tuple
 
 import paho.mqtt.client as mqtt
@@ -37,6 +37,7 @@ from SimVehicleSys.protocol.vda_2_0_0.action import Action
 from .error_manager import emit_error
 from .state_manager import global_store
 from SimVehicleSys.sim_vehicle.action_executor import applyRotationStepInSim, applyTranslateStepInSim
+ 
 
 from .navigation import (
     resolve_scene_path,
@@ -271,7 +272,7 @@ class VehicleSimulator:
                         lvl = None
                         if isinstance(e, dict):
                             lvl = e.get("errorLevel")
-                        name = None
+                            name = None
                         if isinstance(e, dict):
                             name = e.get("errorName") or e.get("type")
                         desc = None
@@ -284,7 +285,7 @@ class VehicleSimulator:
                                 ref = e.get("errorReferences")
                         item = {
                             "errorType": "" if et is None else str(et),
-                            "errorLevel": str(lvl) if lvl is not None else "WARNING",
+                            "errorLevel": (str(lvl).upper() if isinstance(lvl, str) else str(lvl)) if lvl is not None else "WARNING",
                             "errorName": "" if name is None else str(name),
                             "errorDescription": "" if desc is None else str(desc),
                             "errorReference": ref if ref is not None else [],
@@ -423,7 +424,101 @@ class VehicleSimulator:
         self.visualization.agv_position = self.state.agv_position
         self.visualization.battery_state = self.state.battery_state
         self.visualization.safety_state = self.state.safety_state
-        publish_json(mqtt_cli, self.visualization_topic, self.visualization, qos=1, retain=False)
+        try:
+            vp = getattr(self.state, "agv_position", None)
+            cfg = getattr(self, "config", None)
+            w = float(getattr(getattr(cfg, "settings", None), "width", 0.745)) if cfg else 0.745
+            l = float(getattr(getattr(cfg, "settings", None), "length", 1.03)) if cfg else 1.03
+            off = float(getattr(getattr(cfg, "settings", None), "center_forward_offset_m", 0.0)) if cfg else 0.0
+            loads = list(getattr(self.state, "loads", []) or [])
+            max_l = 0.0
+            max_w = 0.0
+            for ld in loads:
+                try:
+                    dim = getattr(ld, "load_dimensions", None)
+                    if dim is not None:
+                        ll = float(getattr(dim, "length", 0.0) or 0.0)
+                        ww = float(getattr(dim, "width", 0.0) or 0.0)
+                        max_l = max(max_l, ll)
+                        max_w = max(max_w, ww)
+                except Exception:
+                    pass
+            if vp is not None:
+                s_len = 1.1 * max(l, max_l)
+                s_wid = 1.1 * max(w, max_w)
+                # cx = float(vp.x) + math.cos(float(vp.theta)) * off
+                # cy = float(vp.y) + math.sin(float(vp.theta)) * off
+                cx = float(vp.x) - math.cos(float(vp.theta)) * off
+                cy = float(vp.y) - math.sin(float(vp.theta)) * off
+                safety = {"center": {"x": cx, "y": cy}, "length": s_len, "width": s_wid, "theta": float(vp.theta)}
+                try:
+                    from SimVehicleSys.sim_vehicle.collision import compute_front_radar
+                    radar = compute_front_radar(float(vp.x), float(vp.y), float(vp.theta), float(l), float(w), float(off), fov_deg=70.0, radius_m=0.8)
+                except Exception:
+                    radar = None
+                overlaps_payload = None
+                try:
+                    from SimVehicleSys.sim_vehicle.collision import oriented_rect_polygon, sector_polygon, polygon_intersection
+                    my_rect_poly = oriented_rect_polygon((cx, cy), s_len, s_wid, float(vp.theta))
+                    radar_poly = None
+                    if radar:
+                        radar_poly = sector_polygon((float(radar["origin"]["x"]), float(radar["origin"]["y"])), float(radar["theta"]), float(radar["fovDeg"]), float(radar["radius"]))
+                    neighbors = getattr(self, "_neighbors", {}) or {}
+                    rad_overlaps: list[dict] = []
+                    saf_overlaps: list[dict] = []
+                    for sn, env in list(neighbors.items()):
+                        if not isinstance(env, dict):
+                            continue
+                        cc = env.get("center") or {}
+                        nl = float(env.get("length", 0.0))
+                        nw = float(env.get("width", 0.0))
+                        nt = float(env.get("theta", 0.0))
+                        nb_map = str(env.get("mapId", "") or "")
+                        my_map = str(getattr(vp, "map_id", "") or "")
+                        if my_map and nb_map and my_map != nb_map:
+                            continue
+                        nrect = oriented_rect_polygon((float(cc.get("x", 0.0)), float(cc.get("y", 0.0))), nl, nw, nt)
+                        if radar_poly is not None:
+                            inter_r = polygon_intersection(radar_poly, nrect)
+                            if len(inter_r) >= 3:
+                                rad_overlaps.append({
+                                    "with": str(sn),
+                                    "points": [{"x": float(px), "y": float(py)} for (px, py) in inter_r]
+                                })
+                        inter_s = polygon_intersection(my_rect_poly, nrect)
+                        if len(inter_s) >= 3:
+                            saf_overlaps.append({
+                                "with": str(sn),
+                                "points": [{"x": float(px), "y": float(py)} for (px, py) in inter_s]
+                            })
+                    overlaps_payload = {"radar": rad_overlaps, "safety": saf_overlaps}
+                except Exception:
+                    overlaps_payload = None
+                try:
+                    payload = asdict(self.visualization)
+                    payload["safety"] = safety
+                    if radar:
+                        payload["radar"] = radar
+                    if overlaps_payload:
+                        payload["overlaps"] = overlaps_payload
+                    publish_json(mqtt_cli, self.visualization_topic, payload, qos=1, retain=False)
+                    return
+                except Exception:
+                    try:
+                        setattr(self.visualization, "safety", safety)
+                        if radar:
+                            setattr(self.visualization, "radar", radar)
+                        if overlaps_payload:
+                            setattr(self.visualization, "overlaps", overlaps_payload)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        try:
+            payload = asdict(self.visualization)
+            publish_json(mqtt_cli, self.visualization_topic, payload, qos=1, retain=False)
+        except Exception:
+            publish_json(mqtt_cli, self.visualization_topic, self.visualization, qos=1, retain=False)
 
     def accept_instant_actions(self, instant_action_request: InstantActions) -> None:
         # 接收即时动作时：清空 actionStates，仅显示本次 instantActions 的动作
@@ -1018,6 +1113,88 @@ class VehicleSimulator:
         dt = max(1e-3, now_ts - prev_ts) if prev_ts is not None else 0.05
         self._last_update_time = now_ts
         self._last_delta_seconds = dt
+        try:
+            vp = getattr(self.state, "agv_position", None)
+            cfg = getattr(self, "config", None)
+            if vp and cfg:
+                w = float(getattr(getattr(cfg, "settings", None), "width", 0.745))
+                l = float(getattr(getattr(cfg, "settings", None), "length", 1.03))
+                off = float(getattr(getattr(cfg, "settings", None), "center_forward_offset_m", 0.0))
+                s_len = 1.1 * max(l, 0.0)
+                s_wid = 1.1 * max(w, 0.0)
+                cx = float(vp.x) - math.cos(float(vp.theta)) * off
+                cy = float(vp.y) - math.sin(float(vp.theta)) * off
+                from SimVehicleSys.sim_vehicle.collision import (
+                    compute_front_radar,
+                    oriented_rect_polygon,
+                    sector_polygon,
+                    polygons_overlap,
+                )
+                my_rect = oriented_rect_polygon((cx, cy), s_len, s_wid, float(vp.theta))
+                radar = compute_front_radar(float(vp.x), float(vp.y), float(vp.theta), float(l), float(w), float(off), fov_deg=70.0, radius_m=0.8)
+                radar_poly = sector_polygon((radar["origin"]["x"], radar["origin"]["y"]), float(radar["theta"]), float(radar["fovDeg"]), float(radar["radius"]))
+                neighbors = getattr(self, "_neighbors", {}) or {}
+                blocked = False
+                # try:
+                #     self.logger.info(f"[COLLISION] self radar origin=({radar['origin']['x']:.3f},{radar['origin']['y']:.3f}) theta={float(radar['theta']):.3f} fov={float(radar['fovDeg']):.1f} radius={float(radar['radius']):.2f}")
+                #     self.logger.info(f"[COLLISION] self safety center=({cx:.3f},{cy:.3f}) len={s_len:.3f} wid={s_wid:.3f} theta={float(vp.theta):.3f}")
+                # except Exception:
+                #     pass
+                for sn, env in list(neighbors.items()):
+                    try:
+                        if not isinstance(env, dict):
+                            continue
+                        cc = env.get("center") or {}
+                        nl = float(env.get("length", 0.0))
+                        nw = float(env.get("width", 0.0))
+                        nt = float(env.get("theta", 0.0))
+                        nrect = oriented_rect_polygon((float(cc.get("x", 0.0)), float(cc.get("y", 0.0))), nl, nw, nt)
+                        # 仅在同一地图下考虑碰撞；不同 mapId 忽略
+                        try:
+                            my_map = str(getattr(vp, "map_id", "") or "")
+                            nb_map = str(env.get("mapId", "") or "")
+                            if my_map and nb_map and my_map != nb_map:
+                                continue
+                        except Exception:
+                            pass
+                        from SimVehicleSys.sim_vehicle.collision import circle_polygon_overlap
+                        fast_hit = circle_polygon_overlap((radar["origin"]["x"], radar["origin"]["y"]), float(radar["radius"]), nrect)
+                        ov1 = polygons_overlap(radar_poly, nrect)
+                        ov2 = polygons_overlap(my_rect, nrect)
+                        # try:
+                        #     self.logger.info(f"[COLLISION] neighbor={sn} fastHit={fast_hit} ovRadarRect={ov1} ovSafetyRect={ov2}")
+                        # except Exception:
+                        #     pass
+                        if fast_hit or ov1 or ov2:
+                            blocked = True
+                            break
+                    except Exception:
+                        pass
+                was_blocked = bool(getattr(self, "_collision_blocked", False))
+                if blocked and not was_blocked:
+                    setattr(self, "_collision_blocked", True)
+                    self.nav_paused = True
+                    self.state.paused = True
+                    self.state.driving = False
+                    try:
+                        emit_error(54231, {"serial_number": self.config.vehicle.serial_number, "reason": "collisionGate", "map": getattr(vp, "map_id", "")})
+                    except Exception:
+                        pass
+                elif (not blocked) and was_blocked:
+                    setattr(self, "_collision_blocked", False)
+                    if getattr(self, "nav_running", False):
+                        self.nav_paused = False
+                        self.state.paused = False
+                        self.state.driving = True
+                    # 清理阻挡错误：委托 state_manager 去重
+                    try:
+                        rt = global_store.get_runtime(self.config.vehicle.serial_number)
+                        if rt and hasattr(rt, "errors") and isinstance(rt.errors, list):
+                            rt.errors = [e for e in rt.errors if str(getattr(e, "errorType", e.get("errorType", ""))) not in ("54231", 54231)]
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         if self._is_action_in_progress():
             return
         self._process_instant_actions()
@@ -1530,7 +1707,8 @@ class VehicleSimulator:
                     if st.action_id == a.action_id and st.action_status == ActionStatus.Waiting:
                         try:
                             atype = str(a.action_type or st.action_type or "").strip()
-                            if atype in ("JackLoad", "JackUnload"):
+                            at_l = atype.lower()
+                            if at_l in ("jackload", "pick", "jackunload", "drop"):
                                 from SimVehicleSys.sim_vehicle.action_executor import execute_pallet_action_in_sim
                                 execute_pallet_action_in_sim(self, atype, a.action_parameters)
                             elif atype in ("StartCharging", "startCharging", "ChargingStart"):

@@ -262,7 +262,8 @@ def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_para
     """
     try:
         atype = str(action_type or "").strip()
-        if atype not in ("JackLoad", "JackUnload"):
+        at_l = atype.lower()
+        if at_l not in ("jackload", "jackunload", "pick", "drop"):
             return
         def pval(key: str, default: Any = None) -> Any:
             try:
@@ -292,7 +293,7 @@ def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_para
         except Exception:
             pass
         try:
-            if atype == "JackLoad":
+            if at_l in ("jackload", "pick"):
                 # 解析托盘/货架模型文件，填充更完整的载荷信息
                 lid = Path(recfile).stem or "shelf"
                 ltype = "shelf"
@@ -331,9 +332,15 @@ def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_para
                         load_dimensions=ldim,
                     )
                 ]
-                # 设置叉高（米）：默认 0.1m，若存在边约束则按 [minHeight, maxHeight] 夹取
                 try:
                     default_h = 0.1
+                    try:
+                        if not action_parameters:
+                            cfg = getattr(sim_vehicle, "config", None)
+                            s = getattr(cfg, "settings", None)
+                            default_h = float(getattr(s, "height_max", default_h))
+                    except Exception:
+                        pass
                     min_h = None
                     max_h = None
                     try:
@@ -371,11 +378,51 @@ def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_para
                     sim_vehicle.state.fork_state.fork_height = float(h)
                 except Exception:
                     pass
+                try:
+                    di_arr = [
+                        {"id": 0, "source": "normal", "status": False, "valid": True},
+                        {"id": 1, "source": "normal", "status": False, "valid": True},
+                        {"id": 2, "source": "normal", "status": False, "valid": True},
+                        {"id": 3, "source": "normal", "status": False, "valid": True},
+                    ]
+                    do_arr = [
+                        {"id": 0, "status": False},
+                    ]
+                    di_info = Information(
+                        info_type="DI",
+                        info_references=[
+                            InfoReference(reference_key="DI", reference_value=di_arr),
+                        ],
+                        info_description="info of DI",
+                        info_level="INFO",
+                    )
+                    do_info = Information(
+                        info_type="DO",
+                        info_references=[
+                            InfoReference(reference_key="DO", reference_value=do_arr),
+                        ],
+                        info_description="info of DO",
+                        info_level="INFO",
+                    )
+                    try:
+                        sim_vehicle.state.information = [x for x in sim_vehicle.state.information if x.info_type not in ("DI", "DO")]
+                    except Exception:
+                        sim_vehicle.state.information = []
+                    sim_vehicle.state.information.append(di_info)
+                    sim_vehicle.state.information.append(do_info)
+                except Exception:
+                    pass
             else:
                 sim_vehicle.state.loads = []
-                # 卸货同时将叉高清零（米）：默认 0.0m；若存在边约束则按 [minHeight, maxHeight] 夹取
                 try:
                     default_h = 0.0
+                    try:
+                        if not action_parameters:
+                            cfg = getattr(sim_vehicle, "config", None)
+                            s = getattr(cfg, "settings", None)
+                            default_h = float(getattr(s, "height_min", default_h))
+                    except Exception:
+                        pass
                     min_h = None
                     max_h = None
                     try:
