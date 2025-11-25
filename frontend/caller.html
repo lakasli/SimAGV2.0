@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简约风格呼叫器图标</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+        }
+        
+        .container {
+            text-align: center;
+            background-color: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+        
+        .caller-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 40px;
+        }
+        
+        .caller {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-color: #f5f5f5;
+            border-radius: 20px;
+            box-shadow: 
+                0 8px 25px rgba(0, 0, 0, 0.1),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.8),
+                inset 0 0 15px rgba(0, 0, 0, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        /* 按钮区域 */
+        .button-area {
+            position: relative;
+            width: 160px;
+            height: 160px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* 灯带 */
+        .light-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: conic-gradient(
+                from 0deg,
+                #2ecc71 0deg 90deg,
+                rgba(46, 204, 113, 0.3) 90deg 180deg,
+                #2ecc71 180deg 270deg,
+                rgba(46, 204, 113, 0.3) 270deg 360deg
+            );
+            box-shadow: 
+                0 0 20px rgba(46, 204, 113, 0.5),
+                inset 0 0 10px rgba(255, 255, 255, 0.8);
+            transition: all 0.5s ease;
+            z-index: 1;
+        }
+        
+        /* 呼叫状态 - 红色灯带 */
+        .caller.active .light-ring {
+            background: conic-gradient(
+                from 0deg,
+                #e74c3c 0deg 90deg,
+                rgba(231, 76, 60, 0.3) 90deg 180deg,
+                #e74c3c 180deg 270deg,
+                rgba(231, 76, 60, 0.3) 270deg 360deg
+            );
+            box-shadow: 
+                0 0 20px rgba(231, 76, 60, 0.7),
+                inset 0 0 10px rgba(255, 255, 255, 0.8);
+            animation: pulse 1.5s infinite alternate;
+        }
+        
+        @keyframes pulse {
+            0% {
+                box-shadow: 
+                    0 0 20px rgba(231, 76, 60, 0.7),
+                    inset 0 0 10px rgba(255, 255, 255, 0.8);
+            }
+            100% {
+                box-shadow: 
+                    0 0 30px rgba(231, 76, 60, 0.9),
+                    inset 0 0 10px rgba(255, 255, 255, 0.8);
+            }
+        }
+        
+        /* 中央按钮 */
+        .call-button {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #ffffff, #e6e6e6);
+            box-shadow: 
+                5px 5px 15px rgba(0, 0, 0, 0.1),
+                -5px -5px 15px rgba(255, 255, 255, 0.8),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 2;
+        }
+        
+        .call-button:hover {
+            transform: scale(1.05);
+        }
+        
+        .call-button:active {
+            transform: scale(0.95);
+            box-shadow: 
+                2px 2px 10px rgba(0, 0, 0, 0.1),
+                -2px -2px 10px rgba(255, 255, 255, 0.8),
+                inset 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .button-text {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        /* 状态指示灯 */
+        .status-light {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #95a5a6;
+            box-shadow: 
+                0 0 5px rgba(0, 0, 0, 0.2),
+                inset 0 0 3px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            z-index: 3;
+        }
+        
+        .status-light.on {
+            background-color: #2ecc71;
+            box-shadow: 
+                0 0 10px rgba(46, 204, 113, 0.7),
+                inset 0 0 3px rgba(255, 255, 255, 0.5);
+        }
+        
+        /* 控制按钮 */
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 50px;
+            background-color: #3498db;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);
+        }
+        
+        .btn:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(52, 152, 219, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn-call {
+            background-color: #e74c3c;
+            box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3);
+        }
+        
+        .btn-call:hover {
+            background-color: #c0392b;
+            box-shadow: 0 6px 15px rgba(231, 76, 60, 0.4);
+        }
+        
+        .btn-light {
+            background-color: #2ecc71;
+            box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
+        }
+        
+        .btn-light:hover {
+            background-color: #27ae60;
+            box-shadow: 0 6px 15px rgba(46, 204, 113, 0.4);
+        }
+        
+        .status {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+            height: 24px;
+        }
+        
+        .caller.active .status {
+            color: #e74c3c;
+        }
+        
+        .features {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .feature {
+            display: flex;
+            align-items: center;
+            background-color: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 50px;
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        
+        .feature i {
+            margin-right: 8px;
+            color: #3498db;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>简约风格呼叫器图标</h1>
+        <p class="subtitle">点击按钮或使用控制按钮切换呼叫状态</p>
+        
+        <div class="caller-container">
+            <div class="caller" id="caller">
+                <div class="button-area">
+                    <div class="light-ring"></div>
+                    <div class="call-button" id="callButton">
+                        <div class="button-text">呼叫</div>
+                    </div>
+                </div>
+                <div class="status-light" id="statusLight"></div>
+            </div>
+        </div>
+        
+        <div class="status" id="status">当前状态: 待机 | 指示灯: 关闭</div>
+        
+        <div class="controls">
+            <button class="btn btn-call" id="callBtn">呼叫状态</button>
+            <button class="btn" id="standbyBtn">待机状态</button>
+            <button class="btn btn-light" id="lightBtn">切换指示灯</button>
+        </div>
+        
+        <div class="features">
+            <div class="feature">
+                <i>✓</i> 1:1比例设计
+            </div>
+            <div class="feature">
+                <i>✓</i> 灯带效果
+            </div>
+            <div class="feature">
+                <i>✓</i> 状态指示灯
+            </div>
+            <div class="feature">
+                <i>✓</i> 交互反馈
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const caller = document.getElementById('caller');
+        const callButton = document.getElementById('callButton');
+        const statusLight = document.getElementById('statusLight');
+        const callBtn = document.getElementById('callBtn');
+        const standbyBtn = document.getElementById('standbyBtn');
+        const lightBtn = document.getElementById('lightBtn');
+        const status = document.getElementById('status');
+        
+        let isCalling = false;
+        let isLightOn = false;
+        
+        // 呼叫按钮点击事件
+        callButton.addEventListener('click', toggleCallState);
+        callBtn.addEventListener('click', () => {
+            if (!isCalling) {
+                setCallState(true);
+            }
+        });
+        
+        standbyBtn.addEventListener('click', () => {
+            if (isCalling) {
+                setCallState(false);
+            }
+        });
+        
+        lightBtn.addEventListener('click', toggleLight);
+        
+        function toggleCallState() {
+            setCallState(!isCalling);
+        }
+        
+        function setCallState(calling) {
+            isCalling = calling;
+            
+            if (isCalling) {
+                caller.classList.add('active');
+                status.textContent = `当前状态: 呼叫中 | 指示灯: ${isLightOn ? '开启' : '关闭'}`;
+            } else {
+                caller.classList.remove('active');
+                status.textContent = `当前状态: 待机 | 指示灯: ${isLightOn ? '开启' : '关闭'}`;
+            }
+        }
+        
+        function toggleLight() {
+            isLightOn = !isLightOn;
+            
+            if (isLightOn) {
+                statusLight.classList.add('on');
+            } else {
+                statusLight.classList.remove('on');
+            }
+            
+            status.textContent = `当前状态: ${isCalling ? '呼叫中' : '待机'} | 指示灯: ${isLightOn ? '开启' : '关闭'}`;
+        }
+    </script>
+</body>
+</html>

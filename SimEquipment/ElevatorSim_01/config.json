@@ -1,6 +1,6 @@
 {
-  "name": "Elevator-01",
   "manufacturer": "SimEquip",
+  "type": "elevator",
   "serial_number": "Elevator-01",
   "vda_version": "v2",
   "vda_full_version": "2.0.0",
@@ -10,7 +10,7 @@
     "port": 1883,
     "vda_interface": "uequip"
   },
-  "site": "10724",
+  "site": ["10724"],
   "map_id": "test1",
   "state_frequency": 1,
   "action_time": 3,

@@ -88,14 +88,37 @@ def list_equipments() -> List[dict]:
                         continue
                     data = json.loads(cfg_fp.read_text(encoding="utf-8")) or {}
                     mqtt = data.get("mqtt", {}) or {}
+                    t = data.get("type")
+                    if not t:
+                        nm = p.name.lower()
+                        if "door" in nm:
+                            t = "door"
+                        elif "caller" in nm:
+                            t = "caller"
+                        elif "elevator" in nm:
+                            t = "elevator"
+                        elif "light" in nm:
+                            t = "light"
+                        else:
+                            t = "device"
+                    site_raw = data.get("site")
+                    if isinstance(site_raw, list):
+                        site_list = [str(x) for x in site_raw if x is not None]
+                    elif isinstance(site_raw, str):
+                        site_list = [site_raw]
+                    else:
+                        site_list = []
+                    if str(t).lower() != "door" and len(site_list) > 1:
+                        site_list = site_list[:1]
                     items.append({
                         "name": data.get("name"),
+                        "type": t,
                         "manufacturer": data.get("manufacturer"),
                         "serial_number": data.get("serial_number"),
                         "vda_version": data.get("vda_version"),
                         "vda_full_version": data.get("vda_full_version"),
                         "ip": data.get("ip"),
-                        "site": data.get("site"),
+                        "site": site_list,
                         "map_id": data.get("map_id"),
                         "state_frequency": data.get("state_frequency"),
                         "action_time": data.get("action_time"),

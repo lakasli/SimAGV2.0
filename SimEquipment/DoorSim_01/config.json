@@ -1,7 +1,7 @@
 {
-  "name": "Door-01",
   "manufacturer": "SimEquip",
   "serial_number": "Door-01",
+  "type": "door",
   "vda_version": "v2",
   "vda_full_version": "2.0.0",
   "ip": "192.168.0.10",
@@ -10,7 +10,7 @@
     "port": 1883,
     "vda_interface": "uequip"
   },
-  "site": "10939",
+  "site": ["10939", "10922"],
   "map_id": "test1",
   "state_frequency": 1,
   "action_time": 3,
