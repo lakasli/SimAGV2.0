@@ -253,13 +253,7 @@ async def execute_points_movement(
 
 
 def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_parameters: Optional[List[Any]] = None) -> None:
-    """在仿真器状态中写入托盘动作信息，并维护载荷列表，供前端消费。
-
-    - action_type: "JackLoad" 或 "JackUnload"。
-    - action_parameters: 列表，包含带 key/value 的参数，其中可能包括：
-      - operation: 同 action_type
-      - recfile: 例如 "shelf/BD1.shelf"
-    """
+    """在仿真器状态中维护载荷与叉高，不再上报 PalletAction 信息。"""
     try:
         atype = str(action_type or "").strip()
         at_l = atype.lower()
@@ -273,25 +267,11 @@ def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_para
             except Exception:
                 pass
             return default
-        op = str(pval("operation", atype))
         recfile = str(pval("recfile", ""))
         try:
-            info = Information(
-                info_type="PalletAction",
-                info_references=[
-                    InfoReference(reference_key="operation", reference_value=op),
-                    InfoReference(reference_key="recfile", reference_value=recfile),
-                ],
-                info_description=None,
-                info_level="INFO",
-            )
-            try:
-                sim_vehicle.state.information = [x for x in sim_vehicle.state.information if x.info_type != "PalletAction"]
-            except Exception:
-                sim_vehicle.state.information = []
-            sim_vehicle.state.information.append(info)
+            sim_vehicle.state.information = [x for x in sim_vehicle.state.information if x.info_type != "PalletAction"]
         except Exception:
-            pass
+            sim_vehicle.state.information = []
         try:
             if at_l in ("jackload", "pick"):
                 # 解析托盘/货架模型文件，填充更完整的载荷信息
@@ -388,32 +368,20 @@ def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_para
                     do_arr = [
                         {"id": 0, "status": False},
                     ]
-                    di_info = Information(
-                        info_type="DI",
-                        info_references=[
-                            InfoReference(reference_key="DI", reference_value=di_arr),
-                        ],
-                        info_description="info of DI",
-                        info_level="INFO",
-                    )
-                    do_info = Information(
-                        info_type="DO",
-                        info_references=[
-                            InfoReference(reference_key="DO", reference_value=do_arr),
-                        ],
-                        info_description="info of DO",
-                        info_level="INFO",
-                    )
                     try:
                         sim_vehicle.state.information = [x for x in sim_vehicle.state.information if x.info_type not in ("DI", "DO")]
                     except Exception:
                         sim_vehicle.state.information = []
-                    sim_vehicle.state.information.append(di_info)
-                    sim_vehicle.state.information.append(do_info)
+                    sim_vehicle.state.information.append(Information(info_type="DI", info_references=[InfoReference(reference_key="DI", reference_value=di_arr)], info_description="info of DI", info_level="INFO"))
+                    sim_vehicle.state.information.append(Information(info_type="DO", info_references=[InfoReference(reference_key="DO", reference_value=do_arr)], info_description="info of DO", info_level="INFO"))
                 except Exception:
                     pass
             else:
                 sim_vehicle.state.loads = []
+                try:
+                    sim_vehicle.state.information = []
+                except Exception:
+                    pass
                 try:
                     default_h = 0.0
                     try:
@@ -539,6 +507,10 @@ def applyRotationStepInSim(sim_vehicle: Any, target_theta: float, base_step: flo
             return (a + pi) % (2 * pi) - pi
         vp = getattr(getattr(sim_vehicle, "state", None), "agv_position", None)
         if not vp:
+            try:
+                setattr(sim_vehicle, "_turning", False)
+            except Exception:
+                pass
             return True
         cur_theta = float(vp.theta or 0.0)
         angle_diff = _norm(float(target_theta) - cur_theta)
@@ -548,10 +520,13 @@ def applyRotationStepInSim(sim_vehicle: Any, target_theta: float, base_step: flo
         new_theta = cur_theta + (angle_diff if aligned else math.copysign(step, angle_diff))
         # 统一归一化，避免角度在连续旋转中累计超界
         new_theta = _norm(new_theta)
-        # 更新仿真状态与可视化
         vp.theta = new_theta
         try:
             sim_vehicle.visualization.agv_position = vp
+        except Exception:
+            pass
+        try:
+            setattr(sim_vehicle, "_turning", not aligned)
         except Exception:
             pass
         # 同步到后端全局状态（若存在）

@@ -1,0 +1,57 @@
+
+{
+  "version": "2.0.0",
+  "headerId": 100,
+  "timestamp": "2025-11-24T11:24:10.585Z",
+  "manufacturer": "SEER",
+  "serialNumber": "AMB-01",
+  "edges": [
+    {
+      "edgeId": "AP3-AP2",
+      "sequenceId": 147,
+      "startNodeId": "AP3",
+      "endNodeId": "AP2",
+      "actions": [],
+      "released": true
+    },
+    {
+      "edgeId": "AP2-AP1",
+      "sequenceId": 148,
+      "startNodeId": "AP2",
+      "endNodeId": "AP1",
+      "actions": [],
+      "released": true
+    }
+  ],
+  "nodes": [
+    {
+      "nodeId": "AP3",
+      "sequenceId": 175,
+      "actions": [],
+      "released": true
+    },
+    {
+      "nodeId": "AP2",
+      "sequenceId": 176,
+      "actions": [],
+      "released": true
+    },
+    {
+      "nodeId": "AP1",
+      "sequenceId": 177,
+      "actions": [
+        {
+          "actionParameters": [],
+          "actionType": "pick",
+          "actionId": "1992917003731615745",
+          "blockingType": "HARD",
+          "actionDescription": "pick",
+          "_actionDescription": "actionDescription"
+        }
+      ],
+      "released": true
+    }
+  ],
+  "orderId": "1992916999281459201",
+  "orderUpdateId": 69
+}

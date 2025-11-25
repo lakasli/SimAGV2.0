@@ -10,11 +10,11 @@ from ..utils.helpers import (
 )
 
 def compute_front_radar(x: float, y: float, theta: float, length_m: float, width_m: float, forward_offset_m: float,
-                        fov_deg: float = 70.0, radius_m: float = 0.8) -> dict:
+                        fov_deg: float = 60.0, radius_m: float = 0.8) -> dict:
     # 车头顶点（半圆顶部）在局部坐标为 (0, -length/2)
     # 世界坐标：先从车体中心按前向偏移 forward_offset_m，再到车头顶点偏移 length/2
-    cx = float(x) - math.cos(float(theta)) * float(forward_offset_m + (length_m / 2.0))
-    cy = float(y) - math.sin(float(theta)) * float(forward_offset_m + (length_m / 2.0))
+    cx = float(x) - math.cos(float(theta)) * float(forward_offset_m + (length_m / 3.0))
+    cy = float(y) - math.sin(float(theta)) * float(forward_offset_m + (length_m / 3.0))
     return {
         "origin": {"x": cx, "y": cy},
         "theta": float(theta),

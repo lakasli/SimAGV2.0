@@ -453,15 +453,16 @@ class VehicleSimulator:
                 safety = {"center": {"x": cx, "y": cy}, "length": s_len, "width": s_wid, "theta": float(vp.theta)}
                 try:
                     from SimVehicleSys.sim_vehicle.collision import compute_front_radar
-                    radar = compute_front_radar(float(vp.x), float(vp.y), float(vp.theta), float(l), float(w), float(off), fov_deg=70.0, radius_m=0.8)
+                    radar = compute_front_radar(float(vp.x), float(vp.y), float(vp.theta), float(l), float(w), float(off), fov_deg=60.0, radius_m=0.8)
                 except Exception:
                     radar = None
                 overlaps_payload = None
                 try:
                     from SimVehicleSys.sim_vehicle.collision import oriented_rect_polygon, sector_polygon, polygon_intersection
                     my_rect_poly = oriented_rect_polygon((cx, cy), s_len, s_wid, float(vp.theta))
+                    turning_now = bool(getattr(self, "_turning", False))
                     radar_poly = None
-                    if radar:
+                    if (not turning_now) and radar:
                         radar_poly = sector_polygon((float(radar["origin"]["x"]), float(radar["origin"]["y"])), float(radar["theta"]), float(radar["fovDeg"]), float(radar["radius"]))
                     neighbors = getattr(self, "_neighbors", {}) or {}
                     rad_overlaps: list[dict] = []
@@ -1008,6 +1009,15 @@ class VehicleSimulator:
         except Exception:
             self.nav_edge_speed_caps = None
         try:
+            for n in list(self.order.nodes or []):
+                for a in list(getattr(n, "actions", []) or []):
+                    self._add_action_state(a)
+            for e in list(self.order.edges or []):
+                for a in list(getattr(e, "actions", []) or []):
+                    self._add_action_state(a)
+        except Exception:
+            pass
+        try:
             ordered_nodes = sorted(list(self.order.nodes or []), key=lambda n: int(getattr(n, "sequence_id", 0) or 0))
         except Exception:
             ordered_nodes = list(self.order.nodes or [])
@@ -1131,10 +1141,11 @@ class VehicleSimulator:
                     polygons_overlap,
                 )
                 my_rect = oriented_rect_polygon((cx, cy), s_len, s_wid, float(vp.theta))
-                radar = compute_front_radar(float(vp.x), float(vp.y), float(vp.theta), float(l), float(w), float(off), fov_deg=70.0, radius_m=0.8)
+                radar = compute_front_radar(float(vp.x), float(vp.y), float(vp.theta), float(l), float(w), float(off), fov_deg=60.0, radius_m=0.8)
                 radar_poly = sector_polygon((radar["origin"]["x"], radar["origin"]["y"]), float(radar["theta"]), float(radar["fovDeg"]), float(radar["radius"]))
                 neighbors = getattr(self, "_neighbors", {}) or {}
                 blocked = False
+                turning_now = bool(getattr(self, "_turning", False))
                 # try:
                 #     self.logger.info(f"[COLLISION] self radar origin=({radar['origin']['x']:.3f},{radar['origin']['y']:.3f}) theta={float(radar['theta']):.3f} fov={float(radar['fovDeg']):.1f} radius={float(radar['radius']):.2f}")
                 #     self.logger.info(f"[COLLISION] self safety center=({cx:.3f},{cy:.3f}) len={s_len:.3f} wid={s_wid:.3f} theta={float(vp.theta):.3f}")
@@ -1157,15 +1168,13 @@ class VehicleSimulator:
                                 continue
                         except Exception:
                             pass
-                        from SimVehicleSys.sim_vehicle.collision import circle_polygon_overlap
-                        fast_hit = circle_polygon_overlap((radar["origin"]["x"], radar["origin"]["y"]), float(radar["radius"]), nrect)
-                        ov1 = polygons_overlap(radar_poly, nrect)
+                        ov1 = False if turning_now else polygons_overlap(radar_poly, nrect)
                         ov2 = polygons_overlap(my_rect, nrect)
                         # try:
                         #     self.logger.info(f"[COLLISION] neighbor={sn} fastHit={fast_hit} ovRadarRect={ov1} ovSafetyRect={ov2}")
                         # except Exception:
                         #     pass
-                        if fast_hit or ov1 or ov2:
+                        if ov1 or ov2:
                             blocked = True
                             break
                     except Exception:

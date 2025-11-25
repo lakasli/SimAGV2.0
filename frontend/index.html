@@ -2265,9 +2265,9 @@
         try {
           const radar = payload.radar || null;
           if (radar && radar.origin && typeof radar.radius === 'number') {
-            robot.radar = {
+              robot.radar = {
               origin: { x: Number(radar.origin.x), y: Number(radar.origin.y) },
-              fovDeg: Number(radar.fovDeg ?? radar.fov_deg ?? 70),
+              fovDeg: Number(radar.fovDeg ?? radar.fov_deg ?? 60),
               radius: Number(radar.radius ?? 0.8),
               theta: Number(radar.theta ?? (robot.currentPosition?.theta ?? 0))
             };
@@ -2299,7 +2299,7 @@
         try {
           ctx.save();
           const o = radar.origin || { x: 0, y: 0 };
-          const fov = Number(radar.fov_deg ?? radar.fovDeg ?? 70);
+          const fov = Number(radar.fov_deg ?? radar.fovDeg ?? 60);
           const radius = Number(radar.radius ?? 1.0);
           const theta = Number(radar.theta ?? thetaRad);
           const sp = worldToScreen(o.x, o.y);
@@ -2351,7 +2351,7 @@
       try {
         if (radar && radar.origin) {
           const o = radar.origin;
-          const fov = Number(radar.fovDeg ?? radar.fov_deg ?? 70);
+          const fov = Number(radar.fovDeg ?? radar.fov_deg ?? 60);
           const radius = Number(radar.radius ?? 0.8);
           const th = Number(radar.theta ?? thetaRad);
           const isBlocked = (() => {
@@ -3031,25 +3031,38 @@
           robot._collisionActive = collision;
           robot.stateErrors = errs.map(e => ({ errorType: String(e.errorType ?? e.code ?? ''), errorName: String(e.errorName ?? e.type ?? '') }));
         } catch (_) {}
-        // 消费信息字段：托盘动作（pick/drop 或 JackLoad/JackUnload）
         try {
-          const infos = Array.isArray(payload.information) ? payload.information : [];
-          for (const info of infos) {
-            const t = String(info.info_type || info.infoType || '').trim();
-            if (t === 'PalletAction') {
-              const refs = Array.isArray(info.info_references || info.infoReferences) ? (info.info_references || info.infoReferences) : [];
-              const kv = {};
-              for (const r of refs) {
-                const k = String(r.reference_key || r.referenceKey || r.key || '').trim();
-                const v = String(r.reference_value || r.referenceValue || r.value || '').trim();
-                if (k) kv[k] = v;
-              }
-              const op = String(kv.operation || '').trim();
-              const recfile = String(kv.recfile || '').trim();
-              if (op) handlePalletAction(sn, op, recfile);
+          const loads = Array.isArray(payload.loads) ? payload.loads : [];
+          const has = loads.length > 0;
+          let model = null;
+          if (has) {
+            const l0 = loads[0] || {};
+            const dim = l0.loadDimensions || l0.load_dimensions || {};
+            const w = Number(dim && (dim.width_m ?? dim.width));
+            const l = Number(dim && (dim.length_m ?? dim.length));
+            const h = Number(dim && (dim.height_m ?? dim.height));
+            if (isFinite(w) && isFinite(l)) {
+              model = { footprint: { width_m: w, length_m: l, height_m: (isFinite(h) ? h : undefined) } };
             }
           }
-        } catch (e) { /* ignore */ }
+          const curId = has ? String((loads[0] && (loads[0].loadId ?? loads[0].load_id)) || '') : '';
+          const lastId = String(robot._lastLoadId || '');
+          robot._lastLoadId = curId;
+          const prevHas = !!robot._lastHasLoad;
+          robot._lastHasLoad = has;
+          if (has) {
+            if (model) robot.shelfModel = model;
+            if (!robot.hasPallet && !robot._palletAnimLoading && !robot._palletAnimUnloading) {
+              loadPallet(sn);
+            } else if (!prevHas && !robot._palletAnimLoading) {
+              loadPallet(sn);
+            }
+          } else {
+            if ((robot.hasPallet || robot._palletAnimLoading || prevHas) && !robot._palletAnimUnloading) {
+              unloadPallet(sn);
+            }
+          }
+        } catch (_) {}
         // 列表信息变化较慢，交给独立节流逻辑
       } catch (e) {
         console.warn('应用 WS 状态失败:', e);
