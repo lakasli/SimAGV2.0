@@ -18,7 +18,7 @@ from SimVehicleSys.utils.helpers import (
     normalize_trajectory,
 )
 from SimVehicleSys.utils.logger import setup_logger
-from SimVehicleSys.protocol.vda5050_common import AgvPosition, NodePosition, Velocity
+from SimVehicleSys.protocol.vda5050_common import AgvPosition, NodePosition, Velocity, BoundingBoxReference, LoadDimensions
 from SimVehicleSys.protocol.vda_2_0_0.connection import Connection, ConnectionState
 from SimVehicleSys.protocol.vda_2_0_0.state import (
     State,
@@ -414,6 +414,43 @@ class VehicleSimulator:
                 # 记录当前用于下次增量计算
                 self._last_publish_state = {"ts": now_ts, "x": float(pos.x), "y": float(pos.y), "theta": float(pos.theta)}
             self.state.velocity = Velocity(vx=vx, vy=vy, omega=omega)
+        except Exception:
+            pass
+        try:
+            loads = list(getattr(self.state, "loads", []) or [])
+            vp = getattr(self.state, "agv_position", None)
+            for ld in loads:
+                try:
+                    if getattr(ld, "load_position", None) is None or str(getattr(ld, "load_position", "")) == "":
+                        ld.load_position = ""
+                except Exception:
+                    pass
+                try:
+                    dim = getattr(ld, "load_dimensions", None)
+                    if dim is None:
+                        ld.load_dimensions = LoadDimensions(length=0.0, width=0.0, height=0.0)
+                    else:
+                        if getattr(dim, "length", None) is None:
+                            dim.length = 0.0
+                        if getattr(dim, "width", None) is None:
+                            dim.width = 0.0
+                        if getattr(dim, "height", None) is None:
+                            dim.height = 0.0
+                except Exception:
+                    pass
+                try:
+                    lt = getattr(ld, "load_type", None)
+                    if lt is not None:
+                        ld.load_type = str(lt)
+                    else:
+                        ld.load_type = "6"
+                except Exception:
+                    pass
+                try:
+                    if vp is not None:
+                        ld.bounding_box_reference = BoundingBoxReference(x=float(getattr(vp, "x", 0.0)), y=float(getattr(vp, "y", 0.0)), z=0.0, theta=float(getattr(vp, "theta", 0.0)))
+                except Exception:
+                    pass
         except Exception:
             pass
         publish_json(mqtt_cli, self.state_topic, self.state, qos=1, retain=False)

@@ -1,11 +1,18 @@
 {
   "type": "shelf",
-  "name": "BD2",
+  "loadType": "6",
+  "name": "-1",
+  "loadDimensions": {
+    "length": 1.33,
+    "width": 1.04,
+    "height": 0.25
+  },
   "footprint": {
     "width_m": 1.04,
     "length_m": 1.33,
     "height_m": 0.25
   },
+  "weight": 0,
   "color": "#6884e0ff",
   "texture_lines": 3,
   "description": "Simple shelf model for jack operations"

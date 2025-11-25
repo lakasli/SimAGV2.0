@@ -275,10 +275,11 @@ def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_para
         try:
             if at_l in ("jackload", "pick"):
                 # 解析托盘/货架模型文件，填充更完整的载荷信息
-                lid = Path(recfile).stem or "shelf"
+                lid = Path(recfile).stem or "-1"
                 ltype = "shelf"
                 ldim = None
                 bbox = None
+                data = {}
                 try:
                     # 解析 JSON 模型文件（例如 SimVehicleSys/shelf/BD1.shelf）
                     sim_root = Path(__file__).resolve().parents[1]  # 指向 SimVehicleSys 目录
@@ -290,26 +291,57 @@ def execute_pallet_action_in_sim(sim_vehicle: Any, action_type: str, action_para
                             candidate = sim_root / "shelf" / Path(recfile).name
                     import json
                     data = json.loads(candidate.read_text(encoding="utf-8")) if (candidate and candidate.exists()) else {}
-                    ltype = str(data.get("type", ltype))
+                    ltype_raw = data.get("loadType", data.get("type", ltype))
+                    if isinstance(ltype_raw, (int, float)):
+                        ltype = str(ltype_raw)
+                    else:
+                        s = str(ltype_raw or "")
+                        ltype = "6" if s.lower() == "shelf" else (s if s else ltype)
                     name = str(data.get("name", lid))
                     lid = name or lid
-                    fp = data.get("footprint", {})
-                    w = float(fp.get("width_m", 0.0))
-                    l = float(fp.get("length_m", 0.0))
-                    h = float(fp.get("height_m", 0.0)) if fp.get("height_m") is not None else None
-                    if l > 0.0 or w > 0.0 or (h or 0.0) > 0.0:
+                    dims = data.get("loadDimensions") or data.get("dimensions") or data.get("footprint") or {}
+                    try:
+                        w = float(dims.get("width", dims.get("width_m", 0.0)))
+                    except Exception:
+                        w = 0.0
+                    try:
+                        l = float(dims.get("length", dims.get("length_m", 0.0)))
+                    except Exception:
+                        l = 0.0
+                    hv = dims.get("height", dims.get("height_m", None))
+                    try:
+                        h = float(hv) if hv is not None else None
+                    except Exception:
+                        h = None
+                    if (l or 0.0) > 0.0 or (w or 0.0) > 0.0 or ((h or 0.0) > 0.0):
                         ldim = LoadDimensions(length=l, width=w, height=h)
-                    # 参考框设置为车辆坐标系原点（顶面），theta 使用 0
-                    bbox = BoundingBoxReference(x=0.0, y=0.0, z=0.0, theta=0.0)
+                    else:
+                        ldim = LoadDimensions(length=0.0, width=0.0, height=0.0)
+                    try:
+                        vp = getattr(getattr(sim_vehicle, "state", None), "agv_position", None)
+                        if vp is not None:
+                            bbox = BoundingBoxReference(x=float(getattr(vp, "x", 0.0)), y=float(getattr(vp, "y", 0.0)), z=0.0, theta=float(getattr(vp, "theta", 0.0)))
+                        else:
+                            bbox = BoundingBoxReference(x=0.0, y=0.0, z=0.0, theta=0.0)
+                    except Exception:
+                        bbox = BoundingBoxReference(x=0.0, y=0.0, z=0.0, theta=0.0)
                 except Exception:
                     pass
+                wt = 0.0
+                try:
+                    wt_raw = data.get("weight", None)
+                    if wt_raw is not None:
+                        wt = float(wt_raw)
+                except Exception:
+                    wt = 0.0
                 sim_vehicle.state.loads = [
                     Load(
                         load_id=lid,
                         load_type=ltype,
-                        load_position="top",
+                        load_position="",
                         bounding_box_reference=bbox,
                         load_dimensions=ldim,
+                        weight=wt,
                     )
                 ]
                 try:
