@@ -136,13 +136,13 @@
     "serialNumber": ""
 }
 
-灯开指令
+警示灯开指令
 {
     "actions": [
         {
             "actionType": "writeValue",
             "actionId": "01d47574-29aa-4dd7-bea2-5efcceea5f2d",
-            "actionDescription": "灯开指令",
+            "actionDescription": "警示灯开指令",
             "blockingType": "HARD",
             "actionParameters": [
                 {
@@ -159,13 +159,13 @@
     "serialNumber": ""
 }
 
-灯关指令
+警示灯关指令
 {
     "actions": [
         {
             "actionType": "writeValue",
             "actionId": "01d47574-29aa-4dd7-bea2-5efcceea5f2d",
-            "actionDescription": "灯关指令",
+            "actionDescription": "警示灯关指令",
             "blockingType": "HARD",
             "actionParameters": [
                 {

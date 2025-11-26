@@ -178,6 +178,22 @@ class MqttPublisher:
         except Exception as e:
             raise
 
+    def publish_equipment_actions(self, equipment: dict, actions_payload: dict) -> None:
+        if not self.client:
+            raise RuntimeError("MQTT publisher not connected")
+        vda = str(equipment.get("vda_version", "v2"))
+        manu = str(equipment.get("manufacturer", ""))
+        serial = str(equipment.get("serial_number", ""))
+        base = f"uequip/{vda}/{manu}/{serial}"
+        topic = f"{base}/instantActions"
+        try:
+            info_obj = self.client.publish(topic, json.dumps(actions_payload), qos=1, retain=False)
+            rc = getattr(info_obj, "rc", mqtt.MQTT_ERR_SUCCESS)
+            if rc != mqtt.MQTT_ERR_SUCCESS:
+                raise RuntimeError(f"MQTT publish equipment actions failed rc={rc}")
+        except Exception:
+            raise
+
     def publish_sim_settings(self, info: AGVInfo, patch: SimSettingsPatch | dict) -> None:
         """发布仿真设置热更新到 MQTT `.../simConfig` 主题。
 

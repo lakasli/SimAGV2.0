@@ -1,0 +1,30 @@
+.caller-component * { margin: 0; padding: 0; box-sizing: border-box; }
+.caller-component { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; }
+.caller-component .container { text-align: center; background-color: white; border-radius: 16px; padding: 30px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); max-width: 500px; width: 100%; }
+.caller-component h1 { color: #2c3e50; margin-bottom: 10px; font-weight: 600; }
+.caller-component .subtitle { color: #7f8c8d; margin-bottom: 30px; font-size: 16px; }
+.caller-component .caller-container { position: relative; width: 100%; aspect-ratio: 1 / 1; margin: 0 auto 40px; }
+.caller-component .caller { position: relative; width: 100%; height: 100%; background-color: #f5f5f5; border-radius: 20px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.8), inset 0 0 15px rgba(0, 0, 0, 0.05); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.caller-component .button-area { position: relative; width: 80%; height: 80%; display: flex; align-items: center; justify-content: center; }
+.caller-component .light-ring { position: absolute; width: 100%; height: 100%; border-radius: 50%; background: conic-gradient(from 0deg, #2ecc71 0deg 90deg, rgba(46, 204, 113, 0.3) 90deg 180deg, #2ecc71 180deg 270deg, rgba(46, 204, 113, 0.3) 270deg 360deg); box-shadow: 0 0 20px rgba(46, 204, 113, 0.5), inset 0 0 10px rgba(255, 255, 255, 0.8); transition: all 0.5s ease; z-index: 1; }
+.caller-component .caller.active .light-ring { background: conic-gradient(from 0deg, #e74c3c 0deg 90deg, rgba(231, 76, 60, 0.3) 90deg 180deg, #e74c3c 180deg 270deg, rgba(231, 76, 60, 0.3) 270deg 360deg); box-shadow: 0 0 20px rgba(231, 76, 60, 0.7), inset 0 0 10px rgba(255, 255, 255, 0.8); animation: pulse 1.5s infinite alternate; }
+@keyframes pulse { 0% { box-shadow: 0 0 20px rgba(231, 76, 60, 0.7), inset 0 0 10px rgba(255, 255, 255, 0.8); } 100% { box-shadow: 0 0 30px rgba(231, 76, 60, 0.9), inset 0 0 10px rgba(255, 255, 255, 0.8); } }
+.caller-component .call-button { position: relative; width: 60%; height: 60%; border-radius: 50%; background: linear-gradient(145deg, #ffffff, #e6e6e6); box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.1), -5px -5px 15px rgba(255, 255, 255, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.9); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s ease; z-index: 2; }
+.caller-component .call-button:hover { transform: scale(1.05); }
+.caller-component .call-button:active { transform: scale(0.95); box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1), -2px -2px 10px rgba(255, 255, 255, 0.8), inset 0 0 5px rgba(0, 0, 0, 0.1); }
+.caller-component .button-text { font-size: 18px; font-weight: 600; color: #2c3e50; text-transform: uppercase; letter-spacing: 1px; }
+.caller-component .status-light { position: absolute; top: 8%; right: 8%; width: 12%; height: 12%; border-radius: 50%; background-color: #95a5a6; box-shadow: 0 0 5px rgba(0, 0, 0, 0.2), inset 0 0 3px rgba(0, 0, 0, 0.3); transition: all 0.3s ease; z-index: 3; }
+.caller-component .status-light.on { background-color: #2ecc71; box-shadow: 0 0 10px rgba(46, 204, 113, 0.7), inset 0 0 3px rgba(255, 255, 255, 0.5); }
+.caller-component .controls { display: flex; justify-content: center; gap: 15px; margin-top: 20px; flex-wrap: wrap; }
+.caller-component .btn { padding: 10px 20px; border: none; border-radius: 50px; background-color: #3498db; color: white; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3); }
+.caller-component .btn:hover { background-color: #2980b9; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(52, 152, 219, 0.4); }
+.caller-component .btn:active { transform: translateY(0); }
+.caller-component .btn-call { background-color: #e74c3c; box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3); }
+.caller-component .btn-call:hover { background-color: #c0392b; box-shadow: 0 6px 15px rgba(231, 76, 60, 0.4); }
+.caller-component .btn-light { background-color: #2ecc71; box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3); }
+.caller-component .btn-light:hover { background-color: #27ae60; box-shadow: 0 6px 15px rgba(46, 204, 113, 0.4); }
+.caller-component .status { margin-top: 20px; font-size: 18px; font-weight: 600; color: #2c3e50; height: 24px; }
+.caller-component .caller.active .status { color: #e74c3c; }
+.caller-component .features { display: flex; justify-content: center; gap: 15px; margin-top: 30px; flex-wrap: wrap; }
+.caller-component .feature { display: flex; align-items: center; background-color: #f8f9fa; padding: 10px 15px; border-radius: 50px; font-size: 14px; color: #2c3e50; }
+.caller-component .feature i { margin-right: 8px; color: #3498db; }

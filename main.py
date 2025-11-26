@@ -9,6 +9,7 @@ import json
 import threading
 import signal
 import re
+import importlib
 
 from SimVehicleSys.config.settings import get_config
 
@@ -249,6 +250,66 @@ def start_simulators() -> list[subprocess.Popen]:
     return procs
 
 
+def _list_equipment_dirs() -> list[Path]:
+    base = PROJECT_ROOT / "SimEquipment"
+    try:
+        if not base.exists():
+            return []
+        return [p for p in base.iterdir() if p.is_dir() and (p / "device.py").exists() and (p / "config.json").exists()]
+    except Exception:
+        return []
+
+
+def _import_device_class(dir_path: Path):
+    try:
+        mod_name = f"SimEquipment.{dir_path.name}.device"
+        mod = importlib.import_module(mod_name)
+        from SimEquipment.base import EquipmentDevice
+        for attr in dir(mod):
+            obj = getattr(mod, attr)
+            if isinstance(obj, type):
+                try:
+                    if issubclass(obj, EquipmentDevice) and obj is not EquipmentDevice:
+                        return obj
+                except Exception:
+                    pass
+    except Exception:
+        return None
+    return None
+
+
+def start_equipment_devices() -> list:
+    devices = []
+    dirs = _list_equipment_dirs()
+    for d in dirs:
+        try:
+            DeviceCls = _import_device_class(d)
+            if not DeviceCls:
+                print(f"跳过设备目录: {d.name}")
+                continue
+            from SimEquipment.base import load_config
+            cfg = load_config(d)
+            dev = DeviceCls(cfg)
+            dev.start()
+            devices.append(dev)
+            try:
+                serial = getattr(getattr(cfg, "identity", None), "serial_number", d.name)
+            except Exception:
+                serial = d.name
+            print(f"启动仿真设备: {serial}")
+        except Exception as e:
+            print(f"启动仿真设备失败: {d.name} {e}")
+    return devices
+
+
+def stop_equipment_devices(devices: list) -> None:
+    for dev in devices:
+        try:
+            dev.stop()
+        except Exception:
+            pass
+
+
 def main() -> None:
     print("检查端口并选择可用端口...")
     mosq_proc = None
@@ -291,6 +352,12 @@ def main() -> None:
     except Exception as e:
         print(f"Simulator start failed: {e}")
         simulator_procs = []
+    print("启动仿真设备...")
+    equipment_devs: list = []
+    try:
+        equipment_devs = start_equipment_devices()
+    except Exception as e:
+        print(f"Equipment start failed: {e}")
     print("所有服务已启动。按 Ctrl+C 停止。")
     try:
         while True:
@@ -322,6 +389,10 @@ def main() -> None:
                     p.terminate()
                 except Exception:
                     pass
+            try:
+                stop_equipment_devices(equipment_devs)
+            except Exception:
+                pass
             if world_service:
                 try:
                     world_service.stop()

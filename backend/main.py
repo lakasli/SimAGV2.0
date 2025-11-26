@@ -136,6 +136,26 @@ def list_equipments() -> List[dict]:
         items = []
     return items
 
+@app.post("/api/equipments/{dir_name}/instant")
+def publish_equipment_instant(dir_name: str, body: dict = Body(...)):
+    equipments = list_equipments()
+    eq = None
+    for it in equipments:
+        if str(it.get("dir_name")) == str(dir_name):
+            eq = it
+            break
+    if not eq:
+        raise HTTPException(status_code=404, detail="Equipment not found")
+    publisher = getattr(app.state, "mqtt_publisher", None)
+    if not publisher:
+        raise HTTPException(status_code=500, detail="MQTT publisher not available")
+    try:
+        # 直接透传 body（应为 camelCase InstantActions 结构，如 docs/仿真设备instanceaction.md）
+        publisher.publish_equipment_actions(eq, body)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Publish equipment actions failed: {e}")
+    return {"published": True, "dir_name": dir_name}
+
 @app.get("/api/maps")
 def list_maps() -> List[str]:
     vehicle_dir = maps_dir / "VehicleMap"

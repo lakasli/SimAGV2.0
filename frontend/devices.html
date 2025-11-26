@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>仿真设备展示</title>
+  <link rel="stylesheet" href="./css/caller.css">
+  <link rel="stylesheet" href="./css/door.css">
+  <link rel="stylesheet" href="./css/elevator.css">
+  <link rel="stylesheet" href="./css/light.css">
+</head>
+<body>
+  <style>
+    .grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 16px; padding: 16px; }
+    .grid .cell { display: flex; border-radius: 8px; overflow: hidden; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+    .cell .container { flex: 0.5; max-width: none; width: 100%; box-shadow: none; border-radius: 0; }
+    .door-component .door-container, .light-component .warning-light-container { width: 100%; aspect-ratio: 1 / 1; }
+  </style>
+  <div class="grid">
+    <div class="cell elevator-component">
+      <div class="container">
+        <h1>电梯</h1>
+        <p class="subtitle">点击按钮展示状态</p>
+        <div class="elevator-container">
+          <div class="icon-frame">
+            <div class="elevator" id="elevatorIcon">
+              <div class="elevator-door" id="elevatorDoorIcon">
+                <div class="door-left"></div>
+                <div class="door-right"></div>
+                <div class="door-gap"></div>
+              </div>
+              <div class="elevator-interior"><div class="interior-pattern"></div></div>
+              <div class="control-panel">
+                <div class="floor-display" id="floorDisplayIcon">1</div>
+                <div class="direction-indicator">
+                  <div class="direction" id="upIcon">↑</div>
+                  <div class="direction" id="downIcon">↓</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="controls">
+          <button class="btn" id="elevatorOpen">开门</button>
+          <button class="btn btn-close" id="elevatorClose">关门</button>
+          <button class="btn btn-up" id="elevatorUp">上行</button>
+          <button class="btn btn-down" id="elevatorDown">下行</button>
+        </div>
+        <div class="status" id="elevatorStatus">当前状态: 关门 | 停止</div>
+      </div>
+    </div>
+
+    <div class="cell door-component">
+      <div class="container">
+        <h1>双开门</h1>
+        <p class="subtitle">点击按钮展示状态</p>
+        <div class="door-container">
+          <div class="icon-frame">
+            <div class="double-door" id="doubleDoorIcon">
+              <div class="door-left">
+                <div class="door-panel"></div>
+                <div class="door-handle"></div>
+              </div>
+              <div class="door-right">
+                <div class="door-panel"></div>
+                <div class="door-handle"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="controls">
+          <button class="btn" id="doorOpen">开门</button>
+          <button class="btn btn-close" id="doorClose">关门</button>
+        </div>
+        <div class="status" id="doorStatus">当前状态: 关门</div>
+      </div>
+    </div>
+
+    <div class="cell caller-component">
+      <div class="container">
+        <h1>呼叫器</h1>
+        <p class="subtitle">点击按钮展示状态</p>
+        <div class="caller-container">
+          <div class="caller" id="callerIcon">
+            <div class="button-area">
+              <div class="light-ring"></div>
+              <div class="call-button" id="callButton"><div class="button-text">呼叫</div></div>
+            </div>
+            <div class="status-light" id="callerLight"></div>
+          </div>
+        </div>
+        <div class="controls">
+          <button class="btn btn-call" id="callerCallOn">呼叫状态</button>
+          <button class="btn" id="callerStandby">待机状态</button>
+          <button class="btn btn-light" id="callerToggleLight">切换指示灯</button>
+        </div>
+        <div class="status" id="callerStatus">当前状态: 待机 | 指示灯: 关闭</div>
+      </div>
+    </div>
+
+    <div class="cell light-component">
+      <div class="container">
+        <h1>警示灯</h1>
+        <p class="subtitle">点击按钮展示状态</p>
+        <div class="warning-light-container">
+          <div class="icon-frame">
+            <div class="warning-light" id="warningLightIcon">
+              <div class="light-bulb"></div>
+              <div class="light-cover"></div>
+              <div class="light-base"></div>
+            </div>
+          </div>
+        </div>
+        <div class="controls">
+          <button class="btn" id="lightOn">开启</button>
+          <button class="btn btn-off" id="lightOff">关闭</button>
+        </div>
+        <div class="status" id="lightStatus">当前状态: 关闭</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const WS_URL = (location.origin.replace('http','ws') + '/ws');
+    let ws;
+    function connectWS(){
+      try{ws = new WebSocket(WS_URL);}catch(e){ws=null;}
+      if(!ws){return;}
+      ws.onmessage = (ev)=>{
+        try{const msg = JSON.parse(ev.data);}catch(_){return;}
+        const msg = JSON.parse(ev.data);
+        const t = String(msg.type||'');
+        const p = msg.payload || {};
+        if(t==='mqtt_state'){updateByStatePayload(p);} // 设备上报state
+      };
+      ws.onclose = ()=>{setTimeout(connectWS, 1000);};
+    }
+    function updateByStatePayload(p){
+      const manu = p.manufacturer || p.manufacturer; // both
+      const sn = p.serialNumber || p.serial_number;
+      const info = p.information || [];
+      // Door
+      const doorInfo = info.find(i=>String(i.info_type||i.infoType||'').toLowerCase()==='doorstate');
+      if(doorInfo){
+        const refs = doorInfo.info_references || doorInfo.infoReferences || [];
+        const isOpen = String((refs.find(r=>String(r.reference_key||r.referenceKey||'')==='open')||{}).reference_value||'false').toLowerCase()==='true';
+        doubleDoorIcon.classList.toggle('door-open', !!isOpen);
+        doorStatus.textContent = `当前状态: ${isOpen?'开门':'关门'}`;
+      }
+      // Light
+      const lightInfo = info.find(i=>String(i.info_type||i.infoType||'').toLowerCase()==='lightstate');
+      if(lightInfo){
+        const refs = lightInfo.info_references || lightInfo.infoReferences || [];
+        const on = String((refs.find(r=>String(r.reference_key||r.referenceKey||'')==='on')||{}).reference_value||'false').toLowerCase()==='true';
+        warningLightIcon.classList.toggle('light-on', !!on);
+        lightStatus.textContent = `当前状态: ${on?'开启':'关闭'}`;
+      }
+      // Elevator
+      const elevInfo = info.find(i=>String(i.info_type||i.infoType||'').toLowerCase()==='elevatorstate');
+      if(elevInfo){
+        const refs = elevInfo.info_references || elevInfo.infoReferences || [];
+        const doorOpen = String((refs.find(r=>String(r.reference_key||r.referenceKey||'')==='doorOpen')||{}).reference_value||'false').toLowerCase()==='true';
+        const floorRef = refs.find(r=>String(r.reference_key||r.referenceKey||'')==='floor');
+        const floorVal = floorRef ? Number(floorRef.reference_value||floorRef.referenceValue||1) : 1;
+        elevatorDoorIcon.classList.toggle('door-open', !!doorOpen);
+        floorDisplayIcon.textContent = String(floorVal||1);
+        const statusDoor = doorOpen?'开门':'关门';
+        elevatorStatus.textContent = `当前状态: ${statusDoor} | 停止`;
+      }
+      // Caller
+      const callerInfo = info.find(i=>String(i.info_type||i.infoType||'').toLowerCase()==='callerstate');
+      if(callerInfo){
+        const refs = callerInfo.info_references || callerInfo.infoReferences || [];
+        const pressed = String((refs.find(r=>String(r.reference_key||r.referenceKey||'')==='pressed')||{}).reference_value||'false').toLowerCase()==='true';
+        callerIcon.classList.toggle('active', !!pressed);
+        updateCallerStatus();
+      }
+    }
+    connectWS();
+    const callerIcon=document.getElementById('callerIcon');
+    const callerLight=document.getElementById('callerLight');
+    const callerStatus=document.getElementById('callerStatus');
+    document.getElementById('callerCallOn').onclick=()=>{callerIcon.classList.add('active');updateCallerStatus();};
+    document.getElementById('callerStandby').onclick=()=>{callerIcon.classList.remove('active');updateCallerStatus();};
+    document.getElementById('callerToggleLight').onclick=()=>{callerLight.classList.toggle('on');updateCallerStatus();};
+    function updateCallerStatus(){const calling=callerIcon.classList.contains('active');const light=callerLight.classList.contains('on');callerStatus.textContent=`当前状态: ${calling?'呼叫中':'待机'} | 指示灯: ${light?'开启':'关闭'}`;}
+
+    const doubleDoorIcon=document.getElementById('doubleDoorIcon');
+    const doorStatus=document.getElementById('doorStatus');
+    document.getElementById('doorOpen').onclick=()=>{doubleDoorIcon.classList.add('door-open');doorStatus.textContent='当前状态: 开门';};
+    document.getElementById('doorClose').onclick=()=>{doubleDoorIcon.classList.remove('door-open');doorStatus.textContent='当前状态: 关门';};
+
+    const elevatorDoorIcon=document.getElementById('elevatorDoorIcon');
+    const elevatorStatus=document.getElementById('elevatorStatus');
+    const upIcon=document.getElementById('upIcon');
+    const downIcon=document.getElementById('downIcon');
+    const floorDisplayIcon=document.getElementById('floorDisplayIcon');
+    let floor=1; let moving=false; let dir='stop';
+    document.getElementById('elevatorOpen').onclick=()=>{if(!moving){elevatorDoorIcon.classList.add('door-open');updateElevator();}};
+    document.getElementById('elevatorClose').onclick=()=>{elevatorDoorIcon.classList.remove('door-open');updateElevator();};
+    document.getElementById('elevatorUp').onclick=()=>{if(!elevatorDoorIcon.classList.contains('door-open')){moving=true;dir='up';upIcon.classList.add('active');downIcon.classList.remove('active');setTimeout(()=>{floor=Math.min(10,floor+1);floorDisplayIcon.textContent=floor;moving=false;dir='stop';upIcon.classList.remove('active');updateElevator();},1200);updateElevator();}};
+    document.getElementById('elevatorDown').onclick=()=>{if(!elevatorDoorIcon.classList.contains('door-open')){moving=true;dir='down';downIcon.classList.add('active');upIcon.classList.remove('active');setTimeout(()=>{floor=Math.max(1,floor-1);floorDisplayIcon.textContent=floor;moving=false;dir='stop';downIcon.classList.remove('active');updateElevator();},1200);updateElevator();}};
+    function updateElevator(){const doorOpen=elevatorDoorIcon.classList.contains('door-open');const statusDoor=doorOpen?'开门':'关门';const statusMove=dir==='up'?'上行':dir==='down'?'下行':'停止';elevatorStatus.textContent=`当前状态: ${statusDoor} | ${statusMove}`;}
+
+    const warningLightIcon=document.getElementById('warningLightIcon');
+    const lightStatus=document.getElementById('lightStatus');
+    async function postInstant(dirName, payload){
+      await fetch(`/api/equipments/${encodeURIComponent(dirName)}/instant`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    }
+    function buildAction(cmd){
+      return {"actions":[{"actionType":"writeValue","actionId":String(Math.random()),"blockingType":"HARD","actionParameters":[{"key":"command","value":cmd}]}],"headerId":0,"timeStamp":"","version":"v1","manufacturer":"","serialNumber":""};
+    }
+    document.getElementById('lightOn').onclick=()=>{postInstant('LightSim_01',buildAction('cmd:on')).catch(()=>{});};
+    document.getElementById('lightOff').onclick=()=>{postInstant('LightSim_01',buildAction('cmd:off')).catch(()=>{});};
+    document.getElementById('doorOpen').onclick=()=>{postInstant('DoorSim_01',buildAction('cmd:open')).catch(()=>{});};
+    document.getElementById('doorClose').onclick=()=>{postInstant('DoorSim_01',buildAction('cmd:close')).catch(()=>{});};
+    document.getElementById('elevatorOpen').onclick=()=>{postInstant('ElevatorSim_01',buildAction('cmd:press')).catch(()=>{});};
+    document.getElementById('elevatorUp').onclick=()=>{postInstant('ElevatorSim_01',{"actions":[{"actionType":"moveToFloor","actionId":String(Math.random()),"blockingType":"HARD","actionParameters":[{"key":"floor","value":(Number(floorDisplayIcon.textContent||'1')+1)}]}],"headerId":0,"timeStamp":"","version":"v1","manufacturer":"","serialNumber":""}).catch(()=>{});};
+    document.getElementById('elevatorDown').onclick=()=>{postInstant('ElevatorSim_01',{"actions":[{"actionType":"moveToFloor","actionId":String(Math.random()),"blockingType":"HARD","actionParameters":[{"key":"floor","value":Math.max(1,(Number(floorDisplayIcon.textContent||'1')-1))}]}],"headerId":0,"timeStamp":"","version":"v1","manufacturer":"","serialNumber":""}).catch(()=>{});};
+    document.getElementById('callerCallOn').onclick=()=>{postInstant('CallerSim_01',buildAction('cmd:press')).catch(()=>{});};
+    document.getElementById('callerStandby').onclick=()=>{postInstant('CallerSim_01',buildAction('cmd:release')).catch(()=>{});};
+  </script>
+</body>
+</html>
