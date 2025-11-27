@@ -136,47 +136,77 @@
       ws.onclose = ()=>{setTimeout(connectWS, 1000);};
     }
     function updateByStatePayload(p){
-      const manu = p.manufacturer || p.manufacturer; // both
+      const manu = p.manufacturer || p.manufacturer;
       const sn = p.serialNumber || p.serial_number;
+      const snl = String(sn || '').toLowerCase();
       const info = p.information || [];
       // Door
       const doorInfo = info.find(i=>String(i.info_type||i.infoType||'').toLowerCase()==='doorstate');
-      if(doorInfo){
+      if(doorInfo && snl.includes('door')){
         const refs = doorInfo.info_references || doorInfo.infoReferences || [];
-        const isOpen = String((refs.find(r=>String(r.reference_key||r.referenceKey||'')==='open')||{}).reference_value||'false').toLowerCase()==='true';
-        doubleDoorIcon.classList.toggle('door-open', !!isOpen);
-        doorStatus.textContent = `当前状态: ${isOpen?'开门':'关门'}`;
+        const vals = refs.filter(r=>String(r.reference_key||r.referenceKey||'')==='value').map(r=>String(r.reference_value||r.referenceValue||''));
+        const isOpen = vals.includes('state:open');
+        const dIcon = document.getElementById('doubleDoorIcon');
+        const dStatus = document.getElementById('doorStatus');
+        if(dIcon){ dIcon.classList.toggle('door-open', !!isOpen); }
+        if(dStatus){ dStatus.textContent = `当前状态: ${isOpen?'开门':'关门'}`; }
       }
       // Light
       const lightInfo = info.find(i=>String(i.info_type||i.infoType||'').toLowerCase()==='lightstate');
       if(lightInfo){
         const refs = lightInfo.info_references || lightInfo.infoReferences || [];
-        const on = String((refs.find(r=>String(r.reference_key||r.referenceKey||'')==='on')||{}).reference_value||'false').toLowerCase()==='true';
-        warningLightIcon.classList.toggle('light-on', !!on);
-        lightStatus.textContent = `当前状态: ${on?'开启':'关闭'}`;
+        const vals = refs.filter(r=>String(r.reference_key||r.referenceKey||'')==='value').map(r=>String(r.reference_value||r.referenceValue||''));
+        const on = vals.includes('state:on');
+        const wIcon = document.getElementById('warningLightIcon');
+        const lStatus = document.getElementById('lightStatus');
+        if(wIcon){ wIcon.classList.toggle('light-on', !!on); }
+        if(lStatus){ lStatus.textContent = `当前状态: ${on?'开启':'关闭'}`; }
       }
       // Elevator
       const elevInfo = info.find(i=>String(i.info_type||i.infoType||'').toLowerCase()==='elevatorstate');
       if(elevInfo){
         const refs = elevInfo.info_references || elevInfo.infoReferences || [];
-        const doorOpen = String((refs.find(r=>String(r.reference_key||r.referenceKey||'')==='doorOpen')||{}).reference_value||'false').toLowerCase()==='true';
-        const floorRef = refs.find(r=>String(r.reference_key||r.referenceKey||'')==='floor');
-        const floorVal = floorRef ? Number(floorRef.reference_value||floorRef.referenceValue||1) : 1;
-        elevatorDoorIcon.classList.toggle('door-open', !!doorOpen);
-        floorDisplayIcon.textContent = String(floorVal||1);
+        const vals = refs.filter(r=>String(r.reference_key||r.referenceKey||'')==='value').map(r=>String(r.reference_value||r.referenceValue||''));
+        const doorOpen = vals.includes('state:open');
+        const isUp = vals.includes('state:up');
+        const isDown = vals.includes('state:down');
+        const floorVal = (function(){
+          const f = vals.find(v=>v.startsWith('state:floor:'));
+          if(!f) return 1;
+          const n = Number(f.split(':').pop());
+          return Number.isFinite(n)?n:1;
+        })();
+        const edIcon = document.getElementById('elevatorDoorIcon');
+        const fdIcon = document.getElementById('floorDisplayIcon');
+        const upIcon = document.getElementById('upIcon');
+        const downIcon = document.getElementById('downIcon');
+        const eStatus = document.getElementById('elevatorStatus');
+        if(edIcon){ edIcon.classList.toggle('door-open', !!doorOpen); }
+        if(fdIcon){ fdIcon.textContent = String(floorVal||1); }
+        if(upIcon){ upIcon.classList.toggle('active', !!isUp); }
+        if(downIcon){ downIcon.classList.toggle('active', !!isDown); }
         const statusDoor = doorOpen?'开门':'关门';
-        elevatorStatus.textContent = `当前状态: ${statusDoor} | 停止`;
+        const statusMove = isUp ? '上行' : (isDown ? '下行' : '停止');
+        if(eStatus){ eStatus.textContent = `当前状态: ${statusDoor} | ${statusMove}`; }
       }
       // Caller
       const callerInfo = info.find(i=>String(i.info_type||i.infoType||'').toLowerCase()==='callerstate');
-      if(callerInfo){
+      if(callerInfo && snl.includes('caller')){
         const refs = callerInfo.info_references || callerInfo.infoReferences || [];
-        const pressed = String((refs.find(r=>String(r.reference_key||r.referenceKey||'')==='pressed')||{}).reference_value||'false').toLowerCase()==='true';
-        callerIcon.classList.toggle('active', !!pressed);
-        updateCallerStatus();
+        const vals = refs.filter(r=>String(r.reference_key||r.referenceKey||'')==='value').map(r=>String(r.reference_value||r.referenceValue||''));
+        const isPressed = vals.includes('state:press');
+        const cIcon = document.getElementById('callerIcon');
+        const cLight = document.getElementById('callerLight');
+        const cStatus = document.getElementById('callerStatus');
+        if(cIcon){ cIcon.classList.toggle('active', !!isPressed); }
+        if(cStatus){
+          const calling = !!isPressed;
+          const light = !!(cLight && cLight.classList.contains('on'));
+          cStatus.textContent = `当前状态: ${calling?'呼叫中':'待机'} | 指示灯: ${light?'开启':'关闭'}`;
+        }
       }
     }
-    connectWS();
+    
     const callerIcon=document.getElementById('callerIcon');
     const callerLight=document.getElementById('callerLight');
     const callerStatus=document.getElementById('callerStatus');
@@ -187,8 +217,6 @@
 
     const doubleDoorIcon=document.getElementById('doubleDoorIcon');
     const doorStatus=document.getElementById('doorStatus');
-    document.getElementById('doorOpen').onclick=()=>{doubleDoorIcon.classList.add('door-open');doorStatus.textContent='当前状态: 开门';};
-    document.getElementById('doorClose').onclick=()=>{doubleDoorIcon.classList.remove('door-open');doorStatus.textContent='当前状态: 关门';};
 
     const elevatorDoorIcon=document.getElementById('elevatorDoorIcon');
     const elevatorStatus=document.getElementById('elevatorStatus');
@@ -219,6 +247,7 @@
     document.getElementById('elevatorDown').onclick=()=>{postInstant('ElevatorSim_01',{"actions":[{"actionType":"moveToFloor","actionId":String(Math.random()),"blockingType":"HARD","actionParameters":[{"key":"floor","value":Math.max(1,(Number(floorDisplayIcon.textContent||'1')-1))}]}],"headerId":0,"timeStamp":"","version":"v1","manufacturer":"","serialNumber":""}).catch(()=>{});};
     document.getElementById('callerCallOn').onclick=()=>{postInstant('CallerSim_01',buildAction('cmd:press')).catch(()=>{});};
     document.getElementById('callerStandby').onclick=()=>{postInstant('CallerSim_01',buildAction('cmd:release')).catch(()=>{});};
+    connectWS();
   </script>
 </body>
 </html>

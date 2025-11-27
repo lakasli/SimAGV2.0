@@ -99,6 +99,7 @@
             "actionDescription": "呼叫器呼叫按钮指令",
             "blockingType": "HARD",
             "actionParameters": [
+                
                 {
                     "key": "command",
                     "value": "cmd:press"

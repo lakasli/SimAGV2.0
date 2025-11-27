@@ -16,6 +16,45 @@ class CallerSim(EquipmentDevice):
         self._last_trigger_time = 0.0
         self._act_id: str | None = None
         self._act_type: str | None = None
+        self._info_type: str = "CALLERSTATE"
+        self._info_desc: str | None = "STATE"
+        self._info_level: str = "INFO"
+        self._references_by_state: dict[str, list[dict]] = {
+            "press": [
+                {"reference_key": "name", "reference_value": "state"},
+                {"reference_key": "value", "reference_value": "state:press"},
+            ],
+            "release": [
+                {"reference_key": "name", "reference_value": "state"},
+                {"reference_key": "value", "reference_value": "state:release"},
+            ],
+        }
+        self._load_info_config()
+
+    def _load_info_config(self) -> None:
+        try:
+            fp = Path(__file__).resolve().parent / "info_config.json"
+            import json as _json
+            data = _json.loads(fp.read_text(encoding="utf-8"))
+            self._info_type = str(data.get("info_type", self._info_type))
+            self._info_desc = data.get("info_description", self._info_desc)
+            self._info_level = str(data.get("info_level", self._info_level))
+            refs = data.get("references_by_state", {}) or {}
+            for k in ("press","release"):
+                v = refs.get(k) or refs.get(k.upper())
+                if isinstance(v, list):
+                    self._references_by_state[k] = v
+        except Exception:
+            pass
+
+    def _build_information(self) -> list[dict]:
+        key = "press" if self.pressed else "release"
+        return [{
+            "info_type": self._info_type,
+            "info_description": self._info_desc,
+            "info_level": self._info_level,
+            "info_references": self._references_by_state.get(key, []),
+        }]
 
     def _start_thread(self) -> None:
         self._publish_factsheet("CALLER")
@@ -27,17 +66,7 @@ class CallerSim(EquipmentDevice):
         interval = 1.0 / float(freq)
         import time as _t
         while not self._stop:
-            self._state["information"] = [
-                {
-                    "info_type": "CallerState",
-                    "info_references": [
-                        {"reference_key": "pressed", "reference_value": "true" if self.pressed else "false"},
-                        {"reference_key": "site", "reference_value": str(self.cfg.settings.site or "")},
-                    ],
-                    "info_description": None,
-                    "info_level": "INFO",
-                }
-            ]
+            self._state["information"] = self._build_information()
             self._publish_state(self._state)
             try:
                 if self._act_running:

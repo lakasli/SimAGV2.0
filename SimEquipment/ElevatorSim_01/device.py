@@ -9,9 +9,9 @@ from SimEquipment.base import EquipmentConfig, EquipmentDevice, load_config
 class ElevatorSim(EquipmentDevice):
     def __init__(self, cfg: EquipmentConfig) -> None:
         super().__init__(cfg)
-        self.door_open: bool = False
+        self.door_open: bool = True
         self.current_floor: int = 1
-        self.floors: List[int] = [1, 2, 3]
+        self.floors: List[int] = list(range(-99, 99))
         self._state = self._build_base_state()
         self._act_running = False
         self._act_paused = False
@@ -19,6 +19,70 @@ class ElevatorSim(EquipmentDevice):
         self._last_trigger_time = 0.0
         self._act_id: str | None = None
         self._act_type: str | None = None
+        self._info_type: str = "CUSTOM_REGISTER"
+        self._info_desc: str | None = "REGISTER_STATE"
+        self._info_level: str = "INFO"
+        self._references_by_state: dict[str, list[dict]] = {
+            "open": [
+                {"reference_key": "name", "reference_value": "state"},
+                {"reference_key": "value", "reference_value": "state:open"},
+            ],
+            "close": [
+                {"reference_key": "name", "reference_value": "state"},
+                {"reference_key": "value", "reference_value": "state:close"},
+            ],
+            "up": [
+                {"reference_key": "name", "reference_value": "state"},
+                {"reference_key": "value", "reference_value": "state:up"},
+            ],
+            "down": [
+                {"reference_key": "name", "reference_value": "state"},
+                {"reference_key": "value", "reference_value": "state:down"},
+            ],
+            "floor": [
+                {"reference_key": "name", "reference_value": "state"},
+                {"reference_key": "value", "reference_value": "state:floor"},
+            ],
+        }
+        self._move_dir: str = "stop"
+        self._door_close_due: float = 0.0
+        self._door_open_due: float = 0.0
+        self._next_floor_due: float = 0.0
+        self._travel_plan: list[int] = []
+        self._load_info_config()
+
+    def _load_info_config(self) -> None:
+        try:
+            fp = Path(__file__).resolve().parent / "info_config.json"
+            data = json.loads(fp.read_text(encoding="utf-8"))
+            self._info_type = str(data.get("info_type", self._info_type))
+            self._info_desc = data.get("info_description", self._info_desc)
+            self._info_level = str(data.get("info_level", self._info_level))
+            refs = data.get("references_by_state", {}) or {}
+            for k in ("open","close","up","down","floor"):
+                v = refs.get(k) or refs.get(k.upper())
+                if isinstance(v, list):
+                    self._references_by_state[k] = v
+        except Exception:
+            pass
+
+    def _build_information(self) -> list[dict]:
+        refs: list[dict] = []
+        refs.append({"referenceKey": "name", "referenceValue": "state"})
+        refs.append({"referenceKey": "value", "referenceValue": ("state:open" if self.door_open else "state:close")})
+        refs.append({"referenceKey": "value", "referenceValue": f"state:floor:{self.current_floor}"})
+        if self._move_dir == "up":
+            refs.append({"referenceKey": "value", "referenceValue": "state:up"})
+        elif self._move_dir == "down":
+            refs.append({"referenceKey": "value", "referenceValue": "state:down"})
+        return [
+            {
+                "infoType": "ELEVATORSTATE",
+                "infoDescription": "STATE",
+                "infoLevel": "INFO",
+                "infoReferences": refs,
+            }
+        ]
 
     def _start_thread(self) -> None:
         self._publish_factsheet("ELEVATOR")
@@ -30,18 +94,33 @@ class ElevatorSim(EquipmentDevice):
         interval = 1.0 / float(freq)
         import time as _t
         while not self._stop:
-            self._state["information"] = [
-                {
-                    "info_type": "ElevatorState",
-                    "info_references": [
-                        {"reference_key": "doorOpen", "reference_value": "true" if self.door_open else "false"},
-                        {"reference_key": "floor", "reference_value": str(self.current_floor)},
-                        {"reference_key": "site", "reference_value": str(self.cfg.settings.site or "")}
-                    ],
-                    "info_description": None,
-                    "info_level": "INFO",
-                }
-            ]
+            now = _t.time()
+            if self._door_close_due and now >= self._door_close_due and self.door_open:
+                self.door_open = False
+                self._door_close_due = 0.0
+                if self._travel_plan:
+                    self._next_floor_due = now + 2.0
+            if self._door_open_due and now >= self._door_open_due and not self.door_open:
+                self.door_open = True
+                self._door_open_due = 0.0
+            if self._next_floor_due and now >= self._next_floor_due and self._travel_plan:
+                nxt = self._travel_plan.pop(0)
+                prev = self.current_floor
+                self.current_floor = int(nxt)
+                if self._travel_plan:
+                    self._move_dir = "up" if self.current_floor > prev else ("down" if self.current_floor < prev else self._move_dir)
+                    self._next_floor_due = now + 2.0
+                else:
+                    self._move_dir = "stop"
+                    self._door_open_due = now + 3.0
+                    self._next_floor_due = 0.0
+                    if self._act_id and self._act_type:
+                        self._state["action_states"] = [{"action_id": self._act_id, "action_status": "FINISHED", "action_type": self._act_type}]
+                        self._publish_state(self._state)
+                        self._act_id = None
+                        self._act_type = None
+                        self._act_running = False
+            self._state["information"] = self._build_information()
             self._publish_state(self._state)
             try:
                 if self._act_running:
@@ -54,13 +133,15 @@ class ElevatorSim(EquipmentDevice):
                             self._act_running = False
                     else:
                         if not self._act_paused:
-                            self._act_remaining = max(0.0, float(self._act_remaining) - interval)
-                            if self._act_remaining <= 0.0:
-                                if self._act_id and self._act_type:
-                                    self._state["action_states"] = [{"action_id": self._act_id, "action_status": "FINISHED", "action_type": self._act_type}]
-                                    self._publish_state(self._state)
-                                self._act_running = False
-                                self._act_remaining = float(self.cfg.settings.action_time)
+                            if not (self._travel_plan or self._door_close_due or self._next_floor_due):
+                                self._act_remaining = max(0.0, float(self._act_remaining) - interval)
+                        if (not (self._travel_plan or self._door_close_due or self._next_floor_due)) and (self._act_remaining <= 0.0):
+                            if self._act_id and self._act_type:
+                                self._state["action_states"] = [{"action_id": self._act_id, "action_status": "FINISHED", "action_type": self._act_type}]
+                                self._publish_state(self._state)
+                            self._move_dir = "stop"
+                            self._act_running = False
+                            self._act_remaining = float(self.cfg.settings.action_time)
             except Exception:
                 pass
             _t.sleep(interval)
@@ -86,6 +167,7 @@ class ElevatorSim(EquipmentDevice):
                 # 支持 cmd:press 或 cmd:press:<floor>
                 if cmd == "cmd:press":
                     self.door_open = True
+                    self._move_dir = "stop"
                     mode = str(self.cfg.settings.trigger_mode or "instant")
                     if mode == "cancel" and self._act_running:
                         self.door_open = False
@@ -99,6 +181,7 @@ class ElevatorSim(EquipmentDevice):
                         self._act_paused = False
                         self._act_remaining = float(self.cfg.settings.action_time)
                         self._last_trigger_time = __import__("time").time()
+                        self._door_close_due = __import__("time").time() + 3.0
                         self._act_id = str(aid)
                         self._act_type = "writeValue"
                         out_states.append({"action_id": str(aid), "action_status": "RUNNING", "action_type": "writeValue"})
@@ -108,7 +191,20 @@ class ElevatorSim(EquipmentDevice):
                     except Exception:
                         tgt = None
                     if tgt is not None and tgt in self.floors:
-                        self.current_floor = int(tgt)
+                        prev = self.current_floor
+                        path: list[int] = []
+                        if tgt > prev:
+                            path = list(range(prev + 1, tgt + 1))
+                            self._move_dir = "up"
+                        elif tgt < prev:
+                            path = list(range(prev - 1, tgt - 1, -1))
+                            self._move_dir = "down"
+                        else:
+                            path = []
+                            self._move_dir = "stop"
+                        self._travel_plan = path
+                        self._door_close_due = __import__("time").time() + 3.0
+                        self._next_floor_due = 0.0
                         mode = str(self.cfg.settings.trigger_mode or "instant")
                         if mode == "cancel" and self._act_running:
                             out_states.append({"action_id": str(aid), "action_status": "FAILED", "action_type": "writeValue", "result_description": "canceled"})
@@ -119,8 +215,6 @@ class ElevatorSim(EquipmentDevice):
                         else:
                             self._act_running = True
                             self._act_paused = False
-                            self._act_remaining = float(self.cfg.settings.action_time)
-                            self._last_trigger_time = __import__("time").time()
                             self._act_id = str(aid)
                             self._act_type = "writeValue"
                             out_states.append({"action_id": str(aid), "action_status": "RUNNING", "action_type": "writeValue"})
@@ -130,6 +224,7 @@ class ElevatorSim(EquipmentDevice):
                     continue
             elif at == "openDoor":
                 self.door_open = True
+                self._move_dir = "stop"
                 mode = str(self.cfg.settings.trigger_mode or "instant")
                 if mode == "cancel" and self._act_running:
                     self.door_open = False
@@ -148,6 +243,7 @@ class ElevatorSim(EquipmentDevice):
                     out_states.append({"action_id": str(aid), "action_status": "RUNNING", "action_type": "openDoor"})
             elif at == "closeDoor":
                 self.door_open = False
+                self._move_dir = "stop"
                 mode = str(self.cfg.settings.trigger_mode or "instant")
                 if mode == "cancel" and self._act_running:
                     out_states.append({"action_id": str(aid), "action_status": "FAILED", "action_type": "closeDoor", "result_description": "canceled"})
@@ -174,7 +270,20 @@ class ElevatorSim(EquipmentDevice):
                             tgt = None
                         break
                 if tgt is not None and tgt in self.floors:
-                    self.current_floor = int(tgt)
+                    prev = self.current_floor
+                    path: list[int] = []
+                    if tgt > prev:
+                        path = list(range(prev + 1, tgt + 1))
+                        self._move_dir = "up"
+                    elif tgt < prev:
+                        path = list(range(prev - 1, tgt - 1, -1))
+                        self._move_dir = "down"
+                    else:
+                        path = []
+                        self._move_dir = "stop"
+                    self._travel_plan = path
+                    self._door_close_due = __import__("time").time() + 3.0
+                    self._next_floor_due = 0.0
                     mode = str(self.cfg.settings.trigger_mode or "instant")
                     if mode == "cancel" and self._act_running:
                         out_states.append({"action_id": str(aid), "action_status": "FAILED", "action_type": "moveToFloor", "result_description": "canceled"})
@@ -185,8 +294,6 @@ class ElevatorSim(EquipmentDevice):
                     else:
                         self._act_running = True
                         self._act_paused = False
-                        self._act_remaining = float(self.cfg.settings.action_time)
-                        self._last_trigger_time = __import__("time").time()
                         self._act_id = str(aid)
                         self._act_type = "moveToFloor"
                         out_states.append({"action_id": str(aid), "action_status": "RUNNING", "action_type": "moveToFloor"})
@@ -194,15 +301,6 @@ class ElevatorSim(EquipmentDevice):
                     out_states.append({"action_id": str(aid), "action_status": "FAILED", "action_type": "moveToFloor", "result_description": "invalidFloor"})
         if out_states:
             self._state["action_states"] = out_states
-            self._publish_state(self._state)
-            try:
-                import time as _t
-                _t.sleep(max(0.0, float(self.cfg.settings.action_time)))
-            except Exception:
-                pass
-            for s in self._state.get("action_states", []):
-                if s.get("action_status") != "FAILED":
-                    s["action_status"] = "FINISHED"
             self._publish_state(self._state)
 
 

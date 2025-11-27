@@ -1,39 +1,330 @@
-.elevator-component * { margin: 0; padding: 0; box-sizing: border-box; }
-.elevator-component { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; }
-.elevator-component .container { text-align: center; background-color: white; border-radius: 16px; padding: 30px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); max-width: 500px; width: 100%; }
-.elevator-component h1 { color: #2c3e50; margin-bottom: 10px; font-weight: 600; }
-.elevator-component .subtitle { color: #7f8c8d; margin-bottom: 30px; font-size: 16px; }
-.elevator-component .icon-frame { position: relative; width: 100%; height: 100%; background-color: #f5f5f5; border-radius: 20px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.8), inset 0 0 15px rgba(0, 0, 0, 0.05); display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.elevator-component .elevator-container { position: relative; width: 100%; aspect-ratio: 1 / 1; margin: 0 auto 40px; perspective: 1000px; }
-.elevator-component .elevator { position: relative; width: 80%; height: 80%; background-color: #ecf0f1; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1); overflow: hidden; display: flex; flex-direction: column; }
-.elevator-component .elevator::after { content: ''; position: absolute; top: 70%; left: 0; right: 0; height: 2%; background-color: #7f8c8d; }
-.elevator-component .elevator-door { position: relative; height: 70%; display: flex; transition: all 0.5s ease; }
-.elevator-component .door-left, .elevator-component .door-right { position: relative; width: 50%; height: 100%; background-color: #bdc3c7; transition: transform 0.8s ease; display: flex; align-items: center; justify-content: center; }
-.elevator-component .door-left { border-right: 2px solid #95a5a6; }
-.elevator-component .door-right { border-left: 2px solid #95a5a6; }
-.elevator-component .door-gap { display: none; }
-.elevator-component .door-open .door-left { transform: translateX(-90%); }
-.elevator-component .door-open .door-right { transform: translateX(90%); }
-.elevator-component .elevator-interior { position: absolute; top: 0; left: 0; width: 100%; height: 70%; background-color: #34495e; display: flex; align-items: center; justify-content: center; z-index: -1; }
-.elevator-component .interior-pattern { width: 80%; height: 80%; border: 2px solid #2c3e50; border-radius: 6px; position: relative; }
-.elevator-component .interior-pattern::before { content: ''; position: absolute; top: 30%; left: 10%; right: 10%; height: 2px; background-color: #2c3e50; }
-.elevator-component .interior-pattern::after { content: ''; position: absolute; top: 60%; left: 10%; right: 10%; height: 2px; background-color: #2c3e50; }
-.elevator-component .control-panel { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 180px; height: 36px; display: block; background-color: transparent; border: none; padding: 0; }
-.elevator-component .floor-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 30px; background-color: #1a252f; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #e74c3c; font-weight: bold; font-family: 'Courier New', monospace; font-size: 18px; z-index: 2; }
-.elevator-component .direction-indicator { position: absolute; top: 50%; left: 42%; transform: translate(-40%, -50%); width: 140px; display: flex; justify-content: space-between; align-items: center; gap: 0; z-index: 1; }
-.elevator-component .direction { width: 30px; height: 30px; border-radius: 50%; background-color: #1a252f; display: flex; align-items: center; justify-content: center; color: #7f8c8d; font-weight: bold; transition: all 0.3s ease; }
-.elevator-component .direction.active { background-color: #e74c3c; color: white; box-shadow: 0 0 10px rgba(231, 76, 60, 0.7); }
-.elevator-component .controls { display: flex; justify-content: center; gap: 15px; margin-top: 20px; flex-wrap: wrap; }
-.elevator-component .btn { padding: 10px 20px; border: none; border-radius: 50px; background-color: #3498db; color: white; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3); }
-.elevator-component .btn:hover { background-color: #2980b9; transform: translateY(-2px); box-shadow: 0 6px 15px rgba(52, 152, 219, 0.4); }
-.elevator-component .btn:active { transform: translateY(0); }
-.elevator-component .btn-close { background-color: #e74c3c; box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3); }
-.elevator-component .btn-close:hover { background-color: #c0392b; box-shadow: 0 6px 15px rgba(231, 76, 60, 0.4); }
-.elevator-component .btn-up { background-color: #2ecc71; box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3); }
-.elevator-component .btn-up:hover { background-color: #27ae60; box-shadow: 0 6px 15px rgba(46, 204, 113, 0.4); }
-.elevator-component .btn-down { background-color: #f39c12; box-shadow: 0 4px 10px rgba(243, 156, 18, 0.3); }
-.elevator-component .btn-down:hover { background-color: #d35400; box-shadow: 0 6px 15px rgba(243, 156, 18, 0.4); }
-.elevator-component .status { margin-top: 20px; font-size: 18px; font-weight: 600; color: #2c3e50; height: 24px; }
-.elevator-component .features { display: flex; justify-content: center; gap: 15px; margin-top: 30px; flex-wrap: wrap; }
-.elevator-component .feature { display: flex; align-items: center; background-color: #f8f9fa; padding: 10px 15px; border-radius: 50px; font-size: 14px; color: #2c3e50; }
-.elevator-component .feature i { margin-right: 8px; color: #3498db; }
+.elevator-component * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.elevator-component {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 20px;
+}
+
+.elevator-component .container {
+    text-align: center;
+    background-color: white;
+    border-radius: 16px;
+    padding: 30px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    max-width: 500px;
+    width: 100%;
+}
+
+.elevator-component h1 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.elevator-component .subtitle {
+    color: #7f8c8d;
+    margin-bottom: 30px;
+    font-size: 16px;
+}
+
+.elevator-component .icon-frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background-color: #f5f5f5;
+    border-radius: 20px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.8), inset 0 0 15px rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.elevator-component .elevator-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    margin: 0 auto 40px;
+    perspective: 1000px;
+}
+
+.elevator-component .elevator {
+    position: relative;
+    width: 80%;
+    height: 80%;
+    background-color: #ecf0f1;
+    border-radius: 1.5cqw;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    container-type: size;
+}
+
+.elevator-component .elevator::after {
+    content: '';
+    position: absolute;
+    top: 70%;
+    left: 0;
+    right: 0;
+    height: 2%;
+    background-color: #7f8c8d;
+}
+
+.elevator-component .elevator-door {
+    position: relative;
+    height: 70%;
+    display: flex;
+    transition: all 0.5s ease;
+}
+
+.elevator-component .door-left,
+.elevator-component .door-right {
+    position: relative;
+    width: 50%;
+    height: 100%;
+    background-color: #bdc3c7;
+    transition: transform 0.8s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.elevator-component .door-left::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0.8cqw;
+    height: 100%;
+    background-color: #95a5a6;
+}
+
+.elevator-component .door-right::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0.8cqw;
+    height: 100%;
+    background-color: #95a5a6;
+}
+
+.elevator-component .door-gap {
+    display: none;
+}
+
+.elevator-component .door-open .door-left {
+    transform: translateX(-90%);
+}
+
+.elevator-component .door-open .door-right {
+    transform: translateX(90%);
+}
+
+.elevator-component .elevator-interior {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 70%;
+    background-color: #34495e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: -1;
+}
+
+.elevator-component .interior-pattern {
+    width: 80%;
+    height: 80%;
+    border: 0.4cqw solid #2c3e50;
+    border-radius: 0.8cqw;
+    position: relative;
+}
+
+.elevator-component .interior-pattern::before {
+    content: '';
+    position: absolute;
+    top: 30%;
+    left: 10%;
+    right: 10%;
+    height: 0.3cqw;
+    background-color: #2c3e50;
+}
+
+.elevator-component .interior-pattern::after {
+    content: '';
+    position: absolute;
+    top: 60%;
+    left: 10%;
+    right: 10%;
+    height: 0.3cqw;
+    background-color: #2c3e50;
+}
+
+.elevator-component .control-panel {
+    position: absolute;
+    bottom: 2cqh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90cqw;
+    height: 18cqh;
+    display: block;
+    background-color: transparent;
+    border: none;
+    padding: 0;
+}
+
+.elevator-component .floor-display {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 30cqw;
+    height: 15cqh;
+    background-color: #1a252f;
+    border-radius: 1cqw;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #e74c3c;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    font-size: 9cqh;
+    z-index: 2;
+}
+
+.elevator-component .direction-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 70cqw;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0;
+    z-index: 1;
+}
+
+.elevator-component .direction {
+    width: 15cqw;
+    height: 15cqw;
+    border-radius: 50%;
+    background-color: #1a252f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #7f8c8d;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    font-size: 8cqw;
+}
+
+.elevator-component .direction.active {
+    background-color: #e74c3c;
+    color: white;
+    box-shadow: 0 0 2cqw rgba(231, 76, 60, 0.7);
+}
+
+.elevator-component .controls {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+
+.elevator-component .btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 50px;
+    background-color: #3498db;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);
+}
+
+.elevator-component .btn:hover {
+    background-color: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(52, 152, 219, 0.4);
+}
+
+.elevator-component .btn:active {
+    transform: translateY(0);
+}
+
+.elevator-component .btn-close {
+    background-color: #e74c3c;
+    box-shadow: 0 4px 10px rgba(231, 76, 60, 0.3);
+}
+
+.elevator-component .btn-close:hover {
+    background-color: #c0392b;
+    box-shadow: 0 6px 15px rgba(231, 76, 60, 0.4);
+}
+
+.elevator-component .btn-up {
+    background-color: #2ecc71;
+    box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
+}
+
+.elevator-component .btn-up:hover {
+    background-color: #27ae60;
+    box-shadow: 0 6px 15px rgba(46, 204, 113, 0.4);
+}
+
+.elevator-component .btn-down {
+    background-color: #f39c12;
+    box-shadow: 0 4px 10px rgba(243, 156, 18, 0.3);
+}
+
+.elevator-component .btn-down:hover {
+    background-color: #d35400;
+    box-shadow: 0 6px 15px rgba(243, 156, 18, 0.4);
+}
+
+.elevator-component .status {
+    margin-top: 20px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #2c3e50;
+    height: 24px;
+}
+
+.elevator-component .features {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 30px;
+    flex-wrap: wrap;
+}
+
+.elevator-component .feature {
+    display: flex;
+    align-items: center;
+    background-color: #f8f9fa;
+    padding: 10px 15px;
+    border-radius: 50px;
+    font-size: 14px;
+    color: #2c3e50;
+}
+
+.elevator-component .feature i {
+    margin-right: 8px;
+    color: #3498db;
+}

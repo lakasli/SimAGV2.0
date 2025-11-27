@@ -22,6 +22,7 @@ class MQTTBridge:
         self.host: str = ""
         self.port: int = 0
         self.vda_interface: str = ""
+        self._equip_interface: str = "uequip"
         self._load_config()
 
     def _load_config(self) -> None:
@@ -30,6 +31,12 @@ class MQTTBridge:
         self.host = str(cfg.mqtt_broker.host)
         self.port = int(str(cfg.mqtt_broker.port))
         self.vda_interface = str(cfg.mqtt_broker.vda_interface)
+        try:
+            env_equip_iface = __import__("os").getenv("SIMAGV_MQTT_EQUIP_INTERFACE")
+            if env_equip_iface:
+                self._equip_interface = str(env_equip_iface)
+        except Exception:
+            pass
 
     def start(self) -> None:
         self.client = mqtt.Client(client_id=str(uuid.uuid4()), protocol=mqtt.MQTTv5)
@@ -40,7 +47,15 @@ class MQTTBridge:
         except Exception as e:
             print(f"MQTTBridge connect failed: {e}")
             return
-        self.client.subscribe(f"{self.vda_interface}/#", qos=1)
+        try:
+            self.client.subscribe(f"{self.vda_interface}/#", qos=1)
+        except Exception:
+            pass
+        try:
+            # 设备主题桥接（如 DoorSim 使用 uequip/v2/...）
+            self.client.subscribe(f"{self._equip_interface}/#", qos=1)
+        except Exception:
+            pass
         self.client.loop_start()
 
     def stop(self) -> None:

@@ -6,6 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AGV地图查看器</title>
   <link rel="stylesheet" href="/static/css/index.css?v=20251125" />
+  <link rel="stylesheet" href="/static/css/door.css" />
+  <link rel="stylesheet" href="/static/css/elevator.css" />
 </head>
 
 <body>
@@ -76,6 +78,7 @@
   <div class="canvas-container" id="canvasContainer">
     <canvas id="mapCanvas"></canvas>
     <div class="loading" id="loading" style="display:none;">正在加载地图数据...</div>
+    <div class="equip-overlay-layer" id="equipOverlayLayer" style="pointer-events:none;"></div>
     <div class="info-panel">
       <div id="mapInfoSection">
         <div id="mapInfoHeader"><strong>地图信息</strong></div>

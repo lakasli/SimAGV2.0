@@ -1,0 +1,15 @@
+{
+  "info_type": "CUSTOM_REGISTER",
+  "info_description": "REGISTER_STATE",
+  "info_level": "INFO",
+  "references_by_state": {
+    "open": [
+      { "reference_key": "name", "reference_value": "state" },
+      { "reference_key": "value", "reference_value": "state:open" }
+    ],
+    "close": [
+      { "reference_key": "name", "reference_value": "state" },
+      { "reference_key": "value", "reference_value": "state:close" }
+    ]
+  }
+}

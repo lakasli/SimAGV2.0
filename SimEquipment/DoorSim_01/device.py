@@ -18,6 +18,50 @@ class DoorSim(EquipmentDevice):
         self._last_trigger_time = 0.0
         self._act_id: str | None = None
         self._act_type: str | None = None
+        self._pending_target: bool | None = None
+        self._instant_cache: dict[str, dict] = {}
+        self._delay_seconds: float = 3.0
+        self._info_type: str = "CUSTOM_REGISTER"
+        self._info_desc: str | None = "REGISTER_STATE"
+        self._info_level: str = "INFO"
+        self._references_by_state: dict[str, list[dict]] = {
+            "open": [
+                {"reference_key": "name", "reference_value": "state"},
+                {"reference_key": "value", "reference_value": "state:open"},
+            ],
+            "close": [
+                {"reference_key": "name", "reference_value": "state"},
+                {"reference_key": "value", "reference_value": "state:close"},
+            ],
+        }
+        self._load_info_config()
+
+    def _load_info_config(self) -> None:
+        try:
+            fp = Path(__file__).resolve().parent / "info_config.json"
+            data = json.loads(fp.read_text(encoding="utf-8"))
+            self._info_type = str(data.get("info_type", self._info_type))
+            self._info_desc = data.get("info_description", self._info_desc)
+            self._info_level = str(data.get("info_level", self._info_level))
+            refs = data.get("references_by_state", {}) or {}
+            open_refs = refs.get("open") or refs.get("OPEN")
+            close_refs = refs.get("close") or refs.get("CLOSE")
+            if isinstance(open_refs, list) and isinstance(close_refs, list):
+                self._references_by_state = {"open": open_refs, "close": close_refs}
+        except Exception:
+            pass
+
+    def _build_information(self) -> list[dict]:
+        refs = [
+            {"referenceKey": "name", "referenceValue": "state"},
+            {"referenceKey": "value", "referenceValue": ("state:open" if self.door_open else "state:close")},
+        ]
+        return [{
+            "infoType": "DOORSTATE",
+            "infoDescription": "STATE",
+            "infoLevel": "INFO",
+            "infoReferences": refs,
+        }]
 
     def _start_thread(self) -> None:
         self._publish_factsheet("DOOR")
@@ -29,17 +73,9 @@ class DoorSim(EquipmentDevice):
         interval = 1.0 / float(freq)
         import time as _t
         while not self._stop:
-            self._state["information"] = [
-                {
-                    "info_type": "DoorState",
-                    "info_references": [
-                        {"reference_key": "open", "reference_value": "true" if self.door_open else "false"},
-                        {"reference_key": "site", "reference_value": str(self.cfg.settings.site or "")},
-                    ],
-                    "info_description": None,
-                    "info_level": "INFO",
-                }
-            ]
+            self._state["information"] = self._build_information()
+            if self._instant_cache:
+                self._state["action_states"] = list(self._instant_cache.values())
             self._publish_state(self._state)
             # 处理动作计时/保持/完成
             try:
@@ -57,8 +93,31 @@ class DoorSim(EquipmentDevice):
                             self._act_remaining = max(0.0, float(self._act_remaining) - interval)
                             if self._act_remaining <= 0.0:
                                 if self._act_id and self._act_type:
-                                    self._state["action_states"] = [{"action_id": self._act_id, "action_status": "FINISHED", "action_type": self._act_type}]
-                                    self._publish_state(self._state)
+                                    if self._pending_target is not None:
+                                        self.door_open = bool(self._pending_target)
+                                    self._state["information"] = self._build_information()
+                                    desc = None
+                                    if self._act_type == "writeValue":
+                                        desc = ("Command \"cmd:open\" written successfully to register \"set\"" if self.door_open else "Command \"cmd:close\" written successfully to register \"set\"")
+                                    finished_entry = {
+                                        "action_id": self._act_id,
+                                        "action_status": "FINISHED",
+                                        "action_type": self._act_type,
+                                        "result_description": desc,
+                                    }
+                                    try:
+                                        if self._act_type in self._instant_cache:
+                                            base_entry = self._instant_cache.get(self._act_type, {})
+                                            base_entry.update(finished_entry)
+                                            self._state["action_states"] = [base_entry]
+                                            self._publish_state(self._state)
+                                            del self._instant_cache[self._act_type]
+                                        else:
+                                            self._state["action_states"] = [finished_entry]
+                                            self._publish_state(self._state)
+                                    except Exception:
+                                        self._state["action_states"] = [finished_entry]
+                                        self._publish_state(self._state)
                                 self._act_running = False
                                 self._act_remaining = float(self.cfg.settings.action_time)
             except Exception:
@@ -72,6 +131,16 @@ class DoorSim(EquipmentDevice):
             at = a.get("action_type", a.get("actionType", ""))
             aid = a.get("action_id", a.get("actionId", ""))
             params = a.get("action_parameters", a.get("actionParameters", [])) or []
+            if at:
+                entry = {
+                    "action_type": at,
+                    "action_id": str(aid),
+                    "action_status": "RUNNING",
+                    "action_parameters": params,
+                    "blocking_type": "HARD",
+                    "timestamp": int(__import__("time").time() * 1000),
+                }
+                self._instant_cache[at] = entry
             if at == "factsheetRequest":
                 self._publish_factsheet("DOOR")
                 out_states.append({"action_id": str(aid), "action_status": "FINISHED", "action_type": "factsheetRequest"})
@@ -84,15 +153,31 @@ class DoorSim(EquipmentDevice):
                         cmd = str(p.get("value", ""))
                         break
                 if cmd == "cmd:open":
-                    self.door_open = True
+                    self._pending_target = True
                 elif cmd == "cmd:close":
-                    self.door_open = False
+                    self._pending_target = False
                 else:
                     continue
+                try:
+                    desc = f"Write command \"{cmd}\" to register \"set\""
+                except Exception:
+                    desc = None
+                self._instant_cache["writeValue"] = {
+                    "action_type": "writeValue",
+                    "action_id": str(aid),
+                    "action_status": "RUNNING",
+                    "action_description": desc,
+                    "action_parameters": [
+                        {"key": "registerName", "value": "set"},
+                        {"key": "command", "value": cmd},
+                    ],
+                    "blocking_type": "HARD",
+                    "timestamp": int(__import__("time").time() * 1000),
+                }
                 mode = str(self.cfg.settings.trigger_mode or "instant")
                 if mode == "cancel" and self._act_running:
                     # 第二次短按取消
-                    self.door_open = False
+                    self._pending_target = None
                     out_states.append({"action_id": str(aid), "action_status": "FAILED", "action_type": "writeValue", "result_description": "canceled"})
                     self._act_running = False
                 elif mode == "pause" and self._act_running:
@@ -103,21 +188,28 @@ class DoorSim(EquipmentDevice):
                     # 启动或保持
                     self._act_running = True
                     self._act_paused = False
-                    self._act_remaining = float(self.cfg.settings.action_time)
+                    self._act_remaining = max(0.0, float(self._delay_seconds))
                     self._last_trigger_time = __import__("time").time()
                     self._act_id = str(aid)
                     self._act_type = "writeValue"
                     out_states.append({"action_id": str(aid), "action_status": ("RUNNING" if mode != "hold" else "RUNNING"), "action_type": "writeValue"})
             elif at in ("openDoor", "closeDoor", "toggleDoor"):
                 if at == "openDoor":
-                    self.door_open = True
+                    self._pending_target = True
                 elif at == "closeDoor":
-                    self.door_open = False
+                    self._pending_target = False
                 else:
-                    self.door_open = not self.door_open
+                    self._pending_target = (not self.door_open)
+                self._instant_cache[at] = {
+                    "action_type": at,
+                    "action_id": str(aid),
+                    "action_status": "RUNNING",
+                    "blocking_type": "HARD",
+                    "timestamp": int(__import__("time").time() * 1000),
+                }
                 mode = str(self.cfg.settings.trigger_mode or "instant")
                 if mode == "cancel" and self._act_running:
-                    self.door_open = False
+                    self._pending_target = None
                     out_states.append({"action_id": str(aid), "action_status": "FAILED", "action_type": at, "result_description": "canceled"})
                     self._act_running = False
                 elif mode == "pause" and self._act_running:
@@ -126,21 +218,13 @@ class DoorSim(EquipmentDevice):
                 else:
                     self._act_running = True
                     self._act_paused = False
-                    self._act_remaining = float(self.cfg.settings.action_time)
+                    self._act_remaining = max(0.0, float(self._delay_seconds))
                     self._last_trigger_time = __import__("time").time()
                     self._act_id = str(aid)
                     self._act_type = at
                     out_states.append({"action_id": str(aid), "action_status": "RUNNING", "action_type": at})
         if out_states:
-            self._state["action_states"] = out_states
-            self._publish_state(self._state)
-            try:
-                import time as _t
-                _t.sleep(max(0.0, float(self.cfg.settings.action_time)))
-            except Exception:
-                pass
-            for s in self._state.get("action_states", []):
-                s["action_status"] = "FINISHED"
+            self._state["action_states"] = list(self._instant_cache.values())
             self._publish_state(self._state)
 
 

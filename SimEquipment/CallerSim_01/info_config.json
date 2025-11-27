@@ -1,0 +1,15 @@
+{
+  "info_type": "CALLERSTATE",
+  "info_description": "STATE",
+  "info_level": "INFO",
+  "references_by_state": {
+    "press": [
+      { "reference_key": "name", "reference_value": "state" },
+      { "reference_key": "value", "reference_value": "state:press" }
+    ],
+    "release": [
+      { "reference_key": "name", "reference_value": "state" },
+      { "reference_key": "value", "reference_value": "state:release" }
+    ]
+  }
+}
